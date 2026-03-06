@@ -231,4 +231,4 @@ const eslintFactory = (options: LintmaxOptions): ReturnType<typeof defineConfig>
 }
 
 export type { LintmaxOptions }
-export { eslintFactory as eslint }
+export { eslintFactory as eslint, warnToError }
