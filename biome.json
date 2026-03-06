@@ -26,7 +26,12 @@
       "!!**/.turbo",
       "!!**/.venv",
       "!!**/.wxt",
+      "!!**/_generated",
+      "!!**/Android",
+      "!!**/Darwin",
       "!!**/dist",
+      "!!**/maestro",
+      "!!**/module_bindings",
       "!!**/playwright-report",
       "!!**/test-results",
       "!!**/*.xcassets"
