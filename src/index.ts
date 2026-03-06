@@ -1,7 +1,7 @@
 import type { Linter } from 'eslint'
 
 import { createRequire } from 'node:module'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 interface BiomeOptions {
@@ -219,11 +219,15 @@ const warnToError = (rules: Partial<Linter.RulesRecord>): Linter.RulesRecord => 
   return result
 }
 
+const cacheDir = join('node_modules', '.cache', 'lintmax')
+
 const sync = (options?: SyncOptions) => {
   const cwd = process.cwd()
-  writeFileSync(join(cwd, 'biome.json'), `${JSON.stringify(createBiomeConfig(cwd, options?.biome), null, 2)}\n`)
-  writeFileSync(join(cwd, '.oxlintrc.json'), `${JSON.stringify(createOxlintConfig(options?.oxlint), null, 2)}\n`)
+  const dir = join(cwd, cacheDir)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'biome.json'), `${JSON.stringify(createBiomeConfig(cwd, options?.biome), null, 2)}\n`)
+  writeFileSync(join(dir, '.oxlintrc.json'), `${JSON.stringify(createOxlintConfig(options?.oxlint), null, 2)}\n`)
 }
 
 export type { BiomeOptions, OxlintOptions, SyncOptions }
-export { createBiomeConfig, createOxlintConfig, sync, warnToError }
+export { cacheDir, createBiomeConfig, createOxlintConfig, sync, warnToError }

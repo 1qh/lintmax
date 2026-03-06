@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Maximum strictness linting, formatting, and type-checking in one package",
   "type": "module",
+  "bin": {
+    "lintmax": "dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -23,7 +26,7 @@
     "oxlintrc.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && printf '#!/usr/bin/env node\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
