@@ -14,15 +14,12 @@
     },
     "./tsconfig": "./tsconfig.json",
     "./tsconfig.json": "./tsconfig.json",
-    "./biome": "./biome.json",
-    "./biome.json": "./biome.json",
     "./oxlint": "./oxlintrc.json",
     "./oxlintrc.json": "./oxlintrc.json"
   },
   "files": [
     "dist",
     "tsconfig.json",
-    "biome.json",
     "oxlintrc.json"
   ],
   "scripts": {
@@ -43,6 +40,7 @@
     "typescript-eslint": "latest"
   },
   "peerDependencies": {
+    "@biomejs/biome": ">=1",
     "eslint": ">=9 <10",
     "typescript": ">=5"
   },
