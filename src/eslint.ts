@@ -13,6 +13,7 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import turbo from 'eslint-plugin-turbo'
 import { defineConfig, globalIgnores } from 'eslint/config'
+import { existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import tseslint from 'typescript-eslint'
 
@@ -41,9 +42,11 @@ const eslintFactory = (options?: LintmaxOptions): ReturnType<typeof defineConfig
   if (opts.ignores)
     configs.push(globalIgnores(opts.ignores))
 
+  if (existsSync(gitignorePath))
+    configs.push(includeIgnoreFile(gitignorePath))
+
   configs.push(
     ...defineConfig(
-      includeIgnoreFile(gitignorePath),
       perfectionist['recommended-natural'],
       { ignores: ['postcss.config.mjs'] },
       {
