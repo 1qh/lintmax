@@ -16,9 +16,7 @@
       "import": "./dist/eslint.js"
     },
     "./tsconfig": "./tsconfig.json",
-    "./tsconfig.json": "./tsconfig.json",
-    "./oxlint": "./oxlintrc.json",
-    "./oxlintrc.json": "./oxlintrc.json"
+    "./tsconfig.json": "./tsconfig.json"
   },
   "files": [
     "dist",
@@ -44,6 +42,7 @@
     "eslint-plugin-turbo": "latest",
     "oxlint": "latest",
     "prettier": "latest",
+    "sort-package-json": "latest",
     "typescript-eslint": "latest"
   },
   "peerDependencies": {

@@ -229,5 +229,7 @@ const sync = (options?: SyncOptions) => {
   writeFileSync(join(dir, '.oxlintrc.json'), `${JSON.stringify(createOxlintConfig(options?.oxlint), null, 2)}\n`)
 }
 
+const defineConfig = (options: SyncOptions): SyncOptions => options
+
 export type { BiomeOptions, OxlintOptions, SyncOptions }
-export { cacheDir, createBiomeConfig, createOxlintConfig, sync, warnToError }
+export { cacheDir, createBiomeConfig, createOxlintConfig, defineConfig, sync, warnToError }
