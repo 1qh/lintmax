@@ -1,6 +1,6 @@
 node_modules
 dist
-.cache
-*.tsbuildinfo
+bun.lock
 .cache/
 .eslintcache
+*.tsbuildinfo
