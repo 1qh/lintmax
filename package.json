@@ -47,12 +47,12 @@
     "typescript-eslint": "latest"
   },
   "peerDependencies": {
-    "eslint": ">=9",
+    "eslint": ">=9 <10",
     "typescript": ">=5"
   },
   "devDependencies": {
     "@types/node": "latest",
-    "eslint": "latest",
+    "eslint": "9",
     "typescript": "latest"
   }
 }
