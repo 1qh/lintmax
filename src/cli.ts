@@ -5,6 +5,73 @@ import { join } from 'node:path'
 import { cacheDir, sync } from './index.js'
 
 const cwd = process.cwd()
+const [, , cmd] = process.argv
+
+const init = () => {
+  const pkgPath = join(cwd, 'package.json')
+  if (!existsSync(pkgPath)) {
+    process.stderr.write('No package.json found\n')
+    process.exit(1)
+  }
+
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as {
+    scripts?: Record<string, string>
+    [key: string]: unknown
+  }
+  const scripts = pkg.scripts ?? {}
+  let changed = false
+
+  if (!scripts.fix) {
+    scripts.fix = 'lintmax fix'
+    changed = true
+  }
+  if (!scripts.check) {
+    scripts.check = 'lintmax check'
+    changed = true
+  }
+  if (changed) {
+    pkg.scripts = scripts
+    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
+  }
+
+  const tsconfigPath = join(cwd, 'tsconfig.json')
+  if (existsSync(tsconfigPath)) {
+    try {
+      const tsconfig = JSON.parse(readFileSync(tsconfigPath, 'utf-8')) as { extends?: string; [key: string]: unknown }
+      if (tsconfig.extends !== 'lintmax/tsconfig') {
+        tsconfig.extends = 'lintmax/tsconfig'
+        writeFileSync(tsconfigPath, `${JSON.stringify(tsconfig, null, 2)}\n`)
+      }
+    } catch {
+      process.stderr.write('tsconfig.json: could not parse, add "extends": "lintmax/tsconfig" manually\n')
+    }
+  } else
+    writeFileSync(tsconfigPath, `${JSON.stringify({ extends: 'lintmax/tsconfig' }, null, 2)}\n`)
+
+  const gitignorePath = join(cwd, '.gitignore')
+  const ignoreEntries = ['.cache/', '.eslintcache']
+  if (existsSync(gitignorePath)) {
+    const content = readFileSync(gitignorePath, 'utf-8')
+    const toAdd: string[] = []
+    for (const entry of ignoreEntries)
+      if (!content.includes(entry))
+        toAdd.push(entry)
+    if (toAdd.length > 0)
+      writeFileSync(gitignorePath, `${content.trimEnd()}\n${toAdd.join('\n')}\n`)
+  } else
+    writeFileSync(gitignorePath, `${ignoreEntries.join('\n')}\n`)
+
+  process.stdout.write('tsconfig.json  extends lintmax/tsconfig\n')
+  process.stdout.write('package.json   "fix": "lintmax fix", "check": "lintmax check"\n')
+  process.stdout.write(`.gitignore     ${ignoreEntries.join(', ')}\n`)
+  process.stdout.write('\nRun: bun fix\n')
+}
+
+if (cmd === 'init') {
+  init()
+  process.exit(0)
+}
+
 const dir = join(cwd, cacheDir)
 mkdirSync(dir, { recursive: true })
 
@@ -49,20 +116,13 @@ const hasEslintConfig = existsSync(join(cwd, 'eslint.config.ts'))
   || existsSync(join(cwd, 'eslint.config.js'))
   || existsSync(join(cwd, 'eslint.config.mjs'))
 
-const eslintArgs: string[] = []
-if (!hasEslintConfig) {
-  const generatedEslintConfig = join(dir, 'eslint.config.mjs')
-  writeFileSync(generatedEslintConfig, "export { default } from 'lintmax/eslint'\n")
-  eslintArgs.push('--config', generatedEslintConfig)
-}
+const eslintArgs = hasEslintConfig ? [] : ['--config', join(dir, 'eslint.config.mjs')]
 
 const sortPkgJson = resolveBin('sort-package-json', 'sort-package-json')
 const biomeBin = resolveBin('@biomejs/biome', 'biome')
 const oxlintBin = resolveBin('oxlint', 'oxlint')
 const eslintBin = resolveBin('eslint', 'eslint')
 const prettierBin = resolveBin('prettier', 'prettier')
-
-const [, , cmd] = process.argv
 
 const prettierMd = ['--single-quote', '--no-semi', '--trailing-comma', 'none', '--print-width', '80', '--arrow-parens', 'avoid', '--tab-width', '2', '--prose-wrap', 'preserve']
 const hasFlowmark = spawnSync('which', ['flowmark'], { stdio: 'pipe', env }).status === 0

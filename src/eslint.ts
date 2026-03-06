@@ -16,14 +16,12 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 import { isAbsolute, join } from 'node:path'
 import tseslint from 'typescript-eslint'
 
+import type { EslintOptions } from './index.js'
+
 import { warnToError } from './index.js'
 
-interface LintmaxOptions {
+interface LintmaxOptions extends EslintOptions {
   append?: Linter.Config[]
-  ignores?: string[]
-  rules?: Record<string, 'off'>
-  tailwind?: string
-  tsconfigRootDir?: string
 }
 
 const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>

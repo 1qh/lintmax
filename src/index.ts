@@ -23,8 +23,16 @@ interface OxlintOptions {
   rules?: Record<string, 'off'>
 }
 
+interface EslintOptions {
+  ignores?: string[]
+  rules?: Record<string, 'off'>
+  tailwind?: string
+  tsconfigRootDir?: string
+}
+
 interface SyncOptions {
   biome?: BiomeOptions
+  eslint?: EslintOptions
   oxlint?: OxlintOptions
 }
 
@@ -227,9 +235,13 @@ const sync = (options?: SyncOptions) => {
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'biome.json'), `${JSON.stringify(createBiomeConfig(cwd, options?.biome), null, 2)}\n`)
   writeFileSync(join(dir, '.oxlintrc.json'), `${JSON.stringify(createOxlintConfig(options?.oxlint), null, 2)}\n`)
+  const eslintConfig = options?.eslint
+    ? `import { eslint } from 'lintmax/eslint'\nexport default eslint(${JSON.stringify(options.eslint)})\n`
+    : "export { default } from 'lintmax/eslint'\n"
+  writeFileSync(join(dir, 'eslint.config.mjs'), eslintConfig)
 }
 
 const defineConfig = (options: SyncOptions): SyncOptions => options
 
-export type { BiomeOptions, OxlintOptions, SyncOptions }
+export type { BiomeOptions, EslintOptions, OxlintOptions, SyncOptions }
 export { cacheDir, createBiomeConfig, createOxlintConfig, defineConfig, sync, warnToError }
