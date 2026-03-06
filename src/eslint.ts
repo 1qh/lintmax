@@ -13,7 +13,7 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import turbo from 'eslint-plugin-turbo'
 import { defineConfig, globalIgnores } from 'eslint/config'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import tseslint from 'typescript-eslint'
 
 import { warnToError } from './index.js'
@@ -23,22 +23,25 @@ interface LintmaxOptions {
   ignores?: string[]
   rules?: Record<string, 'off'>
   tailwind?: string
-  tsconfigRootDir: string
+  tsconfigRootDir?: string
 }
 
 const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
   entryPoint ? eslintPluginBetterTailwindcss.configs['recommended-error'].rules : {}
 
-const eslintFactory = (options: LintmaxOptions): ReturnType<typeof defineConfig> => {
-  const configs: Parameters<typeof defineConfig> = [],
-    gitignorePath = join(options.tsconfigRootDir, '.gitignore'),
+const eslintFactory = (options?: LintmaxOptions): ReturnType<typeof defineConfig> => {
+  const opts = options ?? {},
+    root = opts.tsconfigRootDir ?? process.cwd(),
+    configs: Parameters<typeof defineConfig> = [],
+    gitignorePath = join(root, '.gitignore'),
+    tailwindEntry = opts.tailwind && (isAbsolute(opts.tailwind) ? opts.tailwind : join(root, opts.tailwind)),
     tailwindSettings: Record<string, unknown> = {}
 
-  if (options.tailwind)
-    tailwindSettings['better-tailwindcss'] = { entryPoint: options.tailwind }
+  if (tailwindEntry)
+    tailwindSettings['better-tailwindcss'] = { entryPoint: tailwindEntry }
 
-  if (options.ignores)
-    configs.push(globalIgnores(options.ignores))
+  if (opts.ignores)
+    configs.push(globalIgnores(opts.ignores))
 
   configs.push(
     ...defineConfig(
@@ -144,7 +147,7 @@ const eslintFactory = (options: LintmaxOptions): ReturnType<typeof defineConfig>
       rules: {
         ...reactPlugin.configs['jsx-runtime'].rules,
         ...reactPlugin.configs.all.rules,
-        ...tailwindRules(options.tailwind),
+        ...tailwindRules(tailwindEntry),
         'better-tailwindcss/enforce-consistent-line-wrapping': 'off',
         'react-hooks/exhaustive-deps': 'error',
         'react-hooks/incompatible-library': 'error',
@@ -189,23 +192,23 @@ const eslintFactory = (options: LintmaxOptions): ReturnType<typeof defineConfig>
     })
   )
 
-  if (options.rules) {
+  if (opts.rules) {
     const overrideRules: Linter.RulesRecord = {}
-    for (const [key, value] of Object.entries(options.rules))
+    for (const [key, value] of Object.entries(opts.rules))
       overrideRules[key] = value
 
     configs.push({ rules: overrideRules })
   }
 
-  if (options.append)
-    for (const config of options.append)
+  if (opts.append)
+    for (const config of opts.append)
       configs.push(config)
 
   configs.push({
     languageOptions: {
       parserOptions: {
         projectService: true,
-        tsconfigRootDir: options.tsconfigRootDir
+        tsconfigRootDir: root
       }
     },
     linterOptions: { reportUnusedDisableDirectives: true }
@@ -214,5 +217,8 @@ const eslintFactory = (options: LintmaxOptions): ReturnType<typeof defineConfig>
   return defineConfig(...configs)
 }
 
+const defaultConfig = eslintFactory()
+
 export type { LintmaxOptions }
+export default defaultConfig
 export { eslintFactory as eslint, warnToError }
