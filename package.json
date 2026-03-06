@@ -1,11 +1,25 @@
 {
   "name": "lintmax",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Maximum strictness linting, formatting, and type-checking in one package",
-  "type": "module",
-  "bin": {
-    "lintmax": "dist/cli.js"
+  "keywords": [
+    "biome",
+    "eslint",
+    "formatter",
+    "lint",
+    "linter",
+    "oxlint",
+    "prettier",
+    "typecheck",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/1qh/lintmax"
   },
+  "license": "MIT",
+  "author": "1qh",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -18,6 +32,9 @@
     "./tsconfig": "./tsconfig.json",
     "./tsconfig.json": "./tsconfig.json"
   },
+  "bin": {
+    "lintmax": "dist/cli.js"
+  },
   "files": [
     "dist",
     "tsconfig.json",
@@ -25,6 +42,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && printf '#!/usr/bin/env node\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
+    "check": "bun dist/cli.js check",
+    "fix": "bun dist/cli.js fix",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
@@ -45,11 +64,11 @@
     "sort-package-json": "latest",
     "typescript-eslint": "latest"
   },
-  "peerDependencies": {
-    "typescript": ">=5"
-  },
   "devDependencies": {
     "@types/node": "latest",
     "typescript": "latest"
+  },
+  "peerDependencies": {
+    "typescript": ">=5"
   }
 }

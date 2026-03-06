@@ -1,3 +1,5 @@
 declare module 'eslint-plugin-prefer-arrow-functions' {
-  export const rules: Record<string, import('eslint').Rule.RuleModule>
+  import type { Rule } from 'eslint'
+
+  export const rules: Record<string, Rule.RuleModule>
 }

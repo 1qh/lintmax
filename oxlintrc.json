@@ -58,6 +58,7 @@
     "no-duplicate-imports": "off",
     "no-magic-numbers": "off",
     "no-nested-ternary": "off",
+    "prefer-destructuring": "off",
     "no-ternary": "off",
     "no-undef": "off",
     "no-undefined": "off",
