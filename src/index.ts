@@ -37,16 +37,6 @@ interface SyncOptions {
 }
 
 const pkgRoot = join(import.meta.dirname, '..'),
-  biomeCategories = [
-    'a11y',
-    'complexity',
-    'correctness',
-    'nursery',
-    'performance',
-    'security',
-    'style',
-    'suspicious'
-  ] as const,
   biomeRulesOff: string[] = [
     'noBarrelFile',
     'noConditionalExpect',
@@ -98,19 +88,22 @@ const pkgRoot = join(import.meta.dirname, '..'),
     '!!**/test-results',
     '!!**/*.xcassets'
   ],
-  resolveBiomeRuleCategories = (cwd: string): Map<string, string> => {
+  resolveBiomeSchema = (cwd: string): { categories: string[]; ruleMap: Map<string, string> } => {
     const req = createRequire(join(cwd, 'package.json')),
       schemaPath = req.resolve('@biomejs/biome/configuration_schema.json'),
       schema = JSON.parse(readFileSync(schemaPath, 'utf8')) as {
         $defs: Record<string, { properties?: Record<string, unknown> }>
       },
-      map = new Map<string, string>()
-    for (const cat of biomeCategories) {
+      rulesProps = schema.$defs.Rules?.properties ?? {},
+      categories = Object.keys(rulesProps).filter(k => k !== 'recommended'),
+      ruleMap = new Map<string, string>()
+    for (const cat of categories) {
       const key = cat.charAt(0).toUpperCase() + cat.slice(1),
         props = schema.$defs[key]?.properties
-      if (props) for (const rule of Object.keys(props)) if (rule !== 'recommended' && rule !== 'all') map.set(rule, cat)
+      if (props)
+        for (const rule of Object.keys(props)) if (rule !== 'recommended' && rule !== 'all') ruleMap.set(rule, cat)
     }
-    return map
+    return { categories, ruleMap }
   },
   extractRuleNames = (rules: Record<string, 'off'>): string[] => {
     const names: string[] = []
@@ -129,7 +122,7 @@ const pkgRoot = join(import.meta.dirname, '..'),
     return result
   },
   createBiomeConfig = (cwd: string, options?: BiomeOptions): Record<string, unknown> => {
-    const categoryMap = resolveBiomeRuleCategories(cwd),
+    const { categories, ruleMap } = resolveBiomeSchema(cwd),
       allRulesOff = [...biomeRulesOff]
     if (options?.rules)
       for (const key of Object.keys(options.rules)) {
@@ -148,7 +141,7 @@ const pkgRoot = join(import.meta.dirname, '..'),
       {
         css: { parser: { tailwindDirectives: true } },
         includes: ['**'],
-        linter: { rules: groupByCategory(allRulesOff, categoryMap) }
+        linter: { rules: groupByCategory(allRulesOff, ruleMap) }
       }
     ]
 
@@ -158,7 +151,7 @@ const pkgRoot = join(import.meta.dirname, '..'),
         else if (override.rules)
           overrides.push({
             includes: override.includes,
-            linter: { rules: groupByCategory(extractRuleNames(override.rules), categoryMap) }
+            linter: { rules: groupByCategory(extractRuleNames(override.rules), ruleMap) }
           })
 
     return {
@@ -189,16 +182,7 @@ const pkgRoot = join(import.meta.dirname, '..'),
           test: 'all',
           vue: 'all'
         },
-        rules: {
-          a11y: 'error',
-          complexity: 'error',
-          correctness: 'error',
-          nursery: 'error',
-          performance: 'error',
-          security: 'error',
-          style: 'error',
-          suspicious: 'error'
-        }
+        rules: Object.fromEntries(categories.map(c => [c, 'error']))
       },
       overrides
     }

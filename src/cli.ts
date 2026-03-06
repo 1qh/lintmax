@@ -8,6 +8,7 @@ import { cacheDir, sync } from './index.js'
 
 const cwd = process.cwd(),
   cmd = process.argv[2],
+  { version } = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { version: string },
   sortKeys = (obj: Record<string, unknown>): Record<string, unknown> => {
     const sorted: Record<string, unknown> = {},
       keys = Object.keys(obj).toSorted()
@@ -195,7 +196,6 @@ const initScripts = (pkg: Pkg, pkgPath: string) => {
       process.stdout.write(`\nLegacy configs found (can be removed): ${foundLegacy.join(', ')}\n`)
     process.stdout.write('\nRun: bun fix\n')
   },
-  version = '0.0.1',
   usage = () => {
     process.stdout.write(`lintmax v${version}\n\n`)
     process.stdout.write('Usage: lintmax <command>\n\n')
