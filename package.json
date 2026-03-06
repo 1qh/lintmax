@@ -12,9 +12,8 @@
       "types": "./dist/eslint.d.ts",
       "import": "./dist/eslint.js"
     },
-    "./tsconfig": "./tsconfig/base.json",
-    "./tsconfig/base": "./tsconfig/base.json",
-    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig": "./tsconfig.json",
+    "./tsconfig.json": "./tsconfig.json",
     "./biome": "./biome.json",
     "./biome.json": "./biome.json",
     "./oxlint": "./oxlintrc.json",
@@ -22,12 +21,12 @@
   },
   "files": [
     "dist",
-    "tsconfig",
+    "tsconfig.json",
     "biome.json",
     "oxlintrc.json"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
