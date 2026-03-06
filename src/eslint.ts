@@ -200,7 +200,7 @@ const eslintFactory = (options?: LintmaxOptions): ReturnType<typeof defineConfig
 
   if (opts.append)
     for (const config of opts.append)
-      configs.push(config)
+      configs.push(config.rules ? { ...config, rules: warnToError(config.rules) } : config)
 
   configs.push({
     languageOptions: {
@@ -219,4 +219,4 @@ const defaultConfig = eslintFactory()
 
 export type { LintmaxOptions }
 export default defaultConfig
-export { eslintFactory as eslint, warnToError }
+export { eslintFactory as eslint }

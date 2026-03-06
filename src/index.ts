@@ -243,5 +243,5 @@ const sync = (options?: SyncOptions) => {
 
 const defineConfig = (options: SyncOptions): SyncOptions => options
 
-export type { BiomeOptions, EslintOptions, OxlintOptions, SyncOptions }
-export { cacheDir, createBiomeConfig, createOxlintConfig, defineConfig, sync, warnToError }
+export type { EslintOptions, SyncOptions }
+export { cacheDir, defineConfig, sync, warnToError }
