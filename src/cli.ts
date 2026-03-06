@@ -175,9 +175,31 @@ const init = () => {
   process.stdout.write('\nRun: bun fix\n')
 }
 
+const version = '0.1.0'
+
+const usage = () => {
+  process.stdout.write(`lintmax v${version}\n\n`)
+  process.stdout.write('Usage: lintmax <command>\n\n')
+  process.stdout.write('Commands:\n')
+  process.stdout.write('  init     Scaffold config files for a new project\n')
+  process.stdout.write('  fix      Auto-fix and format all files\n')
+  process.stdout.write('  check    Check all files without modifying\n')
+  process.stdout.write('  --version  Show version\n')
+}
+
 if (cmd === 'init') {
   init()
   process.exit(0)
+}
+
+if (cmd === '--version' || cmd === '-v') {
+  process.stdout.write(`${version}\n`)
+  process.exit(0)
+}
+
+if (cmd !== 'fix' && cmd !== 'check') {
+  usage()
+  process.exit(cmd === '--help' || cmd === '-h' ? 0 : 1)
 }
 
 const dir = join(cwd, cacheDir)
@@ -192,7 +214,10 @@ const resolveBin = (pkg: string, bin: string): string => {
       pkgDir = candidate
       break
     }
-  if (!pkgDir) throw new Error(`Cannot find package: ${pkg}`)
+  if (!pkgDir) {
+    process.stderr.write(`Cannot find ${pkg} — run: bun add -d lintmax\n`)
+    process.exit(1)
+  }
   const pkgJson = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf-8')) as { bin?: Record<string, string> | string }
   const binPath = typeof pkgJson.bin === 'string' ? pkgJson.bin : pkgJson.bin?.[bin] ?? ''
   return join(pkgDir, binPath)
@@ -203,10 +228,11 @@ const cwdBinDir = join(cwd, 'node_modules', '.bin')
 /** biome-ignore lint/style/noProcessEnv: cli reads environment */
 const env = { ...process.env, PATH: `${pkgBinDir}:${cwdBinDir}:${process.env.PATH ?? ''}` }
 
-const run = (command: string, args: string[], silent = false): void => {
+const run = (label: string, command: string, args: string[], silent = false): void => {
   const result = spawnSync(command, args, { stdio: silent ? 'pipe' : 'inherit', cwd, env })
   if (result.status !== 0) {
     if (silent) {
+      process.stderr.write(`[${label}]\n`)
       if (result.stdout.length > 0) process.stderr.write(result.stdout)
       if (result.stderr.length > 0) process.stderr.write(result.stderr)
     }
@@ -216,7 +242,7 @@ const run = (command: string, args: string[], silent = false): void => {
 
 const configPath = join(cwd, 'lintmax.config.ts')
 if (existsSync(configPath))
-  run('bun', ['-e', `const m = await import('${configPath}'); if (m.default) { const { sync: s } = await import('lintmax'); s(m.default); }`], true)
+  run('config', 'bun', ['-e', `const m = await import('${configPath}'); if (m.default) { const { sync: s } = await import('lintmax'); s(m.default); }`], true)
 else
   sync()
 
@@ -236,17 +262,17 @@ const prettierMd = ['--single-quote', '--no-semi', '--trailing-comma', 'none', '
 const hasFlowmark = spawnSync('which', ['flowmark'], { stdio: 'pipe', env }).status === 0
 
 if (cmd === 'fix') {
-  run('node', [sortPkgJson, '**/package.json'], true)
-  run(biomeBin, ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'], true)
-  run(oxlintBin, ['-c', join(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet'], true)
-  run('node', [eslintBin, ...eslintArgs, '--fix', '--cache', '--cache-location', join(cwd, '.cache', '.eslintcache')], true)
-  run(biomeBin, ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'], true)
-  run('node', [prettierBin, ...prettierMd, '--write', '**/*.md'], true)
-  if (hasFlowmark) run('flowmark', ['--auto', '.'], true)
+  run('sort-package-json', 'node', [sortPkgJson, '**/package.json'], true)
+  run('biome', biomeBin, ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'], true)
+  run('oxlint', oxlintBin, ['-c', join(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet'], true)
+  run('eslint', 'node', [eslintBin, ...eslintArgs, '--fix', '--cache', '--cache-location', join(cwd, '.cache', '.eslintcache')], true)
+  run('biome', biomeBin, ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'], true)
+  run('prettier', 'node', [prettierBin, ...prettierMd, '--write', '**/*.md'], true)
+  if (hasFlowmark) run('flowmark', 'flowmark', ['--auto', '.'], true)
 } else if (cmd === 'check') {
-  run('node', [sortPkgJson, '--check', '**/package.json'])
-  run(biomeBin, ['ci', '--config-path', dir, '--diagnostic-level=error'])
-  run(oxlintBin, ['-c', join(dir, '.oxlintrc.json'), '--quiet'])
-  run('node', [eslintBin, ...eslintArgs, '--cache', '--cache-location', join(cwd, '.cache', '.eslintcache')])
-  run('node', [prettierBin, ...prettierMd, '--check', '**/*.md'])
+  run('sort-package-json', 'node', [sortPkgJson, '--check', '**/package.json'])
+  run('biome', biomeBin, ['ci', '--config-path', dir, '--diagnostic-level=error'])
+  run('oxlint', oxlintBin, ['-c', join(dir, '.oxlintrc.json'), '--quiet'])
+  run('eslint', 'node', [eslintBin, ...eslintArgs, '--cache', '--cache-location', join(cwd, '.cache', '.eslintcache')])
+  run('prettier', 'node', [prettierBin, ...prettierMd, '--check', '**/*.md'])
 }
