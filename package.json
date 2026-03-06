@@ -12,12 +12,9 @@
       "types": "./dist/eslint.d.ts",
       "import": "./dist/eslint.js"
     },
+    "./tsconfig": "./tsconfig/base.json",
     "./tsconfig/base": "./tsconfig/base.json",
     "./tsconfig/base.json": "./tsconfig/base.json",
-    "./tsconfig/nextjs": "./tsconfig/nextjs.json",
-    "./tsconfig/nextjs.json": "./tsconfig/nextjs.json",
-    "./tsconfig/compiled-package": "./tsconfig/compiled-package.json",
-    "./tsconfig/compiled-package.json": "./tsconfig/compiled-package.json",
     "./biome": "./biome.json",
     "./biome.json": "./biome.json",
     "./oxlint": "./oxlintrc.json",
