@@ -1,6 +1,6 @@
 {
   "name": "lintmax",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Maximum strictness linting, formatting, and type-checking in one package",
   "keywords": [
     "biome",
@@ -41,7 +41,7 @@
     "oxlintrc.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
+    "build": "rm -rf dist .cache/tsbuildinfo.json && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
     "check": "bun dist/cli.js check",
     "fix": "bun dist/cli.js fix",
     "prepublishOnly": "bun run build"
