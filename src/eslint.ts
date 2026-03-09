@@ -44,7 +44,7 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
     configs.push(
       ...defineConfig(
         perfectionist['recommended-natural'],
-        { ignores: ['postcss.config.mjs'] },
+        { ignores: ['**/postcss.config.mjs'] },
         {
           extends: [
             eslint.configs.recommended,
@@ -121,6 +121,7 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
           }
         },
         {
+          plugins: (eslintReact.configs['strict-type-checked'] as Linter.Config).plugins,
           rules: {
             ...warnToError({
               ...eslintReact.configs['strict-type-checked'].rules,

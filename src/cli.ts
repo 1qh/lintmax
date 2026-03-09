@@ -306,7 +306,12 @@ const hasEslintConfig =
   hasFlowmark = spawnSync('which', ['flowmark'], { env, stdio: 'pipe' }).status === 0
 
 if (cmd === 'fix') {
-  run({ args: [sortPkgJson, '**/package.json'], command: 'bun', label: 'sort-package-json', silent: true })
+  run({
+    args: [sortPkgJson, '**/package.json', '--ignore', '**/node_modules/**'],
+    command: 'bun',
+    label: 'sort-package-json',
+    silent: true
+  })
   run({
     args: ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
     command: biomeBin,
@@ -332,9 +337,18 @@ if (cmd === 'fix') {
     silent: true
   })
   if (hasFlowmark) run({ args: ['--auto', '.'], command: 'flowmark', label: 'flowmark', silent: true })
-  run({ args: [prettierBin, ...prettierMd, '--write', '**/*.md'], command: 'bun', label: 'prettier', silent: true })
+  run({
+    args: [prettierBin, ...prettierMd, '--write', '--no-error-on-unmatched-pattern', '**/*.md'],
+    command: 'bun',
+    label: 'prettier',
+    silent: true
+  })
 } else {
-  run({ args: [sortPkgJson, '--check', '**/package.json'], command: 'bun', label: 'sort-package-json' })
+  run({
+    args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
+    command: 'bun',
+    label: 'sort-package-json'
+  })
   run({ args: ['ci', '--config-path', dir, '--diagnostic-level=error'], command: biomeBin, label: 'biome' })
   run({ args: ['-c', join(dir, '.oxlintrc.json'), '--quiet'], command: oxlintBin, label: 'oxlint' })
   run({
@@ -342,5 +356,9 @@ if (cmd === 'fix') {
     command: 'bun',
     label: 'eslint'
   })
-  run({ args: [prettierBin, ...prettierMd, '--check', '**/*.md'], command: 'bun', label: 'prettier' })
+  run({
+    args: [prettierBin, ...prettierMd, '--check', '--no-error-on-unmatched-pattern', '**/*.md'],
+    command: 'bun',
+    label: 'prettier'
+  })
 }
