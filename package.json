@@ -1,6 +1,6 @@
 {
   "name": "lintmax",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Maximum strictness linting, formatting, and type-checking in one package",
   "keywords": [
     "biome",
@@ -52,6 +52,9 @@
     "@eslint/compat": "latest",
     "@eslint/js": "latest",
     "@next/eslint-plugin-next": "latest",
+    "@types/bun": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
     "eslint": "9",
     "eslint-plugin-better-tailwindcss": "latest",
     "eslint-plugin-perfectionist": "latest",
@@ -62,13 +65,7 @@
     "oxlint": "latest",
     "prettier": "latest",
     "sort-package-json": "latest",
+    "typescript": "latest",
     "typescript-eslint": "latest"
-  },
-  "devDependencies": {
-    "@types/node": "latest",
-    "typescript": "latest"
-  },
-  "peerDependencies": {
-    "typescript": ">=5"
   }
 }

@@ -1,37 +1,64 @@
-// oxlint-disable unicorn/no-process-exit
-
-import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { env as bunEnv, file, spawnSync, write } from 'bun'
 
 import { cacheDir, sync } from './index.js'
-
-const cwd = process.cwd(),
+import { dirnamePath, fromFileUrl, joinPath } from './path.js'
+interface Pkg {
+  [key: string]: unknown
+  scripts?: Record<string, string>
+  workspaces?: string[]
+}
+interface RunOpts {
+  args: string[]
+  command: string
+  env: Record<string, string | undefined>
+  label: string
+  silent?: boolean
+}
+class CliExitError extends Error {
+  code: number
+  constructor({ code, message }: { code: number; message?: string }) {
+    super(message ?? '')
+    this.code = code
+  }
+}
+const decoder = new TextDecoder(),
+  cwd = process.cwd(),
   cmd = process.argv[2],
-  { version } = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { version: string },
+  ignoreEntries = ['.cache/', '.eslintcache'],
+  lintmaxRoot = dirnamePath(dirnamePath(fromFileUrl(import.meta.url))),
+  decodeText = (bytes: Uint8Array | undefined) => decoder.decode(bytes ?? new Uint8Array()),
+  pathExists = async ({ path }: { path: string }) => file(path).exists(),
+  readJson = async ({ path }: { path: string }): Promise<Record<string, unknown>> => {
+    if (!(await pathExists({ path }))) return {}
+    try {
+      const text = await file(path).text()
+      return JSON.parse(text) as Record<string, unknown>
+    } catch {
+      return {}
+    }
+  },
+  readRequiredJson = async <T>({ path }: { path: string }): Promise<T> => {
+    const text = await file(path).text()
+    return JSON.parse(text) as T
+  },
+  writeJson = async ({ data, path }: { data: Record<string, unknown>; path: string }) =>
+    write(path, `${JSON.stringify(data, null, 2)}\n`),
+  ensureDirectory = ({ directory }: { directory: string }) => {
+    const result = spawnSync({ cmd: ['mkdir', '-p', directory], stderr: 'pipe', stdout: 'pipe' })
+    if (result.exitCode === 0) return
+    const stderr = decodeText(result.stderr).trim()
+    throw new CliExitError({
+      code: result.exitCode,
+      message: stderr.length > 0 ? stderr : `Failed to create directory: ${directory}`
+    })
+  },
   sortKeys = (obj: Record<string, unknown>): Record<string, unknown> => {
     const sorted: Record<string, unknown> = {},
       keys = Object.keys(obj).toSorted()
     for (const key of keys) sorted[key] = obj[key]
     return sorted
   },
-  readJson = (path: string): Record<string, unknown> => {
-    if (!existsSync(path)) return {}
-    try {
-      return JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
-    } catch {
-      return {}
-    }
-  },
-  writeJson = (path: string, data: Record<string, unknown>) => writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`)
-
-interface Pkg {
-  [key: string]: unknown
-  scripts?: Record<string, string>
-  workspaces?: string[]
-}
-
-const initScripts = (pkg: Pkg, pkgPath: string) => {
+  initScripts = async ({ pkg, pkgPath }: { pkg: Pkg; pkgPath: string }) => {
     const scripts = pkg.scripts ?? {}
     let changed = false
     if (!scripts.fix) {
@@ -42,25 +69,24 @@ const initScripts = (pkg: Pkg, pkgPath: string) => {
       scripts.check = 'lintmax check'
       changed = true
     }
-    if (changed) {
-      pkg.scripts = scripts
-      writeJson(pkgPath, pkg)
-    }
+    if (!changed) return
+    pkg.scripts = scripts
+    await writeJson({ data: pkg, path: pkgPath })
   },
-  initTsconfig = (configFiles: string[]) => {
-    const tsconfigPath = join(cwd, 'tsconfig.json')
-    if (!existsSync(tsconfigPath)) {
+  initTsconfig = async ({ configFiles }: { configFiles: string[] }) => {
+    const tsconfigPath = joinPath(cwd, 'tsconfig.json')
+    if (!(await pathExists({ path: tsconfigPath }))) {
       const tsconfig: Record<string, unknown> = { extends: 'lintmax/tsconfig' }
       if (configFiles.length > 0) tsconfig.include = configFiles
-      writeJson(tsconfigPath, tsconfig)
+      await writeJson({ data: tsconfig, path: tsconfigPath })
       return
     }
     try {
-      const tsconfig = JSON.parse(readFileSync(tsconfigPath, 'utf8')) as {
+      const tsconfig = await readRequiredJson<{
         [key: string]: unknown
         extends?: string
         include?: string[]
-      }
+      }>({ path: tsconfigPath })
       let changed = false
       if (tsconfig.extends !== 'lintmax/tsconfig') {
         tsconfig.extends = 'lintmax/tsconfig'
@@ -71,28 +97,27 @@ const initScripts = (pkg: Pkg, pkgPath: string) => {
         tsconfig.include = [...(tsconfig.include ?? []), ...toAdd]
         changed = true
       }
-      if (changed) writeJson(tsconfigPath, tsconfig)
+      if (changed) await writeJson({ data: tsconfig, path: tsconfigPath })
     } catch {
       process.stderr.write('tsconfig.json: could not parse, add "extends": "lintmax/tsconfig" manually\n')
     }
   },
-  ignoreEntries = ['.cache/', '.eslintcache'],
-  initGitignore = () => {
-    const gitignorePath = join(cwd, '.gitignore')
-    if (existsSync(gitignorePath)) {
-      const content = readFileSync(gitignorePath, 'utf8'),
+  initGitignore = async () => {
+    const gitignorePath = joinPath(cwd, '.gitignore')
+    if (await pathExists({ path: gitignorePath })) {
+      const content = await file(gitignorePath).text(),
         toAdd: string[] = []
       for (const entry of ignoreEntries) if (!content.includes(entry)) toAdd.push(entry)
-      if (toAdd.length > 0) writeFileSync(gitignorePath, `${content.trimEnd()}\n${toAdd.join('\n')}\n`)
-    } else writeFileSync(gitignorePath, `${ignoreEntries.join('\n')}\n`)
+      if (toAdd.length > 0) await write(gitignorePath, `${content.trimEnd()}\n${toAdd.join('\n')}\n`)
+      return
+    }
+    await write(gitignorePath, `${ignoreEntries.join('\n')}\n`)
   },
-  initVscodeSettings = (pkg: Pkg) => {
-    const vscodePath = join(cwd, '.vscode')
-    mkdirSync(vscodePath, { recursive: true })
-
-    const settingsPath = join(vscodePath, 'settings.json'),
-      settings = readJson(settingsPath)
-
+  initVscodeSettings = async ({ pkg }: { pkg: Pkg }) => {
+    const vscodePath = joinPath(cwd, '.vscode')
+    ensureDirectory({ directory: vscodePath })
+    const settingsPath = joinPath(vscodePath, 'settings.json'),
+      settings = await readJson({ path: settingsPath })
     settings['biome.configPath'] = 'node_modules/.cache/lintmax/biome.json'
     const formatterLangs = [
       'css',
@@ -118,8 +143,6 @@ const initScripts = (pkg: Pkg, pkgPath: string) => {
     }
     settings['editor.formatOnSave'] = true
     settings['eslint.rules.customizations'] = [{ rule: '*', severity: 'warn' }]
-    settings['typescript.tsdk'] = 'node_modules/typescript/lib'
-
     if (pkg.workspaces && !settings['eslint.workingDirectories']) {
       const dirs: { pattern: string }[] = []
       for (const ws of pkg.workspaces) {
@@ -128,22 +151,21 @@ const initScripts = (pkg: Pkg, pkgPath: string) => {
       }
       if (dirs.length > 0) settings['eslint.workingDirectories'] = dirs
     }
-
-    writeJson(settingsPath, sortKeys(settings))
+    await writeJson({ data: sortKeys(settings), path: settingsPath })
   },
-  initVscodeExtensions = () => {
-    const extensionsPath = join(cwd, '.vscode', 'extensions.json'),
-      extJson = readJson(extensionsPath) as { [key: string]: unknown; recommendations?: string[] },
+  initVscodeExtensions = async () => {
+    const extensionsPath = joinPath(cwd, '.vscode', 'extensions.json'),
+      extJson = (await readJson({ path: extensionsPath })) as { [key: string]: unknown; recommendations?: string[] },
       recommendations = ['biomejs.biome', 'dbaeumer.vscode-eslint'],
       currentRecs = extJson.recommendations ?? [],
       recsToAdd: string[] = []
     for (const rec of recommendations) if (!currentRecs.includes(rec)) recsToAdd.push(rec)
     if (recsToAdd.length > 0 || !extJson.recommendations) {
       extJson.recommendations = [...currentRecs, ...recsToAdd]
-      writeJson(extensionsPath, extJson)
+      await writeJson({ data: extJson, path: extensionsPath })
     }
   },
-  findLegacyConfigs = (): string[] => {
+  findLegacyConfigs = async (): Promise<string[]> => {
     const legacyConfigs = [
         '.eslintrc',
         '.eslintrc.json',
@@ -161,42 +183,20 @@ const initScripts = (pkg: Pkg, pkgPath: string) => {
         'biome.jsonc',
         '.oxlintrc.json'
       ],
+      checks = legacyConfigs.map(async configFile => ({
+        configFile,
+        exists: await pathExists({ path: joinPath(cwd, configFile) })
+      })),
+      resolved = await Promise.all(checks),
       found: string[] = []
-    for (const f of legacyConfigs) if (existsSync(join(cwd, f))) found.push(f)
+    for (const item of resolved) if (item.exists) found.push(item.configFile)
     return found
   },
-  init = () => {
-    const pkgPath = join(cwd, 'package.json')
-    if (!existsSync(pkgPath)) {
-      process.stderr.write('No package.json found\n')
-      process.exit(1)
-    }
-
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as Pkg,
-      configFiles: string[] = []
-    if (existsSync(join(cwd, 'eslint.config.ts'))) configFiles.push('eslint.config.ts')
-    if (existsSync(join(cwd, 'lintmax.config.ts'))) configFiles.push('lintmax.config.ts')
-
-    initScripts(pkg, pkgPath)
-    initTsconfig(configFiles)
-    initGitignore()
-    initVscodeSettings(pkg)
-    initVscodeExtensions()
-
-    const foundLegacy = findLegacyConfigs()
-
-    process.stdout.write('tsconfig.json    extends lintmax/tsconfig')
-    if (configFiles.length > 0) process.stdout.write(`, include: ${configFiles.join(', ')}`)
-    process.stdout.write('\n')
-    process.stdout.write('package.json     "fix": "lintmax fix", "check": "lintmax check"\n')
-    process.stdout.write(`.gitignore       ${ignoreEntries.join(', ')}\n`)
-    process.stdout.write('.vscode/settings biome formatter, codeActionsOnSave, eslint, typescript\n')
-    process.stdout.write('.vscode/ext      biomejs.biome, dbaeumer.vscode-eslint\n')
-    if (foundLegacy.length > 0)
-      process.stdout.write(`\nLegacy configs found (can be removed): ${foundLegacy.join(', ')}\n`)
-    process.stdout.write('\nRun: bun fix\n')
+  readVersion = async () => {
+    const pkg = await readRequiredJson<{ version: string }>({ path: joinPath(lintmaxRoot, 'package.json') })
+    return pkg.version
   },
-  usage = () => {
+  usage = ({ version }: { version: string }) => {
     process.stdout.write(`lintmax v${version}\n\n`)
     process.stdout.write('Usage: lintmax <command>\n\n')
     process.stdout.write('Commands:\n')
@@ -204,161 +204,203 @@ const initScripts = (pkg: Pkg, pkgPath: string) => {
     process.stdout.write('  fix      Auto-fix and format all files\n')
     process.stdout.write('  check    Check all files without modifying\n')
     process.stdout.write('  --version  Show version\n')
-  }
-
-if (cmd === 'init') {
-  init()
-  process.exit(0)
-}
-
-if (cmd === '--version' || cmd === '-v') {
-  process.stdout.write(`${version}\n`)
-  process.exit(0)
-}
-
-if (cmd !== 'fix' && cmd !== 'check') {
-  usage()
-  process.exit(cmd === '--help' || cmd === '-h' ? 0 : 1)
-}
-
-const dir = join(cwd, cacheDir)
-mkdirSync(dir, { recursive: true })
-
-const lintmaxNm = join(import.meta.dirname, '..', 'node_modules'),
-  resolveBin = (pkg: string, bin: string): string => {
-    const candidates = [join(lintmaxNm, pkg), join(cwd, 'node_modules', pkg)]
-    let pkgDir = ''
-    for (const candidate of candidates)
-      if (existsSync(join(candidate, 'package.json'))) {
-        pkgDir = candidate
-        break
-      }
-    if (!pkgDir) {
-      process.stderr.write(`Cannot find ${pkg} — run: bun add -d lintmax\n`)
-      process.exit(1)
+  },
+  resolvePackageJsonPath = async ({ pkg }: { pkg: string }): Promise<null | string> => {
+    try {
+      return fromFileUrl(import.meta.resolve(`${pkg}/package.json`))
+    } catch {
+      const consumerCandidate = joinPath(cwd, 'node_modules', pkg, 'package.json')
+      if (await pathExists({ path: consumerCandidate })) return consumerCandidate
+      return null
     }
-    const pkgJson = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8')) as {
-        bin?: Record<string, string> | string
-      },
+  },
+  resolveBin = async ({ bin, pkg }: { bin: string; pkg: string }): Promise<string> => {
+    const packageJsonPath = await resolvePackageJsonPath({ pkg })
+    if (!packageJsonPath) throw new CliExitError({ code: 1, message: `Cannot find ${pkg} — run: bun add -d lintmax` })
+    const pkgJson = await readRequiredJson<{ bin?: Record<string, string> | string }>({ path: packageJsonPath }),
+      pkgDir = dirnamePath(packageJsonPath),
       binPath = typeof pkgJson.bin === 'string' ? pkgJson.bin : (pkgJson.bin?.[bin] ?? '')
-    return join(pkgDir, binPath)
+    return joinPath(pkgDir, binPath)
   },
-  pkgBinDir = join(import.meta.dirname, '..', 'node_modules', '.bin'),
-  cwdBinDir = join(cwd, 'node_modules', '.bin'),
-  /** biome-ignore lint/style/noProcessEnv: cli reads environment */
-  env = { ...process.env, PATH: `${pkgBinDir}:${cwdBinDir}:${process.env.PATH ?? ''}` }
-
-interface RunOpts {
-  args: string[]
-  command: string
-  label: string
-  silent?: boolean
-}
-
-const run = ({ args, command, label, silent = false }: RunOpts): void => {
-    const result = spawnSync(command, args, { cwd, env, stdio: silent ? 'pipe' : 'inherit' })
-    if (result.status !== 0) {
-      if (silent) {
-        process.stderr.write(`[${label}]\n`)
-        if (result.stdout.length > 0) process.stderr.write(result.stdout)
-        if (result.stderr.length > 0) process.stderr.write(result.stderr)
-      }
-      process.exit(result.status ?? 1)
+  run = ({ args, command, env, label, silent = false }: RunOpts): void => {
+    const result = spawnSync({
+      cmd: [command, ...args],
+      cwd,
+      env,
+      stderr: silent ? 'pipe' : 'inherit',
+      stdout: silent ? 'pipe' : 'inherit'
+    })
+    if (result.exitCode === 0) return
+    if (silent) {
+      process.stderr.write(`[${label}]\n`)
+      const stdout = decodeText(result.stdout)
+      if (stdout.length > 0) process.stderr.write(stdout)
+      const stderr = decodeText(result.stderr)
+      if (stderr.length > 0) process.stderr.write(stderr)
     }
+    throw new CliExitError({ code: result.exitCode })
   },
-  configPath = join(cwd, 'lintmax.config.ts')
-if (existsSync(configPath))
-  run({
-    args: [
-      '-e',
-      `const m = await import('${configPath}'); if (m.default) { const { sync: s } = await import('lintmax'); s(m.default); }`
-    ],
-    command: 'bun',
-    label: 'config',
-    silent: true
-  })
-else sync()
-
-const hasEslintConfig =
-    existsSync(join(cwd, 'eslint.config.ts')) ||
-    existsSync(join(cwd, 'eslint.config.js')) ||
-    existsSync(join(cwd, 'eslint.config.mjs')),
-  eslintArgs = hasEslintConfig ? [] : ['--config', join(dir, 'eslint.config.mjs')],
-  sortPkgJson = resolveBin('sort-package-json', 'sort-package-json'),
-  biomeBin = resolveBin('@biomejs/biome', 'biome'),
-  oxlintBin = resolveBin('oxlint', 'oxlint'),
-  eslintBin = resolveBin('eslint', 'eslint'),
-  prettierBin = resolveBin('prettier', 'prettier'),
-  prettierMd = [
-    '--single-quote',
-    '--no-semi',
-    '--trailing-comma',
-    'none',
-    '--print-width',
-    '80',
-    '--arrow-parens',
-    'avoid',
-    '--tab-width',
-    '2',
-    '--prose-wrap',
-    'preserve'
-  ],
-  hasFlowmark = spawnSync('which', ['flowmark'], { env, stdio: 'pipe' }).status === 0
-
-if (cmd === 'fix') {
-  run({
-    args: [sortPkgJson, '**/package.json', '--ignore', '**/node_modules/**'],
-    command: 'bun',
-    label: 'sort-package-json',
-    silent: true
-  })
-  run({
-    args: ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
-    command: biomeBin,
-    label: 'biome',
-    silent: true
-  })
-  run({
-    args: ['-c', join(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet'],
-    command: oxlintBin,
-    label: 'oxlint',
-    silent: true
-  })
-  run({
-    args: [eslintBin, ...eslintArgs, '--fix', '--cache', '--cache-location', join(cwd, '.cache', '.eslintcache')],
-    command: 'bun',
-    label: 'eslint',
-    silent: true
-  })
-  run({
-    args: ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
-    command: biomeBin,
-    label: 'biome',
-    silent: true
-  })
-  if (hasFlowmark) run({ args: ['--auto', '.'], command: 'flowmark', label: 'flowmark', silent: true })
-  run({
-    args: [prettierBin, ...prettierMd, '--write', '--no-error-on-unmatched-pattern', '**/*.md'],
-    command: 'bun',
-    label: 'prettier',
-    silent: true
-  })
-} else {
-  run({
-    args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
-    command: 'bun',
-    label: 'sort-package-json'
-  })
-  run({ args: ['ci', '--config-path', dir, '--diagnostic-level=error'], command: biomeBin, label: 'biome' })
-  run({ args: ['-c', join(dir, '.oxlintrc.json'), '--quiet'], command: oxlintBin, label: 'oxlint' })
-  run({
-    args: [eslintBin, ...eslintArgs, '--cache', '--cache-location', join(cwd, '.cache', '.eslintcache')],
-    command: 'bun',
-    label: 'eslint'
-  })
-  run({
-    args: [prettierBin, ...prettierMd, '--check', '--no-error-on-unmatched-pattern', '**/*.md'],
-    command: 'bun',
-    label: 'prettier'
-  })
+  runInit = async () => {
+    const pkgPath = joinPath(cwd, 'package.json')
+    if (!(await pathExists({ path: pkgPath }))) throw new CliExitError({ code: 1, message: 'No package.json found' })
+    const pkg = await readRequiredJson<Pkg>({ path: pkgPath }),
+      configFiles: string[] = []
+    if (await pathExists({ path: joinPath(cwd, 'eslint.config.ts') })) configFiles.push('eslint.config.ts')
+    if (await pathExists({ path: joinPath(cwd, 'lintmax.config.ts') })) configFiles.push('lintmax.config.ts')
+    await initScripts({ pkg, pkgPath })
+    await initTsconfig({ configFiles })
+    await initGitignore()
+    await initVscodeSettings({ pkg })
+    await initVscodeExtensions()
+    const foundLegacy = await findLegacyConfigs()
+    process.stdout.write('tsconfig.json    extends lintmax/tsconfig')
+    if (configFiles.length > 0) process.stdout.write(`, include: ${configFiles.join(', ')}`)
+    process.stdout.write('\n')
+    process.stdout.write('package.json     "fix": "lintmax fix", "check": "lintmax check"\n')
+    process.stdout.write(`.gitignore       ${ignoreEntries.join(', ')}\n`)
+    process.stdout.write('.vscode/settings biome formatter, codeActionsOnSave, eslint\n')
+    process.stdout.write('.vscode/ext      biomejs.biome, dbaeumer.vscode-eslint\n')
+    if (foundLegacy.length > 0)
+      process.stdout.write(`\nLegacy configs found (can be removed): ${foundLegacy.join(', ')}\n`)
+    process.stdout.write('\nRun: bun fix\n')
+  },
+  runLint = async () => {
+    const dir = joinPath(cwd, cacheDir)
+    ensureDirectory({ directory: dir })
+    const configPath = joinPath(cwd, 'lintmax.config.ts'),
+      hasConfig = await pathExists({ path: configPath }),
+      bundledBinA = joinPath(lintmaxRoot, 'node_modules', '.bin'),
+      bundledBinB = joinPath(dirnamePath(lintmaxRoot), '.bin'),
+      cwdBinDir = joinPath(cwd, 'node_modules', '.bin'),
+      env = { ...bunEnv, PATH: `${bundledBinA}:${bundledBinB}:${cwdBinDir}:${bunEnv.PATH ?? ''}` }
+    if (hasConfig)
+      run({
+        args: [
+          '-e',
+          `const m = await import('${configPath}'); if (m.default) { const { sync: s } = await import('lintmax'); await s(m.default); }`
+        ],
+        command: 'bun',
+        env,
+        label: 'config',
+        silent: true
+      })
+    else await sync()
+    const hasEslintConfig =
+        (await pathExists({ path: joinPath(cwd, 'eslint.config.ts') })) ||
+        (await pathExists({ path: joinPath(cwd, 'eslint.config.js') })) ||
+        (await pathExists({ path: joinPath(cwd, 'eslint.config.mjs') })),
+      eslintArgs = hasEslintConfig ? [] : ['--config', joinPath(dir, 'eslint.config.mjs')],
+      [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin] = await Promise.all([
+        resolveBin({ bin: 'sort-package-json', pkg: 'sort-package-json' }),
+        resolveBin({ bin: 'biome', pkg: '@biomejs/biome' }),
+        resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
+        resolveBin({ bin: 'eslint', pkg: 'eslint' }),
+        resolveBin({ bin: 'prettier', pkg: 'prettier' })
+      ]),
+      prettierMd = [
+        '--single-quote',
+        '--no-semi',
+        '--trailing-comma',
+        'none',
+        '--print-width',
+        '80',
+        '--arrow-parens',
+        'avoid',
+        '--tab-width',
+        '2',
+        '--prose-wrap',
+        'preserve'
+      ],
+      hasFlowmark = spawnSync({ cmd: ['which', 'flowmark'], env, stderr: 'pipe', stdout: 'pipe' }).exitCode === 0
+    if (cmd === 'fix') {
+      run({
+        args: [sortPkgJson, '**/package.json', '--ignore', '**/node_modules/**'],
+        command: 'bun',
+        env,
+        label: 'sort-package-json',
+        silent: true
+      })
+      run({
+        args: ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
+        command: biomeBin,
+        env,
+        label: 'biome',
+        silent: true
+      })
+      run({
+        args: ['-c', joinPath(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet'],
+        command: oxlintBin,
+        env,
+        label: 'oxlint',
+        silent: true
+      })
+      run({
+        args: [eslintBin, ...eslintArgs, '--fix', '--cache', '--cache-location', joinPath(cwd, '.cache', '.eslintcache')],
+        command: 'bun',
+        env,
+        label: 'eslint',
+        silent: true
+      })
+      run({
+        args: ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
+        command: biomeBin,
+        env,
+        label: 'biome',
+        silent: true
+      })
+      if (hasFlowmark) run({ args: ['--auto', '.'], command: 'flowmark', env, label: 'flowmark', silent: true })
+      run({
+        args: [prettierBin, ...prettierMd, '--write', '--no-error-on-unmatched-pattern', '**/*.md'],
+        command: 'bun',
+        env,
+        label: 'prettier',
+        silent: true
+      })
+      return
+    }
+    run({
+      args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
+      command: 'bun',
+      env,
+      label: 'sort-package-json'
+    })
+    run({ args: ['ci', '--config-path', dir, '--diagnostic-level=error'], command: biomeBin, env, label: 'biome' })
+    run({ args: ['-c', joinPath(dir, '.oxlintrc.json'), '--quiet'], command: oxlintBin, env, label: 'oxlint' })
+    run({
+      args: [eslintBin, ...eslintArgs, '--cache', '--cache-location', joinPath(cwd, '.cache', '.eslintcache')],
+      command: 'bun',
+      env,
+      label: 'eslint'
+    })
+    run({
+      args: [prettierBin, ...prettierMd, '--check', '--no-error-on-unmatched-pattern', '**/*.md'],
+      command: 'bun',
+      env,
+      label: 'prettier'
+    })
+  },
+  main = async () => {
+    const version = await readVersion()
+    if (cmd === 'init') {
+      await runInit()
+      return
+    }
+    if (cmd === '--version' || cmd === '-v') {
+      process.stdout.write(`${version}\n`)
+      return
+    }
+    if (cmd !== 'fix' && cmd !== 'check') {
+      usage({ version })
+      if (cmd === '--help' || cmd === '-h') return
+      throw new CliExitError({ code: 1 })
+    }
+    await runLint()
+  }
+try {
+  await main()
+} catch (error) {
+  if (error instanceof CliExitError) {
+    if (error.message.length > 0) process.stderr.write(`${error.message}\n`)
+    process.exitCode = error.code
+  } else throw error
 }

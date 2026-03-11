@@ -1,5 +1,4 @@
 /// <reference types="./types.d.ts" />
-
 import type { Linter } from 'eslint'
 
 import eslintReact from '@eslint-react/eslint-plugin'
@@ -13,34 +12,34 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import turbo from 'eslint-plugin-turbo'
 import { defineConfig, globalIgnores } from 'eslint/config'
-import { existsSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
 import tseslint from 'typescript-eslint'
 
 import type { EslintOptions } from './index.js'
 
 import { warnToError } from './index.js'
-
+import { isAbsolutePath, joinPath } from './path.js'
 interface LintmaxOptions extends EslintOptions {
   append?: Linter.Config[]
 }
-
 const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
     entryPoint ? eslintPluginBetterTailwindcss.configs['recommended-error'].rules : {},
   eslintFactory = (options?: LintmaxOptions): ReturnType<typeof defineConfig> => {
     const opts = options ?? {},
       root = opts.tsconfigRootDir ?? process.cwd(),
       configs: Parameters<typeof defineConfig> = [],
-      gitignorePath = join(root, '.gitignore'),
-      tailwindEntry = opts.tailwind && (isAbsolute(opts.tailwind) ? opts.tailwind : join(root, opts.tailwind)),
+      gitignorePath = joinPath(root, '.gitignore'),
+      tailwindEntry = opts.tailwind && (isAbsolutePath(opts.tailwind) ? opts.tailwind : joinPath(root, opts.tailwind)),
       tailwindSettings: Record<string, unknown> = {}
-
     if (tailwindEntry) tailwindSettings['better-tailwindcss'] = { entryPoint: tailwindEntry }
-
     if (opts.ignores) configs.push(globalIgnores(opts.ignores))
-
-    if (existsSync(gitignorePath)) configs.push(includeIgnoreFile(gitignorePath))
-
+    try {
+      configs.push(includeIgnoreFile(gitignorePath))
+    } catch (error) {
+      if (error instanceof Error) {
+        const message = error.message.toLowerCase()
+        if (!(message.includes('enoent') || message.includes('no such file'))) throw error
+      } else throw error
+    }
     configs.push(
       ...defineConfig(
         perfectionist['recommended-natural'],
@@ -79,6 +78,7 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
               { fixStyle: 'separate-type-imports', prefer: 'type-imports' }
             ],
             '@typescript-eslint/explicit-function-return-type': 'off',
+            '@typescript-eslint/explicit-member-accessibility': 'off',
             '@typescript-eslint/explicit-module-boundary-types': 'off',
             '@typescript-eslint/init-declarations': 'off',
             '@typescript-eslint/naming-convention': [
@@ -195,18 +195,14 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
         }
       })
     )
-
     if (opts.rules) {
       const overrideRules: Linter.RulesRecord = {}
       for (const [key, value] of Object.entries(opts.rules)) overrideRules[key] = value
-
       configs.push({ rules: overrideRules })
     }
-
     if (opts.append)
       for (const config of opts.append)
         configs.push(config.rules ? { ...config, rules: warnToError(config.rules) } : config)
-
     configs.push({
       languageOptions: {
         parserOptions: {
@@ -216,11 +212,9 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
       },
       linterOptions: { reportUnusedDisableDirectives: true }
     })
-
     return defineConfig(...configs)
   },
   defaultConfig = eslintFactory()
-
 export type { LintmaxOptions }
 export default defaultConfig
 export { eslintFactory as eslint }
