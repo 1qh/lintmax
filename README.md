@@ -13,7 +13,7 @@ You only disable what you don’t need.
 ## Install
 
 ```bash
-bun add -d lintmax typescript
+bun add -d lintmax
 bunx lintmax init
 ```
 
@@ -42,6 +42,8 @@ Create `lintmax.config.ts`:
 import { defineConfig } from 'lintmax'
 
 export default defineConfig({
+  compact: true,
+  globalIgnorePatterns: ['packages/ui/**', '.intlayer/cache/**'],
   biome: {
     rules: { noBarrelFile: 'off' },
     overrides: [{ disableLinter: true, includes: ['packages/ui/**'] }]
@@ -52,6 +54,11 @@ export default defineConfig({
   }
 })
 ```
+
+- `globalIgnorePatterns` appends patterns to Biome, ESLint, and oxlint ignore sets.
+- `compact` runs a whitespace compaction pass before linting (`false` by default).
+  - `lintmax fix`: rewrites tracked/untracked text files by collapsing 2+ blank lines to 1.
+  - `lintmax check`: verifies compaction state without modifying files.
 
 ### ESLint overrides
 

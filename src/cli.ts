@@ -2,6 +2,7 @@ import { env as bunEnv, file, spawnSync, write } from 'bun'
 
 import { cacheDir, sync } from './index.js'
 import { dirnamePath, fromFileUrl, joinPath } from './path.js'
+
 interface Pkg {
   [key: string]: unknown
   scripts?: Record<string, string>
@@ -21,7 +22,30 @@ class CliExitError extends Error {
     this.code = code
   }
 }
-const decoder = new TextDecoder(),
+const COMPACT_REGEX = /(?:\r?\n){2,}/gu,
+  compactBasenames = new Set(['.env.example', '.gitignore', '.npmrc', '.prettierignore', 'Dockerfile', 'Makefile']),
+  compactExtensions = new Set([
+    '.cjs',
+    '.css',
+    '.gql',
+    '.graphql',
+    '.html',
+    '.js',
+    '.json',
+    '.jsonc',
+    '.jsx',
+    '.md',
+    '.mjs',
+    '.mts',
+    '.scss',
+    '.sql',
+    '.ts',
+    '.tsx',
+    '.txt',
+    '.yaml',
+    '.yml'
+  ]),
+  decoder = new TextDecoder(),
   cwd = process.cwd(),
   cmd = process.argv[2],
   ignoreEntries = ['.cache/', '.eslintcache'],
@@ -43,8 +67,95 @@ const decoder = new TextDecoder(),
   },
   writeJson = async ({ data, path }: { data: Record<string, unknown>; path: string }) =>
     write(path, `${JSON.stringify(data, null, 2)}\n`),
+  basename = ({ path }: { path: string }): string => {
+    const index = path.lastIndexOf('/')
+    if (index === -1) return path
+    return path.slice(index + 1)
+  },
+  extension = ({ path }: { path: string }): string => {
+    const slashIndex = path.lastIndexOf('/'),
+      dotIndex = path.lastIndexOf('.')
+    return dotIndex > slashIndex ? path.slice(dotIndex) : ''
+  },
+  compactContent = ({ content }: { content: string }): string => content.replace(COMPACT_REGEX, '\n'),
+  isCompactCandidate = ({ relativePath }: { relativePath: string }): boolean => {
+    const fileName = basename({ path: relativePath })
+    if (compactBasenames.has(fileName)) return true
+    return compactExtensions.has(extension({ path: relativePath }))
+  },
+  isBinary = ({ bytes }: { bytes: Uint8Array }): boolean => {
+    for (const byte of bytes) if (byte === 0) return true
+    return false
+  },
+  listCompactFiles = ({ env, root }: { env: Record<string, string | undefined>; root: string }): string[] => {
+    const result = spawnSync({
+      cmd: ['git', '-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      env,
+      stderr: 'pipe',
+      stdout: 'pipe'
+    })
+    if (result.exitCode !== 0) {
+      const stderr = decodeText(result.stderr).trim()
+      throw new CliExitError({
+        code: result.exitCode,
+        message: stderr.length > 0 ? stderr : 'Failed to list files for compact step'
+      })
+    }
+    const entries = decodeText(result.stdout).split('\0'),
+      files: string[] = []
+    for (const entry of entries) if (entry.length > 0 && entry !== 'bun.lock') files.push(entry)
+    return files
+  },
+  runCompact = async ({
+    env,
+    mode,
+    root
+  }: {
+    env: Record<string, string | undefined>
+    mode: 'check' | 'fix'
+    root: string
+  }) => {
+    const files = listCompactFiles({ env, root }),
+      results = await Promise.all(
+        files.map(async relativePath => {
+          if (!isCompactCandidate({ relativePath })) return { changed: false, relativePath, scanned: false }
+          const absolutePath = joinPath(root, relativePath),
+            source = file(absolutePath)
+          if (!(await source.exists())) return { changed: false, relativePath, scanned: false }
+          const bytes = new Uint8Array(await source.arrayBuffer())
+          if (isBinary({ bytes })) return { changed: false, relativePath, scanned: true }
+          const content = decodeText(bytes),
+            compacted = compactContent({ content })
+          if (content === compacted) return { changed: false, relativePath, scanned: true }
+          if (mode === 'fix') await write(absolutePath, compacted)
+          return { changed: true, relativePath, scanned: true }
+        })
+      ),
+      changed: string[] = []
+    let scanned = 0
+    for (const result of results) {
+      if (result.scanned) scanned += 1
+      if (result.changed) changed.push(result.relativePath)
+    }
+    if (mode === 'fix') {
+      process.stdout.write(`[compact] Scanned ${scanned} files\n`)
+      process.stdout.write(`[compact] Updated ${changed.length} files\n`)
+      return
+    }
+    if (changed.length === 0) return
+    const shown = changed.slice(0, 10),
+      suffix = changed.length > shown.length ? `\n...and ${changed.length - shown.length} more` : ''
+    throw new CliExitError({
+      code: 1,
+      message: `[compact]\nFiles requiring compaction:\n${shown.join('\n')}${suffix}\nRun: lintmax fix`
+    })
+  },
   ensureDirectory = ({ directory }: { directory: string }) => {
-    const result = spawnSync({ cmd: ['mkdir', '-p', directory], stderr: 'pipe', stdout: 'pipe' })
+    const result = spawnSync({
+      cmd: ['mkdir', '-p', directory],
+      stderr: 'pipe',
+      stdout: 'pipe'
+    })
     if (result.exitCode === 0) return
     const stderr = decodeText(result.stderr).trim()
     throw new CliExitError({
@@ -132,7 +243,10 @@ const decoder = new TextDecoder(),
     for (const lang of formatterLangs) {
       const key = `[${lang}]`,
         existing = (settings[key] ?? {}) as Record<string, unknown>
-      settings[key] = { ...existing, 'editor.defaultFormatter': 'biomejs.biome' }
+      settings[key] = {
+        ...existing,
+        'editor.defaultFormatter': 'biomejs.biome'
+      }
     }
     const existingActions = (settings['editor.codeActionsOnSave'] ?? {}) as Record<string, unknown>
     settings['editor.codeActionsOnSave'] = {
@@ -155,7 +269,10 @@ const decoder = new TextDecoder(),
   },
   initVscodeExtensions = async () => {
     const extensionsPath = joinPath(cwd, '.vscode', 'extensions.json'),
-      extJson = (await readJson({ path: extensionsPath })) as { [key: string]: unknown; recommendations?: string[] },
+      extJson = (await readJson({ path: extensionsPath })) as {
+        [key: string]: unknown
+        recommendations?: string[]
+      },
       recommendations = ['biomejs.biome', 'dbaeumer.vscode-eslint'],
       currentRecs = extJson.recommendations ?? [],
       recsToAdd: string[] = []
@@ -193,7 +310,9 @@ const decoder = new TextDecoder(),
     return found
   },
   readVersion = async () => {
-    const pkg = await readRequiredJson<{ version: string }>({ path: joinPath(lintmaxRoot, 'package.json') })
+    const pkg = await readRequiredJson<{ version: string }>({
+      path: joinPath(lintmaxRoot, 'package.json')
+    })
     return pkg.version
   },
   usage = ({ version }: { version: string }) => {
@@ -216,8 +335,14 @@ const decoder = new TextDecoder(),
   },
   resolveBin = async ({ bin, pkg }: { bin: string; pkg: string }): Promise<string> => {
     const packageJsonPath = await resolvePackageJsonPath({ pkg })
-    if (!packageJsonPath) throw new CliExitError({ code: 1, message: `Cannot find ${pkg} — run: bun add -d lintmax` })
-    const pkgJson = await readRequiredJson<{ bin?: Record<string, string> | string }>({ path: packageJsonPath }),
+    if (!packageJsonPath)
+      throw new CliExitError({
+        code: 1,
+        message: `Cannot find ${pkg} — run: bun add -d lintmax`
+      })
+    const pkgJson = await readRequiredJson<{
+        bin?: Record<string, string> | string
+      }>({ path: packageJsonPath }),
       pkgDir = dirnamePath(packageJsonPath),
       binPath = typeof pkgJson.bin === 'string' ? pkgJson.bin : (pkgJson.bin?.[bin] ?? '')
     return joinPath(pkgDir, binPath)
@@ -272,12 +397,16 @@ const decoder = new TextDecoder(),
       bundledBinA = joinPath(lintmaxRoot, 'node_modules', '.bin'),
       bundledBinB = joinPath(dirnamePath(lintmaxRoot), '.bin'),
       cwdBinDir = joinPath(cwd, 'node_modules', '.bin'),
-      env = { ...bunEnv, PATH: `${bundledBinA}:${bundledBinB}:${cwdBinDir}:${bunEnv.PATH ?? ''}` }
+      runtimePath = joinPath(dir, 'lintmax.json'),
+      env = {
+        ...bunEnv,
+        PATH: `${bundledBinA}:${bundledBinB}:${cwdBinDir}:${bunEnv.PATH ?? ''}`
+      }
     if (hasConfig)
       run({
         args: [
           '-e',
-          `const m = await import('${configPath}'); if (m.default) { const { sync: s } = await import('lintmax'); await s(m.default); }`
+          `const m = await import('${configPath}'); const { sync: s } = await import('lintmax'); await s(m.default);`
         ],
         command: 'bun',
         env,
@@ -285,6 +414,15 @@ const decoder = new TextDecoder(),
         silent: true
       })
     else await sync()
+    const runtime = (await readJson({ path: runtimePath })) as {
+      compact?: boolean
+    }
+    if (runtime.compact === true)
+      await runCompact({
+        env,
+        mode: cmd === 'fix' ? 'fix' : 'check',
+        root: cwd
+      })
     const hasEslintConfig =
         (await pathExists({ path: joinPath(cwd, 'eslint.config.ts') })) ||
         (await pathExists({ path: joinPath(cwd, 'eslint.config.js') })) ||
@@ -311,7 +449,13 @@ const decoder = new TextDecoder(),
         '--prose-wrap',
         'preserve'
       ],
-      hasFlowmark = spawnSync({ cmd: ['which', 'flowmark'], env, stderr: 'pipe', stdout: 'pipe' }).exitCode === 0
+      hasFlowmark =
+        spawnSync({
+          cmd: ['which', 'flowmark'],
+          env,
+          stderr: 'pipe',
+          stdout: 'pipe'
+        }).exitCode === 0
     if (cmd === 'fix') {
       run({
         args: [sortPkgJson, '**/package.json', '--ignore', '**/node_modules/**'],
@@ -321,15 +465,15 @@ const decoder = new TextDecoder(),
         silent: true
       })
       run({
-        args: ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
-        command: biomeBin,
+        args: [biomeBin, 'check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
+        command: 'bun',
         env,
         label: 'biome',
         silent: true
       })
       run({
-        args: ['-c', joinPath(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet'],
-        command: oxlintBin,
+        args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet'],
+        command: 'bun',
         env,
         label: 'oxlint',
         silent: true
@@ -342,13 +486,20 @@ const decoder = new TextDecoder(),
         silent: true
       })
       run({
-        args: ['check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
-        command: biomeBin,
+        args: [biomeBin, 'check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
+        command: 'bun',
         env,
         label: 'biome',
         silent: true
       })
-      if (hasFlowmark) run({ args: ['--auto', '.'], command: 'flowmark', env, label: 'flowmark', silent: true })
+      if (hasFlowmark)
+        run({
+          args: ['--auto', '.'],
+          command: 'flowmark',
+          env,
+          label: 'flowmark',
+          silent: true
+        })
       run({
         args: [prettierBin, ...prettierMd, '--write', '--no-error-on-unmatched-pattern', '**/*.md'],
         command: 'bun',
@@ -364,8 +515,18 @@ const decoder = new TextDecoder(),
       env,
       label: 'sort-package-json'
     })
-    run({ args: ['ci', '--config-path', dir, '--diagnostic-level=error'], command: biomeBin, env, label: 'biome' })
-    run({ args: ['-c', joinPath(dir, '.oxlintrc.json'), '--quiet'], command: oxlintBin, env, label: 'oxlint' })
+    run({
+      args: [biomeBin, 'ci', '--config-path', dir, '--diagnostic-level=error'],
+      command: 'bun',
+      env,
+      label: 'biome'
+    })
+    run({
+      args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--quiet'],
+      command: 'bun',
+      env,
+      label: 'oxlint'
+    })
     run({
       args: [eslintBin, ...eslintArgs, '--cache', '--cache-location', joinPath(cwd, '.cache', '.eslintcache')],
       command: 'bun',

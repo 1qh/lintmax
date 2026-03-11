@@ -3,6 +3,7 @@ import type { Linter } from 'eslint'
 import { file, spawnSync, write } from 'bun'
 
 import { dirnamePath, fromFileUrl, joinPath } from './path.js'
+
 interface BiomeOptions {
   ignorePatterns?: string[]
   overrides?: {
@@ -28,7 +29,9 @@ interface OxlintOptions {
 }
 interface SyncOptions {
   biome?: BiomeOptions
+  compact?: boolean
   eslint?: EslintOptions
+  globalIgnorePatterns?: string[]
   oxlint?: OxlintOptions
 }
 const decoder = new TextDecoder(),
@@ -84,9 +87,18 @@ const decoder = new TextDecoder(),
     '!!**/test-results',
     '!!**/*.xcassets'
   ],
+  normalizeBiomeIgnorePattern = ({ pattern }: { pattern: string }): string => {
+    if (pattern.startsWith('!!')) return pattern
+    const trimmed = pattern.startsWith('./') ? pattern.slice(2) : pattern
+    return trimmed.startsWith('**/') ? `!!${trimmed}` : `!!**/${trimmed}`
+  },
   decodeBytes = (bytes: Uint8Array | undefined) => decoder.decode(bytes ?? new Uint8Array()),
   ensureDirectory = ({ directory }: { directory: string }) => {
-    const result = spawnSync({ cmd: ['mkdir', '-p', directory], stderr: 'pipe', stdout: 'pipe' })
+    const result = spawnSync({
+      cmd: ['mkdir', '-p', directory],
+      stderr: 'pipe',
+      stdout: 'pipe'
+    })
     if (result.exitCode === 0) return
     const stderr = decodeBytes(result.stderr).trim()
     throw new Error(stderr.length > 0 ? stderr : `Failed to create directory: ${directory}`)
@@ -103,7 +115,9 @@ const decoder = new TextDecoder(),
     return JSON.parse(text) as T
   },
   resolveSchemaPath = async ({ cwd }: { cwd: string }) => {
-    const bundled = resolveBundledModule({ specifier: '@biomejs/biome/configuration_schema.json' })
+    const bundled = resolveBundledModule({
+      specifier: '@biomejs/biome/configuration_schema.json'
+    })
     if (bundled) return bundled
     const consumerCandidate = joinPath(cwd, 'node_modules', '@biomejs', 'biome', 'configuration_schema.json')
     if (await file(consumerCandidate).exists()) return consumerCandidate
@@ -147,9 +161,11 @@ const decoder = new TextDecoder(),
   },
   createBiomeConfig = async ({
     cwd,
+    globalIgnorePatterns,
     options
   }: {
     cwd: string
+    globalIgnorePatterns?: string[]
     options?: BiomeOptions
   }): Promise<Record<string, unknown>> => {
     const { categories, ruleMap } = await resolveBiomeSchema({ cwd }),
@@ -159,33 +175,48 @@ const decoder = new TextDecoder(),
         const ruleName = key.includes('/') ? key.slice(key.indexOf('/') + 1) : key
         if (!allRulesOff.includes(ruleName)) allRulesOff.push(ruleName)
       }
-    const ignorePatterns = [...biomeIgnorePatterns]
-    if (options?.ignorePatterns)
-      for (const pattern of options.ignorePatterns) {
-        const negated = pattern.startsWith('!!') ? pattern : `!!**/${pattern}`
-        if (!ignorePatterns.includes(negated)) ignorePatterns.push(negated)
-      }
+    const ignorePatterns = [...biomeIgnorePatterns],
+      mergedIgnorePatterns = [...(globalIgnorePatterns ?? []), ...(options?.ignorePatterns ?? [])]
+    for (const pattern of mergedIgnorePatterns) {
+      const negated = normalizeBiomeIgnorePattern({ pattern })
+      if (!ignorePatterns.includes(negated)) ignorePatterns.push(negated)
+    }
     const overrides: unknown[] = [
       {
         css: { parser: { tailwindDirectives: true } },
         includes: ['**'],
-        linter: { rules: groupByCategory({ categoryMap: ruleMap, ruleNames: allRulesOff }) }
+        linter: {
+          rules: groupByCategory({
+            categoryMap: ruleMap,
+            ruleNames: allRulesOff
+          })
+        }
       }
     ]
     if (options?.overrides)
       for (const override of options.overrides)
-        if (override.disableLinter) overrides.push({ includes: override.includes, linter: { enabled: false } })
+        if (override.disableLinter)
+          overrides.push({
+            includes: override.includes,
+            linter: { enabled: false }
+          })
         else if (override.rules)
           overrides.push({
             includes: override.includes,
             linter: {
-              rules: groupByCategory({ categoryMap: ruleMap, ruleNames: extractRuleNames(override.rules) })
+              rules: groupByCategory({
+                categoryMap: ruleMap,
+                ruleNames: extractRuleNames(override.rules)
+              })
             }
           })
     return {
       $schema: 'https://biomejs.dev/schemas/latest/schema.json',
       assist: { actions: { source: { organizeImports: 'off' } } },
-      css: { formatter: { enabled: true, quoteStyle: 'single' }, parser: { tailwindDirectives: true } },
+      css: {
+        formatter: { enabled: true, quoteStyle: 'single' },
+        parser: { tailwindDirectives: true }
+      },
       files: { includes: ['**', ...ignorePatterns] },
       formatter: { indentStyle: 'space', lineWidth: 123 },
       javascript: {
@@ -215,15 +246,26 @@ const decoder = new TextDecoder(),
       overrides
     }
   },
-  createOxlintConfig = async ({ options }: { options?: OxlintOptions }): Promise<Record<string, unknown>> => {
+  createOxlintConfig = async ({
+    globalIgnorePatterns,
+    options
+  }: {
+    globalIgnorePatterns?: string[]
+    options?: OxlintOptions
+  }): Promise<Record<string, unknown>> => {
     const base = await readJsonFile<{
-      [key: string]: unknown
-      ignorePatterns?: string[]
-      overrides?: { files: string[]; rules: Record<string, unknown> }[]
-      rules: Record<string, unknown>
-    }>({ filePath: joinPath(pkgRoot, 'oxlintrc.json') })
+        [key: string]: unknown
+        ignorePatterns?: string[]
+        overrides?: { files: string[]; rules: Record<string, unknown> }[]
+        rules: Record<string, unknown>
+      }>({ filePath: joinPath(pkgRoot, 'oxlintrc.json') }),
+      mergedIgnorePatterns = [...(globalIgnorePatterns ?? []), ...(options?.ignorePatterns ?? [])]
+    if (mergedIgnorePatterns.length > 0) {
+      base.ignorePatterns ??= []
+      for (const pattern of mergedIgnorePatterns)
+        if (!base.ignorePatterns.includes(pattern)) base.ignorePatterns.push(pattern)
+    }
     if (!options) return base
-    if (options.ignorePatterns) base.ignorePatterns = [...(base.ignorePatterns ?? []), ...options.ignorePatterns]
     if (options.rules) for (const [key, value] of Object.entries(options.rules)) base.rules[key] = value
     if (options.overrides) {
       base.overrides ??= []
@@ -243,16 +285,36 @@ const decoder = new TextDecoder(),
   cacheDir = joinPath('node_modules', '.cache', 'lintmax'),
   sync = async (options?: SyncOptions): Promise<void> => {
     const cwd = process.cwd(),
-      dir = joinPath(cwd, cacheDir)
+      dir = joinPath(cwd, cacheDir),
+      globalIgnorePatterns = options?.globalIgnorePatterns ?? [],
+      mergedEslintIgnores = [...globalIgnorePatterns]
+    if (options?.eslint?.ignores)
+      for (const pattern of options.eslint.ignores)
+        if (!mergedEslintIgnores.includes(pattern)) mergedEslintIgnores.push(pattern)
+    const eslintOptions: EslintOptions | undefined = options?.eslint
+      ? { ...options.eslint }
+      : mergedEslintIgnores.length > 0
+        ? { ignores: mergedEslintIgnores }
+        : undefined
+    if (eslintOptions && mergedEslintIgnores.length > 0) eslintOptions.ignores = mergedEslintIgnores
     ensureDirectory({ directory: dir })
-    const biomeConfig = await createBiomeConfig({ cwd, options: options?.biome }),
-      oxlintConfig = await createOxlintConfig({ options: options?.oxlint }),
-      eslintConfig = options?.eslint
-        ? `import { eslint } from 'lintmax/eslint'\nexport default eslint(${JSON.stringify(options.eslint)})\n`
-        : "export { default } from 'lintmax/eslint'\n"
+    const biomeConfig = await createBiomeConfig({
+        cwd,
+        globalIgnorePatterns,
+        options: options?.biome
+      }),
+      oxlintConfig = await createOxlintConfig({
+        globalIgnorePatterns,
+        options: options?.oxlint
+      }),
+      eslintConfig = eslintOptions
+        ? `import { eslint } from 'lintmax/eslint'\nexport default eslint(${JSON.stringify(eslintOptions)})\n`
+        : "export { default } from 'lintmax/eslint'\n",
+      runtimeConfig = { compact: options?.compact === true }
     await write(joinPath(dir, 'biome.json'), `${JSON.stringify(biomeConfig, null, 2)}\n`)
     await write(joinPath(dir, '.oxlintrc.json'), `${JSON.stringify(oxlintConfig, null, 2)}\n`)
     await write(joinPath(dir, 'eslint.config.mjs'), eslintConfig)
+    await write(joinPath(dir, 'lintmax.json'), `${JSON.stringify(runtimeConfig, null, 2)}\n`)
   },
   defineConfig = (options: SyncOptions): SyncOptions => options
 export type { EslintOptions, SyncOptions }
