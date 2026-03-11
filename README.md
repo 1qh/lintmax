@@ -57,8 +57,8 @@ export default defineConfig({
 
 - `globalIgnorePatterns` appends patterns to Biome, ESLint, and oxlint ignore sets.
 - `compact` runs a whitespace compaction pass before linting (`false` by default).
-  - `lintmax fix`: rewrites tracked/untracked text files by collapsing 2+ blank lines to 1.
-  - `lintmax check`: verifies compaction state without modifying files.
+- `lintmax fix`: rewrites tracked/untracked text files by collapsing 2+ blank lines to 1.
+- `lintmax check`: verifies compaction state without modifying files.
 
 ### ESLint overrides
 
@@ -91,8 +91,7 @@ One preset for all.
 ## How it stays up to date
 
 Biome config is built **dynamically** from the installed `@biomejs/biome` schema at
-runtime.
-New rules, category changes, and nursery promotions are picked up automatically.
+runtime. New rules, category changes, and nursery promotions are picked up automatically.
 
 ESLint plugins and oxlint are dependencies with auto-updating versions.
 Run `bun update` to get the latest rules without waiting for a lintmax release.
