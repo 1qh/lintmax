@@ -2,13 +2,9 @@
 
 Maximum strictness linting, formatting, and type-checking in one package.
 
-Wraps **6 tools** into a single CLI: [Biome](https://biomejs.dev),
-[oxlint](https://oxc.rs), [ESLint](https://eslint.org), [Prettier](https://prettier.io)
-(markdown), [sort-package-json](https://github.com/keithamus/sort-package-json), and
-[Flowmark](https://github.com/jlevy/flowmark) (optional).
+Wraps **6 tools** into a single CLI: [Biome](https://biomejs.dev), [oxlint](https://oxc.rs), [ESLint](https://eslint.org), [Prettier](https://prettier.io) (markdown), [sort-package-json](https://github.com/keithamus/sort-package-json), and [Flowmark](https://github.com/jlevy/flowmark) (optional).
 
-All rules enabled at `error` by default.
-You only disable what you don’t need.
+All rules enabled at `error` by default. You only disable what you don’t need.
 
 ## Install
 
@@ -85,16 +81,13 @@ Without `eslint.config.ts`, lintmax generates a default config automatically.
 { "extends": "lintmax/tsconfig" }
 ```
 
-Strict mode, bundler resolution, ESNext target, JSX preserve.
-One preset for all.
+Strict mode, bundler resolution, ESNext target, JSX preserve. One preset for all.
 
 ## How it stays up to date
 
-Biome config is built **dynamically** from the installed `@biomejs/biome` schema at
-runtime. New rules, category changes, and nursery promotions are picked up automatically.
+Biome config is built **dynamically** from the installed `@biomejs/biome` schema at runtime. New rules, category changes, and nursery promotions are picked up automatically.
 
-ESLint plugins and oxlint are dependencies with auto-updating versions.
-Run `bun update` to get the latest rules without waiting for a lintmax release.
+ESLint plugins and oxlint are dependencies with auto-updating versions. Run `bun update` to get the latest rules without waiting for a lintmax release.
 
 ## What each tool handles
 

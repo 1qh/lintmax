@@ -494,7 +494,7 @@ const COMPACT_REGEX = /(?:\r?\n){2,}/gu,
       })
       if (hasFlowmark)
         run({
-          args: ['--auto', '.'],
+          args: ['-w', '0', '--auto', '.'],
           command: 'flowmark',
           env,
           label: 'flowmark',

@@ -1,6 +1,6 @@
 {
   "name": "lintmax",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Maximum strictness linting, formatting, and type-checking in one package",
   "keywords": [
     "biome",
