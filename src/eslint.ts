@@ -12,26 +12,147 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import turbo from 'eslint-plugin-turbo'
 import { defineConfig, globalIgnores } from 'eslint/config'
+import { existsSync } from 'node:fs'
 import tseslint from 'typescript-eslint'
 
-import type { EslintOptions } from './index.js'
+import type { EslintOptions } from './lintmax-types.js'
 
-import { warnToError } from './index.js'
+import {
+  DEFAULT_SHARED_IGNORE_PATTERNS,
+  ESLINT_TEST_FILE_PATTERNS,
+  SHARED_OVERRIDE_SYMBOL_KEY,
+  TAILWIND_ENTRY_CANDIDATES
+} from './constants.js'
+import {
+  findUnknownRules,
+  isRecord,
+  normalizeObjectListInput,
+  normalizePathListInput,
+  normalizeRulesOffInput,
+  normalizeTailwindOption,
+  warnToError
+} from './normalize.js'
 import { isAbsolutePath, joinPath } from './path.js'
-interface LintmaxOptions extends EslintOptions {
-  append?: Linter.Config[]
+interface SharedOverrideAppendConfig {
+  files?: string[]
+  rules?: Linter.RulesRecord
 }
-const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
+const sharedOverrideMarker = Symbol.for(SHARED_OVERRIDE_SYMBOL_KEY),
+  normalizeAppendInput = ({ append }: { append: EslintOptions['append'] }): Linter.Config[] => {
+    const out: Linter.Config[] = []
+    for (const value of normalizeObjectListInput({ allowNonPlain: true, label: 'eslint.append', value: append }))
+      out.push(value as Linter.Config)
+    return out
+  },
+  validateEslintOptions = ({ options }: { options?: EslintOptions }) => {
+    if (!options) return
+    if (options.ignores !== undefined)
+      normalizePathListInput({
+        allowUndefined: true,
+        label: 'eslint.ignores',
+        value: options.ignores
+      })
+    if (options.off !== undefined)
+      normalizeRulesOffInput({
+        label: 'eslint.off',
+        value: options.off
+      })
+    if (options.append !== undefined) normalizeAppendInput({ append: options.append })
+    const tailwind = normalizeTailwindOption({
+        label: 'eslint.tailwind',
+        value: options.tailwind
+      }),
+      tailwindEntrySetting = tailwind
+    if (typeof tailwindEntrySetting === 'string') {
+      const root = options.tsconfigRootDir ?? process.cwd(),
+        resolved = isAbsolutePath(tailwindEntrySetting) ? tailwindEntrySetting : joinPath(root, tailwindEntrySetting)
+      if (!existsSync(resolved))
+        throw new Error(
+          `eslint.tailwind file not found: ${resolved}. Use an existing path, set eslint.tailwind to false, or remove eslint.tailwind to use auto-detection.`
+        )
+    }
+    if (options.tsconfigRootDir !== undefined && typeof options.tsconfigRootDir !== 'string')
+      throw new Error('eslint.tsconfigRootDir must be a string')
+  },
+  collectKnownEslintRuleNames = ({
+    appendConfigs,
+    baseConfigs
+  }: {
+    appendConfigs: Linter.Config[]
+    baseConfigs: Parameters<typeof defineConfig>
+  }): Set<string> => {
+    const knownRuleNames = new Set<string>(),
+      seenConfigs = new WeakSet<object>(),
+      collectPluginRuleNames = ({ plugins }: { plugins: unknown }) => {
+        if (!isRecord(plugins)) return
+        for (const [pluginName, plugin] of Object.entries(plugins))
+          if (isRecord(plugin) && isRecord(plugin.rules))
+            for (const ruleName of Object.keys(plugin.rules)) knownRuleNames.add(`${pluginName}/${ruleName}`)
+      },
+      collectFromConfig = ({ config, includeRules }: { config: unknown; includeRules: boolean }) => {
+        if (typeof config !== 'object' || config === null) return
+        if (seenConfigs.has(config)) return
+        seenConfigs.add(config)
+        if (Array.isArray(config)) {
+          for (const entry of config) collectFromConfig({ config: entry, includeRules })
+          return
+        }
+        if (!isRecord(config)) return
+        if (includeRules && isRecord(config.rules))
+          for (const ruleName of Object.keys(config.rules)) knownRuleNames.add(ruleName)
+        if ('plugins' in config) collectPluginRuleNames({ plugins: config.plugins })
+        if ('extends' in config) collectFromConfig({ config: config.extends, includeRules: true })
+      }
+    for (const config of baseConfigs) collectFromConfig({ config, includeRules: true })
+    for (const config of appendConfigs) collectFromConfig({ config, includeRules: false })
+    return knownRuleNames
+  },
+  getSharedAppendConfig = ({ config }: { config: Linter.Config }): null | SharedOverrideAppendConfig => {
+    const raw = config as Record<PropertyKey, unknown>
+    return raw[sharedOverrideMarker] === true ? (config as SharedOverrideAppendConfig) : null
+  },
+  resolveTailwindEntry = ({
+    root,
+    tailwind
+  }: {
+    root: string
+    tailwind: boolean | string | undefined
+  }): string | undefined => {
+    const tailwindSetting = tailwind ?? true
+    if (tailwindSetting === false) return
+    if (typeof tailwindSetting === 'string')
+      return isAbsolutePath(tailwindSetting) ? tailwindSetting : joinPath(root, tailwindSetting)
+    const matches: string[] = []
+    for (const candidate of TAILWIND_ENTRY_CANDIDATES) {
+      const resolved = joinPath(root, candidate)
+      if (existsSync(resolved)) matches.push(resolved)
+    }
+    if (matches.length <= 1) return matches[0]
+    const relMatches = matches.map(path => path.slice(root.length + 1))
+    throw new Error(
+      `Multiple Tailwind entry files found: ${relMatches.join(', ')}. Set eslint.tailwind to an explicit path.`
+    )
+  },
+  tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
     entryPoint ? eslintPluginBetterTailwindcss.configs['recommended-error'].rules : {},
-  eslintFactory = (options?: LintmaxOptions): ReturnType<typeof defineConfig> => {
+  eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig> => {
+    validateEslintOptions({ options })
     const opts = options ?? {},
       root = opts.tsconfigRootDir ?? process.cwd(),
       configs: Parameters<typeof defineConfig> = [],
       gitignorePath = joinPath(root, '.gitignore'),
-      tailwindEntry = opts.tailwind && (isAbsolutePath(opts.tailwind) ? opts.tailwind : joinPath(root, opts.tailwind)),
+      normalizedIgnores = normalizePathListInput({
+        allowUndefined: true,
+        label: 'eslint.ignores',
+        value: opts.ignores
+      }),
+      tailwindEntry = resolveTailwindEntry({
+        root,
+        tailwind: opts.tailwind
+      }),
       tailwindSettings: Record<string, unknown> = {}
     if (tailwindEntry) tailwindSettings['better-tailwindcss'] = { entryPoint: tailwindEntry }
-    if (opts.ignores) configs.push(globalIgnores(opts.ignores))
+    configs.push(globalIgnores([...DEFAULT_SHARED_IGNORE_PATTERNS, ...normalizedIgnores]))
     try {
       configs.push(includeIgnoreFile(gitignorePath))
     } catch (error) {
@@ -113,6 +234,7 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
             'no-undefined': 'off',
             'no-underscore-dangle': 'off',
             'one-var': ['error', 'consecutive'],
+            'perfectionist/sort-objects': 'off',
             'perfectionist/sort-variable-declarations': 'off',
             'preferArrow/prefer-arrow-functions': ['error', { returnStyle: 'implicit' }],
             'sort-imports': 'off',
@@ -193,16 +315,55 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
           }),
           '@next/next/no-duplicate-head': 'off'
         }
+      }),
+      ...defineConfig({
+        files: [...ESLINT_TEST_FILE_PATTERNS],
+        rules: {
+          '@typescript-eslint/require-await': 'off'
+        }
       })
     )
-    if (opts.rules) {
+    const appendConfigs = normalizeAppendInput({ append: opts.append }),
+      knownRuleNames = collectKnownEslintRuleNames({
+        appendConfigs,
+        baseConfigs: configs
+      }),
+      normalizedRules = normalizeRulesOffInput({
+        label: 'eslint.off',
+        value: opts.off
+      })
+    if (normalizedRules) {
+      const unknownRules = findUnknownRules({
+        knownRules: knownRuleNames,
+        rules: normalizedRules
+      })
+      if (unknownRules.length > 0) throw new Error(`eslint.off contains unknown eslint rules: ${unknownRules.join(', ')}`)
       const overrideRules: Linter.RulesRecord = {}
-      for (const [key, value] of Object.entries(opts.rules)) overrideRules[key] = value
+      for (const [key, value] of Object.entries(normalizedRules)) overrideRules[key] = value
       configs.push({ rules: overrideRules })
     }
-    if (opts.append)
-      for (const config of opts.append)
-        configs.push(config.rules ? { ...config, rules: warnToError(config.rules) } : config)
+    for (const config of appendConfigs) {
+      const shared = getSharedAppendConfig({ config }),
+        unknownRules =
+          shared && config.rules
+            ? findUnknownRules({
+                knownRules: knownRuleNames,
+                rules: config.rules
+              })
+            : []
+      if (unknownRules.length > 0)
+        throw new Error(`overrides.eslint contains unknown eslint rules: ${unknownRules.join(', ')}`)
+      const sanitized: Linter.Config =
+        shared === null
+          ? config
+          : (() => {
+              const out: Record<string, unknown> = {}
+              if (shared.files !== undefined) out.files = shared.files
+              if (shared.rules !== undefined) out.rules = shared.rules
+              return out as Linter.Config
+            })()
+      configs.push(sanitized.rules ? { ...sanitized, rules: warnToError(sanitized.rules) } : sanitized)
+    }
     configs.push({
       languageOptions: {
         parserOptions: {
@@ -215,6 +376,6 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
     return defineConfig(...configs)
   },
   defaultConfig = eslintFactory()
-export type { LintmaxOptions }
+export type { EslintOptions }
 export default defaultConfig
 export { eslintFactory as eslint }

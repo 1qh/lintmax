@@ -1,6 +1,6 @@
 {
   "name": "lintmax",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Maximum strictness linting, formatting, and type-checking in one package",
   "keywords": [
     "biome",
@@ -41,11 +41,14 @@
     "oxlintrc.json"
   ],
   "scripts": {
-    "build": "rm -rf dist .cache/tsbuildinfo.json && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
+    "build": "rm -rf node_modules bun.lock dist .cache && bun install && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
     "check": "bun dist/cli.js check",
-    "ci": "rm -rf node_modules .cache dist bun.lock && bun i && bun run build && bun check",
+    "ci": "bun run build && bun check",
     "fix": "bun dist/cli.js fix",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "release": "bun run build && bun check && bun run smoke && bun publish",
+    "release:dry": "bun run build && bun check && bun run smoke && bun publish --dry-run",
+    "smoke": "bun script/smoke.ts"
   },
   "dependencies": {
     "@biomejs/biome": "latest",
