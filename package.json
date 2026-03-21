@@ -41,15 +41,17 @@
     "oxlintrc.json"
   ],
   "scripts": {
-    "build": "(O=$(bun run build:raw 2>&1) || { echo \"$O\"; false; })",
-    "build:raw": "rm -rf node_modules bun.lock dist .cache && bun install && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
-    "check": "(O=$(bun dist/cli.js check 2>&1) || { echo \"$O\"; false; })",
+    "build": "q bun run build:raw",
+    "build:raw": "rm -rf node_modules bun.lock dist .cache && bun install --silent && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
+    "check": "q bun dist/cli.js check",
     "ci": "bun run build && bun check",
-    "fix": "(O=$(bun dist/cli.js fix 2>&1) || { echo \"$O\"; false; })",
+    "fix": "q bun dist/cli.js fix",
+    "postinstall": "bun run q:install",
     "prepublishOnly": "bun run build",
-    "release": "bun run build && bun check && bun run smoke && bun publish",
-    "release:dry": "bun run build && bun check && bun run smoke && bun publish --dry-run",
-    "smoke": "(O=$(bun script/smoke.ts 2>&1) || { echo \"$O\"; false; })"
+    "q:install": "mkdir -p node_modules/.bin && printf '%s\n' '#!/usr/bin/env bash' 'set -u' '' 'if [ \"$#\" -eq 0 ]; then' \"  printf '%s\\\\n' 'Usage: q <command> [args...]' >&2\" '  exit 2' 'fi' '' 'out=\"$(\"$@\" 2>&1)\"' 'status=$?' '' 'if [ \"$status\" -ne 0 ]; then' '  printf \"%s\\\\n\" \"$out\" >&2' '  exit \"$status\"' 'fi' > node_modules/.bin/q && chmod +x node_modules/.bin/q",
+    "release": "q bun run build && q bun check && q bun run smoke && q bun publish",
+    "release:dry": "q bun run build && q bun check && q bun run smoke && q bun publish --dry-run",
+    "smoke": "q bun script/smoke.ts"
   },
   "dependencies": {
     "@biomejs/biome": "latest",
