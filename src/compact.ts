@@ -1,5 +1,4 @@
 import { file, spawnSync, write } from 'bun'
-
 import { CliExitError, decodeText } from './core.js'
 import { joinPath } from './path.js'
 const COMPACT_REGEX = /(?:\r?\n){2,}/gu,

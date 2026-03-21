@@ -1,6 +1,6 @@
 {
   "name": "lintmax",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "Maximum strictness linting, formatting, and type-checking in one package",
   "keywords": [
     "biome",
@@ -41,14 +41,15 @@
     "oxlintrc.json"
   ],
   "scripts": {
-    "build": "rm -rf node_modules bun.lock dist .cache && bun install && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
-    "check": "bun dist/cli.js check",
+    "build": "(O=$(bun run build:raw 2>&1) || { echo \"$O\"; false; })",
+    "build:raw": "rm -rf node_modules bun.lock dist .cache && bun install && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
+    "check": "(O=$(bun dist/cli.js check 2>&1) || { echo \"$O\"; false; })",
     "ci": "bun run build && bun check",
-    "fix": "bun dist/cli.js fix",
+    "fix": "(O=$(bun dist/cli.js fix 2>&1) || { echo \"$O\"; false; })",
     "prepublishOnly": "bun run build",
     "release": "bun run build && bun check && bun run smoke && bun publish",
     "release:dry": "bun run build && bun check && bun run smoke && bun publish --dry-run",
-    "smoke": "bun script/smoke.ts"
+    "smoke": "(O=$(bun script/smoke.ts 2>&1) || { echo \"$O\"; false; })"
   },
   "dependencies": {
     "@biomejs/biome": "latest",

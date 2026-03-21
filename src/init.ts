@@ -1,7 +1,5 @@
 import { file, write } from 'bun'
-
 import type { Pkg } from './core.js'
-
 import { CliExitError, cwd, ignoreEntries, pathExists, readRequiredJson, writeJson } from './core.js'
 import { joinPath } from './path.js'
 const initScripts = async ({ pkg, pkgPath }: { pkg: Pkg; pkgPath: string }) => {

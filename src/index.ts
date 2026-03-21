@@ -1,8 +1,6 @@
 import type { Linter } from 'eslint'
-
 import { file, write } from 'bun'
 import { relative as relativePath } from 'node:path'
-
 import type {
   BiomeOptions,
   EslintImportAppendEntry,
@@ -11,7 +9,6 @@ import type {
   SyncOptions,
   TailwindOption
 } from './lintmax-types.js'
-
 import {
   BIOME_IGNORE_PATTERNS,
   BIOME_PATTERN_RULE_OVERRIDES,

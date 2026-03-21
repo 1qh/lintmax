@@ -1,6 +1,5 @@
 /// <reference types="./types.d.ts" />
 import type { Linter } from 'eslint'
-
 import eslintReact from '@eslint-react/eslint-plugin'
 import { includeIgnoreFile } from '@eslint/compat'
 import eslint from '@eslint/js'
@@ -14,9 +13,7 @@ import turbo from 'eslint-plugin-turbo'
 import { defineConfig, globalIgnores } from 'eslint/config'
 import { existsSync } from 'node:fs'
 import tseslint from 'typescript-eslint'
-
 import type { EslintOptions } from './lintmax-types.js'
-
 import {
   DEFAULT_SHARED_IGNORE_PATTERNS,
   ESLINT_TEST_FILE_PATTERNS,
@@ -236,6 +233,7 @@ const sharedOverrideMarker = Symbol.for(SHARED_OVERRIDE_SYMBOL_KEY),
             'no-undefined': 'off',
             'no-underscore-dangle': 'off',
             'one-var': ['error', 'consecutive'],
+            'perfectionist/sort-imports': ['error', { newlinesBetween: 0, order: 'asc', type: 'natural' }],
             'perfectionist/sort-objects': 'off',
             'perfectionist/sort-variable-declarations': 'off',
             'preferArrow/prefer-arrow-functions': ['error', { returnStyle: 'implicit' }],

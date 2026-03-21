@@ -1,7 +1,5 @@
 import { env as bunEnv, spawnSync } from 'bun'
-
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
-
 import { runCompact } from './compact.js'
 import {
   cacheDir,
