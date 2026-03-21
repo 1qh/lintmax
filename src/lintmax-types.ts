@@ -7,6 +7,13 @@ interface BiomeOptions {
     off: RulesOffInput
   }[]
 }
+interface EslintImportAppendEntry {
+  $lintmax: 'eslint-import'
+  files?: PathListInput
+  from: string
+  ignores?: PathListInput
+  name?: string
+}
 interface EslintOptions {
   append?: Linter.Config[]
   ignores?: PathListInput
@@ -48,7 +55,9 @@ type SharedOverrideMapRuleOptions =
 interface SyncOptions {
   biome?: BiomeOptions
   compact?: boolean
-  eslint?: Omit<EslintOptions, 'append' | 'tailwind' | 'tsconfigRootDir'> & { append?: readonly JsonObject[] }
+  eslint?: Omit<EslintOptions, 'append' | 'tailwind' | 'tsconfigRootDir'> & {
+    append?: readonly (EslintImportAppendEntry | JsonObject)[]
+  }
   ignores?: PathListInput
   overrides?: Record<string, SharedOverrideMapRuleOptions>
   oxlint?: OxlintOptions
@@ -58,6 +67,7 @@ interface SyncOptions {
 type TailwindOption = boolean | string
 export type {
   BiomeOptions,
+  EslintImportAppendEntry,
   EslintOptions,
   OxlintOptions,
   PathListInput,

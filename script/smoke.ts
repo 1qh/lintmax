@@ -1,5 +1,5 @@
 import { $, file, spawnSync, write } from 'bun'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 const decoder = new TextDecoder(),
@@ -244,6 +244,26 @@ try {
     cmd: ['bun', 'node_modules/lintmax/dist/cli.js', 'check'],
     label: 'single-file eslint customization'
   })
+  await mkdir(join(dir, 'generated'), { recursive: true })
+  await write(
+    join(dir, 'generated/eslint-import-preset.mjs'),
+    "export const recommended = [{ plugins: { demo: { meta: { name: 'eslint-plugin-demo', version: '1.0.0' }, rules: { 'demo/noop': { create: () => ({}), meta: { schema: [], type: 'problem' } } } } }, rules: { 'demo/noop': 'off' } }]\n"
+  )
+  await write(
+    join(dir, 'lintmax.config.ts'),
+    "import { defineConfig, eslintImport } from 'lintmax'\n\nexport default defineConfig({\n  eslint: {\n    append: [\n      eslintImport({\n        files: ['src/**/*.ts'],\n        from: './generated/eslint-import-preset.mjs',\n        name: 'recommended'\n      })\n    ]\n  }\n})\n"
+  )
+  run({
+    cmd: ['bun', 'node_modules/lintmax/dist/cli.js', 'check'],
+    label: 'eslintImport helper supports runtime preset imports'
+  })
+  const eslintImportGenerated = await file(join(dir, 'node_modules/.cache/lintmax/eslint.generated.mjs')).text()
+  if (!eslintImportGenerated.includes('generated/eslint-import-preset.mjs'))
+    throw new Error('eslintImport helper did not emit runtime import to generated eslint config')
+  if (eslintImportGenerated.includes('eslint-plugin-demo'))
+    throw new Error('eslintImport helper unexpectedly serialized plugin objects into generated eslint config')
+  if (!eslintImportGenerated.includes('appendImports'))
+    throw new Error('eslintImport helper did not emit append import expansion path')
   await write(join(dir, 'eslint.config.ts'), "throw new Error('should not be used by lintmax')\n")
   run({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.js', 'check'],

@@ -1,8 +1,16 @@
 import type { Linter } from 'eslint'
 
 import { file, write } from 'bun'
+import { relative as relativePath } from 'node:path'
 
-import type { BiomeOptions, EslintOptions, OxlintOptions, SyncOptions, TailwindOption } from './lintmax-types.js'
+import type {
+  BiomeOptions,
+  EslintImportAppendEntry,
+  EslintOptions,
+  OxlintOptions,
+  SyncOptions,
+  TailwindOption
+} from './lintmax-types.js'
 
 import {
   BIOME_IGNORE_PATTERNS,
@@ -43,7 +51,7 @@ interface ParsedBiomeSyncConfig {
   }[]
 }
 interface ParsedEslintSyncConfig {
-  append?: readonly Record<string, unknown>[]
+  append?: readonly ParsedSyncEslintAppendEntry[]
   ignores?: readonly string[]
   off?: readonly string[]
 }
@@ -58,6 +66,16 @@ interface ParsedOxlintSyncConfig {
     files: readonly string[]
     off: readonly string[]
   }[]
+}
+type ParsedSyncEslintAppendEntry = ParsedSyncEslintAppendImportEntry | ParsedSyncEslintAppendInlineEntry
+interface ParsedSyncEslintAppendImportEntry {
+  files?: readonly string[]
+  from: string
+  ignores?: readonly string[]
+  name: string
+}
+interface ParsedSyncEslintAppendInlineEntry {
+  config: Record<string, unknown>
 }
 interface ParsedSyncOptions extends ParsedTopLevelSyncScalars {
   biome?: ParsedBiomeSyncConfig
@@ -76,7 +94,18 @@ interface SharedOverrideEntry {
   files: string[]
   oxlintRules?: Record<string, 'off'>
 }
-const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json'))),
+interface SyncEslintImportMarker {
+  __lintmaxImportRef: number
+}
+interface SyncEslintImportRef {
+  exportName: string
+  files?: readonly string[]
+  ignores?: readonly string[]
+  source: string
+}
+const ESLINT_IMPORT_MARKER_KEY = '__lintmaxImportRef',
+  ESLINT_IMPORT_SENTINEL = 'eslint-import',
+  pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json'))),
   normalizeBiomeIgnorePattern = ({ pattern }: { pattern: string }): string => {
     if (pattern.startsWith('!!')) return pattern
     const trimmed = normalizeIgnorePattern({ pattern })
@@ -348,6 +377,63 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
     if (parsedOverrides.length > 0) parsed.overrides = parsedOverrides
     return parsed
   },
+  parseEslintAppendEntry = ({
+    index,
+    item
+  }: {
+    index: number
+    item: Record<string, unknown>
+  }): ParsedSyncEslintAppendEntry => {
+    const { $lintmax: marker } = item
+    if (marker === ESLINT_IMPORT_SENTINEL) {
+      const allowedKeys = new Set(['$lintmax', 'files', 'from', 'ignores', 'name'])
+      for (const key of Object.keys(item))
+        if (!allowedKeys.has(key))
+          throw new Error(
+            `eslint.append[${index}].${key} is not supported for eslint-import entries. Use from, name, files, ignores.`
+          )
+      assertOptionalString({
+        label: `eslint.append[${index}].from`,
+        value: item.from
+      })
+      const { from } = item
+      if (typeof from !== 'string' || from.trim().length === 0)
+        throw new Error(`eslint.append[${index}].from must be a non-empty string`)
+      assertOptionalString({
+        label: `eslint.append[${index}].name`,
+        value: item.name
+      })
+      const files =
+          item.files === undefined
+            ? undefined
+            : normalizePathListInput({
+                label: `eslint.append[${index}].files`,
+                value: item.files
+              }),
+        ignores =
+          item.ignores === undefined
+            ? undefined
+            : normalizePathListInput({
+                label: `eslint.append[${index}].ignores`,
+                value: item.ignores
+              })
+      return {
+        files,
+        from,
+        ignores,
+        name: typeof item.name === 'string' && item.name.trim().length > 0 ? item.name : 'default'
+      }
+    }
+    if ('$lintmax' in item)
+      throw new Error(
+        `eslint.append[${index}].$lintmax has unsupported value. Use eslintImport(...) or remove the $lintmax key.`
+      )
+    assertJsonSerializable({
+      label: `eslint.append[${index}]`,
+      value: item
+    })
+    return { config: item }
+  },
   validateEslintSyncConfig = ({ eslint }: { eslint: unknown }): ParsedEslintSyncConfig => {
     const eslintValue = assertObject({ label: 'eslint config', value: eslint }),
       parsedCommon = parseLinterSyncCommon({
@@ -366,12 +452,12 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
         label: 'eslint.append',
         value: eslintValue.append
       })
-      for (const [i, item] of appendEntries.entries())
-        assertJsonSerializable({
-          label: `eslint.append[${i}]`,
-          value: item
+      parsed.append = appendEntries.map((item, i) =>
+        parseEslintAppendEntry({
+          index: i,
+          item
         })
-      parsed.append = appendEntries
+      )
     }
     return parsed
   },
@@ -522,7 +608,11 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
     tailwind?: TailwindOption
     tsconfigRootDir?: string
     userIgnorePatterns: string[]
-  }): { eslintOptions: EslintOptions | undefined; sharedOverrideAppendIndexes: number[] } => {
+  }): {
+    eslintImportRefs: SyncEslintImportRef[]
+    eslintOptions: EslintOptions | undefined
+    sharedOverrideAppendIndexes: number[]
+  } => {
     const eslintIgnores = buildEslintIgnorePatterns({
         eslintSource,
         userIgnorePatterns
@@ -534,14 +624,28 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
         files: override.files,
         rules: override.rules
       })),
-      sharedOverrideAppendIndexes = sharedRuleOverrides.map((_, index) => index)
+      sharedOverrideAppendIndexes = sharedRuleOverrides.map((_, index) => index),
+      eslintImportRefs: SyncEslintImportRef[] = []
     if (eslintSource || sharedOverrides.length > 0 || tailwind !== undefined || tsconfigRootDir !== undefined) {
       const eslintOptions: EslintOptions = {
         off: eslintSource?.off
       }
       if (eslintIgnores.length > 0) eslintOptions.ignores = eslintIgnores
-      const appendEntries = (eslintSource?.append ?? []).map(entry => entry as Linter.Config),
-        mergedAppend: Linter.Config[] = [...sharedRuleOverrides, ...appendEntries]
+      const appendEntries: Linter.Config[] = []
+      for (const entry of eslintSource?.append ?? [])
+        if ('config' in entry) appendEntries.push(entry.config as Linter.Config)
+        else {
+          const importRefIndex = eslintImportRefs.push({
+            exportName: entry.name,
+            files: entry.files,
+            ignores: entry.ignores,
+            source: entry.from
+          })
+          appendEntries.push({
+            [ESLINT_IMPORT_MARKER_KEY]: importRefIndex - 1
+          } as SyncEslintImportMarker as Linter.Config)
+        }
+      const mergedAppend: Linter.Config[] = [...sharedRuleOverrides, ...appendEntries]
       if (mergedAppend.length > 0) eslintOptions.append = mergedAppend
       const mergedTailwind = normalizeTailwindOption({
         label: 'tailwind',
@@ -550,16 +654,19 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
       eslintOptions.tailwind = mergedTailwind ?? true
       eslintOptions.tsconfigRootDir = tsconfigRootDir
       return {
+        eslintImportRefs,
         eslintOptions,
         sharedOverrideAppendIndexes
       }
     }
     if (eslintIgnores.length === 0)
       return {
+        eslintImportRefs,
         eslintOptions: undefined,
         sharedOverrideAppendIndexes
       }
     return {
+      eslintImportRefs,
       eslintOptions: {
         ignores: eslintIgnores,
         tailwind: true
@@ -790,6 +897,12 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
       })
     return base
   },
+  resolveSyncImportSource = ({ cwd, dir, source }: { cwd: string; dir: string; source: string }) => {
+    if (!(source.startsWith('.') || source.startsWith('..'))) return source
+    const absoluteSource = joinPath(cwd, source),
+      relativeSource = relativePath(dir, absoluteSource).replaceAll('\\', '/')
+    return relativeSource.startsWith('.') ? relativeSource : `./${relativeSource}`
+  },
   sync = async (options?: SyncOptions): Promise<void> => {
     const { biome, eslint, oxlint, sharedOverrides, tailwind, topLevelIgnores, tsconfigRootDir } = validateSyncOptions({
         options
@@ -808,7 +921,7 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
         oxlintSource: oxlint,
         sharedOverrides
       }),
-      { eslintOptions, sharedOverrideAppendIndexes } = buildEslintOptions({
+      { eslintImportRefs, eslintOptions, sharedOverrideAppendIndexes } = buildEslintOptions({
         eslintSource: eslint,
         sharedOverrides,
         tailwind,
@@ -825,8 +938,31 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
         options: oxlintOptions,
         sharedIgnorePatterns
       }),
+      normalizedImportRefs = eslintImportRefs.map(importRef => ({
+        exportName: importRef.exportName,
+        files: importRef.files,
+        ignores: importRef.ignores,
+        source: resolveSyncImportSource({
+          cwd,
+          dir,
+          source: importRef.source
+        })
+      })),
+      importStatements = normalizedImportRefs
+        .map((importRef, index) => `import * as __lintmaxAppendImport${index} from ${JSON.stringify(importRef.source)}`)
+        .join('\n'),
+      importEntries = normalizedImportRefs
+        .map(
+          (importRef, index) =>
+            `  { exportName: ${JSON.stringify(importRef.exportName)}, files: ${JSON.stringify(importRef.files ?? null)}, ignores: ${JSON.stringify(importRef.ignores ?? null)}, module: __lintmaxAppendImport${index} }`
+        )
+        .join(',\n'),
+      importExpansion =
+        normalizedImportRefs.length === 0
+          ? ''
+          : `\nconst appendImports = [\n${importEntries}\n]\nconst normalizedAppend = []\nfor (const entry of options.append ?? []) {\n  if (entry && typeof entry === 'object' && !Array.isArray(entry) && ${JSON.stringify(ESLINT_IMPORT_MARKER_KEY)} in entry) {\n    const importIndex = entry[${JSON.stringify(ESLINT_IMPORT_MARKER_KEY)}]\n    if (typeof importIndex !== 'number' || !Number.isInteger(importIndex))\n      throw new Error('Invalid eslint import marker index in generated config')\n    const importRef = appendImports[importIndex]\n    if (!importRef) throw new Error(\`Missing eslint import ref for index \${importIndex}\`)\n    const imported = importRef.module[importRef.exportName]\n    const importedEntries = Array.isArray(imported) ? imported : [imported]\n    for (const importedEntry of importedEntries) {\n      if (!importedEntry || typeof importedEntry !== 'object' || Array.isArray(importedEntry))\n        throw new Error(\`Imported eslint append from \${importRef.exportName} must resolve to config object(s)\`)\n      normalizedAppend.push({\n        ...importedEntry,\n        ...(Array.isArray(importRef.files) ? { files: [...importRef.files] } : {}),\n        ...(Array.isArray(importRef.ignores) ? { ignores: [...importRef.ignores] } : {})\n      })\n    }\n    continue\n  }\n  normalizedAppend.push(entry)\n}\noptions.append = normalizedAppend\n`,
       eslintConfig = eslintOptions
-        ? `import { eslint } from 'lintmax/eslint'\nconst options = ${JSON.stringify(eslintOptions)}\nfor (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {\n  const entry = options.append?.[index]\n  if (entry && typeof entry === 'object') entry[Symbol.for(${JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)})] = true\n}\nexport default eslint(options)\n`
+        ? `${importStatements.length > 0 ? `${importStatements}\n` : ''}import { eslint } from 'lintmax/eslint'\nconst options = ${JSON.stringify(eslintOptions)}\nfor (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {\n  const entry = options.append?.[index]\n  if (entry && typeof entry === 'object') entry[Symbol.for(${JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)})] = true\n}${importExpansion}export default eslint(options)\n`
         : "export { default } from 'lintmax/eslint'\n",
       runtimeConfig = { compact: options?.compact !== false }
     await write(joinPath(dir, 'biome.json'), `${JSON.stringify(biomeConfig, null, 2)}\n`)
@@ -834,9 +970,19 @@ const pkgRoot = dirnamePath(fromFileUrl(import.meta.resolve('../package.json')))
     await write(joinPath(dir, 'eslint.generated.mjs'), eslintConfig)
     await write(joinPath(dir, 'lintmax.json'), `${JSON.stringify(runtimeConfig, null, 2)}\n`)
   },
+  eslintImport = ({ files, from, ignores, name }: Omit<EslintImportAppendEntry, '$lintmax'>): EslintImportAppendEntry => {
+    const entry: EslintImportAppendEntry = {
+      $lintmax: ESLINT_IMPORT_SENTINEL,
+      from
+    }
+    if (files !== undefined) entry.files = files
+    if (ignores !== undefined) entry.ignores = ignores
+    if (name !== undefined) entry.name = name
+    return entry
+  },
   defineConfig = <T extends SyncOptions>(options: T): T => {
     validateSyncOptions({ options })
     return options
   }
-export type { SyncOptions }
-export { defineConfig, sync }
+export type { EslintImportAppendEntry, SyncOptions }
+export { defineConfig, eslintImport, sync }

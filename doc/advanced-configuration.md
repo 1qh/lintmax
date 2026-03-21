@@ -52,12 +52,32 @@ eslint: {
 }
 ```
 
-`eslint.append` (`Array<Record<string, unknown>>` JSON-serializable only)
+`eslint.append` (`Array<Record<string, unknown> | EslintImportAppendEntry>`)
+
+For JSON-serializable inline config objects:
 
 ```ts
 eslint: {
   append: [{ files: ['tests/**'], rules: { 'no-magic-numbers': 'off' } }]
 }
+```
+
+For preset modules that include runtime plugin objects/rule functions, use `eslintImport(...)`:
+
+```ts
+import { defineConfig, eslintImport } from 'lintmax'
+
+export default defineConfig({
+  eslint: {
+    append: [
+      eslintImport({
+        files: ['backend/convex/**/*.ts', 'backend/convex/**/*.tsx'],
+        from: '@noboil/convex/eslint',
+        name: 'recommended'
+      })
+    ]
+  }
+})
 ```
 
 ## `biome`
