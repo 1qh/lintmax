@@ -119,7 +119,7 @@ const createStepExecutor = ({
       label: 'oxlint'
     },
     {
-      args: [eslintBin, ...eslintArgs, '--cache', '--cache-location', joinPath(cwd, '.cache', '.eslintcache')],
+      args: [eslintBin, ...eslintArgs],
       label: 'eslint'
     },
     {
@@ -163,7 +163,7 @@ const createStepExecutor = ({
         silent: true
       },
       {
-        args: [eslintBin, ...eslintArgs, '--fix', '--cache', '--cache-location', joinPath(cwd, '.cache', '.eslintcache')],
+        args: [eslintBin, ...eslintArgs, '--fix'],
         label: 'eslint',
         silent: true
       },
