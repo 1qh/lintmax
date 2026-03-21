@@ -16,6 +16,8 @@ ignores: ['packages/ui/**', '.intlayer/cache/**']
 compact: false
 ```
 
+Compact normalization runs on code/config text files and excludes markdown by default.
+
 `tailwind` (`boolean | string`)
 
 ```ts
