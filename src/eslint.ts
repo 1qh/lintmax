@@ -128,6 +128,8 @@ const sharedOverrideMarker = Symbol.for(SHARED_OVERRIDE_SYMBOL_KEY),
       if (existsSync(resolved)) matches.push(resolved)
     }
     if (matches.length <= 1) return matches[0]
+    const preferredOnAmbiguous = [joinPath(root, 'ui/src/styles/globals.css')]
+    for (const preferred of preferredOnAmbiguous) if (matches.includes(preferred)) return preferred
     const relMatches = matches.map(path => path.slice(root.length + 1))
     throw new Error(
       `Multiple Tailwind entry files found: ${relMatches.join(', ')}. Set eslint.tailwind to an explicit path.`

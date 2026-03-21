@@ -244,6 +244,15 @@ try {
     cmd: ['bun', 'node_modules/lintmax/dist/cli.js', 'check'],
     label: 'single-file eslint customization'
   })
+  await mkdir(join(dir, 'ui/src/styles'), { recursive: true })
+  await mkdir(join(dir, 'src/styles'), { recursive: true })
+  await write(join(dir, 'ui/src/styles/globals.css'), "@import 'tailwindcss';\n")
+  await write(join(dir, 'src/styles/globals.css'), "@import 'tailwindcss';\n")
+  await write(join(dir, 'lintmax.config.ts'), "import { defineConfig } from 'lintmax'\nexport default defineConfig({})\n")
+  run({
+    cmd: ['bun', 'node_modules/lintmax/dist/cli.js', 'check'],
+    label: 'tailwind auto-detection prefers ui path on ambiguity'
+  })
   await mkdir(join(dir, 'generated'), { recursive: true })
   await write(
     join(dir, 'generated/eslint-import-preset.mjs'),

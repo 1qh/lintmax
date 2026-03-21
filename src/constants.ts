@@ -90,6 +90,7 @@ const BIOME_RULES_OFF: readonly string[] = [
     }
   ],
   TAILWIND_ENTRY_CANDIDATES: readonly string[] = [
+    'ui/src/styles/globals.css',
     'src/styles/globals.css',
     'app/globals.css',
     'web/global.css',

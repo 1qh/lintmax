@@ -28,6 +28,8 @@ tailwind: false
 tailwind: 'src/styles/globals.css'
 ```
 
+When `tailwind` is omitted or `true`, lintmax auto-detects common entries. In monorepos, it prefers `ui/src/styles/globals.css` when multiple candidates exist.
+
 `tsconfigRootDir` (`string`)
 
 ```ts
