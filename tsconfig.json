@@ -4,15 +4,11 @@
     "allowJs": true,
     "checkJs": true,
     "disableSourceOfProjectReferenceRedirect": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
     "incremental": true,
-    "isolatedModules": true,
     "jsx": "preserve",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "module": "Preserve",
     "moduleDetection": "force",
-    "moduleResolution": "Bundler",
     "noEmit": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
@@ -22,9 +18,7 @@
         "name": "next"
       }
     ],
-    "resolveJsonModule": true,
     "skipLibCheck": true,
-    "strict": true,
     "target": "ESNext",
     "tsBuildInfoFile": "${configDir}/.cache/tsbuildinfo.json",
     "verbatimModuleSyntax": true

@@ -119,7 +119,7 @@ const createStepExecutor = ({
       label: 'oxlint'
     },
     {
-      args: [eslintBin, ...eslintArgs],
+      args: [eslintBin, '--no-error-on-unmatched-pattern', ...eslintArgs],
       label: 'eslint'
     },
     {
