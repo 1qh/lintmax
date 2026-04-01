@@ -50,8 +50,8 @@
     "cleanup-old-versions": "bun script/cleanup-old-versions.ts",
     "fix": "q bun dist/cli.js fix",
     "postinstall": "bash script/q-install.sh",
-    "postpublish": "bun run cleanup-old-versions",
     "prepublishOnly": "bun run build",
+    "postpublish": "bun run cleanup-old-versions",
     "release": "bun ci && q bun publish",
     "release:dry": "bun ci && q bun publish --dry-run",
     "smoke": "q bun script/smoke.ts"
