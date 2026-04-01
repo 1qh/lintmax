@@ -25,6 +25,7 @@ interface StepSpec {
 }
 class CliExitError extends Error {
   code: number
+  override name = 'CliExitError'
   constructor({ code, message }: { code: number; message?: string }) {
     super(message ?? '')
     this.code = code

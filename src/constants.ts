@@ -84,8 +84,7 @@ const BIOME_RULES_OFF: readonly string[] = [
     {
       files: ['**/expo/**/*.tsx', '**/expo/**/*.ts'],
       rules: {
-        'react-perf/jsx-no-new-object-as-prop': 'off',
-        'react/no-unstable-default-props': 'off'
+        'react-perf/jsx-no-new-object-as-prop': 'off'
       }
     }
   ],
