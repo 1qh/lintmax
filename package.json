@@ -45,16 +45,16 @@
     "build": "q bun run build:raw",
     "build:raw": "bun clean && bun install --silent && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
     "check": "q bun dist/cli.js check",
-    "ci": "q bun run build && q bun check && q bun run smoke",
     "clean": "rm -rf node_modules bun.lock dist .cache",
     "cleanup-old-versions": "bun script/cleanup-old-versions.ts",
     "fix": "q bun dist/cli.js fix",
     "postinstall": "bash script/q-install.sh",
     "prepublishOnly": "bun run build",
     "postpublish": "bun run cleanup-old-versions",
-    "release": "bun run ci && q bun publish",
-    "release:dry": "bun run ci && q bun publish --dry-run",
-    "smoke": "q bun script/smoke.ts"
+    "release": "bun run verify && q bun publish",
+    "release:dry": "bun run verify && q bun publish --dry-run",
+    "smoke": "q bun script/smoke.ts",
+    "verify": "q bun run build && q bun check && q bun run smoke"
   },
   "dependencies": {
     "@biomejs/biome": "latest",
