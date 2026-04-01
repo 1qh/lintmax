@@ -52,8 +52,8 @@
     "postinstall": "bash script/q-install.sh",
     "prepublishOnly": "bun run build",
     "postpublish": "bun run cleanup-old-versions",
-    "release": "bun ci && q bun publish",
-    "release:dry": "bun ci && q bun publish --dry-run",
+    "release": "bun run ci && q bun publish",
+    "release:dry": "bun run ci && q bun publish --dry-run",
     "smoke": "q bun script/smoke.ts"
   },
   "dependencies": {
