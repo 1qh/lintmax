@@ -1,6 +1,6 @@
 {
   "name": "lintmax",
-  "version": "0.0.20",
+  "version": "0.0.22",
   "description": "Maximum strictness linting, formatting, and type-checking in one package",
   "keywords": [
     "biome",
@@ -37,6 +37,7 @@
   },
   "files": [
     "dist",
+    "script/q-install.sh",
     "tsconfig.json",
     "oxlintrc.json"
   ],
@@ -50,6 +51,7 @@
     "fix": "q bun dist/cli.js fix",
     "postinstall": "bash script/q-install.sh",
     "postpublish": "bun run cleanup-old-versions",
+    "prepublishOnly": "bun run build",
     "release": "bun ci && q bun publish",
     "release:dry": "bun ci && q bun publish --dry-run",
     "smoke": "q bun script/smoke.ts"
