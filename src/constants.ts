@@ -68,7 +68,7 @@ const BIOME_RULES_OFF: readonly string[] = [
     'expo/**/metro.config.js',
     'expo/**/uniwind-env.d.ts',
     'expo/**/uniwind-types.d.ts',
-    'next-env.d.ts'
+    '**/next-env.d.ts'
   ],
   BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
     {
