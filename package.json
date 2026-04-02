@@ -52,7 +52,8 @@
     "release": "bun publish",
     "release:dry": "bun publish --dry-run",
     "smoke": "bun script/smoke.ts",
-    "verify": "bun clean && bun i && bun run build && bun run fix && bun run check && bun run smoke"
+    "test": "bun script/test-magic.ts && bun script/test-coverage.ts",
+    "verify": "bun clean && bun i && bun run build && bun run fix && bun run check && bun run smoke && bun run test"
   },
   "simple-git-hooks": {
     "pre-commit": "bun run verify && git add -u"
