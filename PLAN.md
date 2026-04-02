@@ -244,7 +244,7 @@ Each parser produces `Diagnostic[]`, all feed into the same aggregator.
 ### Phase 3: Aggregation + deduplication
 
 - Collect all `Diagnostic[]` from all parsers
-- Deduplicate: same file+line from multiple linters → keep biome > oxlint > eslint
+- Deduplicate using rule equivalence map (`src/rule-equivalence.ts`): a `Map<string, string>` mapping known overlapping rules to a canonical name (e.g. `lint/suspicious/noExplicitAny` ↔ `@typescript-eslint/no-explicit-any`). Same file+line+equivalent rule from multiple linters → keep biome > oxlint > eslint
 - Group by file → by linter → by rule → collect line numbers
 - Sort files alphabetically, linters by priority, rules alphabetically
 
@@ -264,7 +264,9 @@ Human mode (`--human`):
 - In fix mode: un-silence fix steps (remove `silent: true`), show verbose output from each tool
 - In check mode: show verbose output from each tool
 
-Threading: `cli.ts` parses `--human`, passes boolean to `runLint`, `runLint` branches between agent path (runCapture + aggregate + format) and human path (existing run).
+Threading: `cli.ts` parses `--human` from `process.argv[3]`, passes boolean to `runLint({ command, human })`. `runLint` branches between agent path (runCapture + aggregate + format) and human path (existing run). Also pass `human` to `runCompact`/`runCompactContinue` to suppress stdout in agent mode.
+
+Phase 1 must also change `createCheckSteps` to use `biome check --reporter=json` instead of `biome ci` in agent mode.
 
 ### Phase 5: Comment deletion (independent)
 
@@ -276,6 +278,8 @@ Threading: `cli.ts` parses `--human`, passes boolean to `runLint`, `runLint` bra
 - Remove non-matching comments, preserve surrounding whitespace
 - New file: `src/comments.ts`
 - Modified: `src/lintmax-types.ts` (add `comments?: boolean` to `SyncOptions`)
+- Modified: `src/pipeline.ts` (update runtime type cast to include `comments?: boolean`, use `runtime.comments !== false` for default-true semantics)
+- Modified: `src/index.ts` (write `comments: options?.comments !== false` to runtime config)
 
 ### Phase 6: Rule catalog (after Phase 2)
 
@@ -396,6 +400,7 @@ The `git add -u` stages any auto-fixes so they’re included in the commit.
 - `src/pipeline.ts` - branch between agent (runCapture + JSON) and human (run + inherit) paths, accept `human` flag
 - `src/format.ts` - new: agent output formatter (grouped format)
 - `src/aggregate.ts` - new: deduplication, grouping, sorting
+- `src/rule-equivalence.ts` - new: map of overlapping rule names across linters
 - `src/comments.ts` - new: comment deletion using TypeScript compiler API
 - `src/rules.ts` - new: rule catalog extraction from all linters
 - `src/cli.ts` - parse `--human` flag, add `rules` command, pass `human` to `runLint`
