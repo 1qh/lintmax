@@ -17,6 +17,7 @@ const findBin = (name: string): string => {
   const candidates = [
     join(process.cwd(), 'node_modules', '.bin', name),
     join(process.cwd(), '..', '..', 'node_modules', '.bin', name),
+    '/var/task/node_modules/.bin/' + name,
   ]
   for (const c of candidates) {
     const check = spawnSync('test', ['-f', c], { stdio: ['pipe', 'pipe', 'pipe'] })
