@@ -127,6 +127,7 @@ export const POST = async (request: Request) => {
       debug: {
         cwd: process.cwd(),
         binLs: (cwdLs.stdout ?? '').split('\n').filter((l: string) => l.includes('biome') || l.includes('oxlint')).join(', '),
+        findBiome: spawnSync('find', ['/var/task', '-name', 'biome', '-type', 'f', '-maxdepth', '6'], { encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] }).stdout?.trim().slice(0, 500) ?? '',
         biomeBin,
         biomeExit: biome.status,
         biomeStderr: biome.stderr?.toString().slice(0, 200) ?? '',
