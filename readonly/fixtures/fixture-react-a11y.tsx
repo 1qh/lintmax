@@ -74,4 +74,45 @@ export {
   TailwindDuplicateClasses,
   TailwindUnnecessaryWhitespace,
   TailwindShorthand,
+  DomAppend,
+  DomDataset,
+  DomTextContent,
+  KeyboardEvent,
+  QuerySelector,
+  ClasslistToggle,
 };
+function DomAppend() {
+  const el = document.createElement("div")
+  const child = document.createElement("span")
+  el.appendChild(child)
+  return <div />
+}
+function DomDataset() {
+  const el = document.createElement("div")
+  el.setAttribute("data-value", "1")
+  return <div />
+}
+function DomTextContent() {
+  const el = document.createElement("div")
+  const text = el.innerText
+  return <div>{text}</div>
+}
+function KeyboardEvent() {
+  document.addEventListener("keydown", (e) => {
+    if (e.keyCode === 13) return
+  })
+  return <div />
+}
+function QuerySelector() {
+  const el = document.getElementById("app")
+  return <div>{el?.id}</div>
+}
+function ClasslistToggle() {
+  const el = document.createElement("div")
+  if (el.classList.contains("active")) {
+    el.classList.remove("active")
+  } else {
+    el.classList.add("active")
+  }
+  return <div />
+}

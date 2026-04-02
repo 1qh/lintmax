@@ -143,6 +143,44 @@ const optionalCatch = async () => {
 const preferSpread2 = (s: string) => Array.from(s)
 const stringRaw = `hello\\nworld`
 const noUselessFallback = (obj: { key?: string }) => ({ ...obj, key: obj.key ?? "default" })
+// eslint-disable-next-line capitalized-comments
+const arrayConstructor = new Array()
+const divRegex = /=foo/
+const debuggerStmt = () => { debugger }
+outer: for (const x of [1]) { break outer }
+const isNanFunc = (x: number) => isNaN(x)
+import {} from "bun"
+type TypeDef = { x: number }
+import type { Pkg } from "./core.js"
+const confusingVoidExpr = () => void Promise.resolve()
+const noImportTypeSide = 1
+const nonNullableAssertion = (x: string | undefined) => x!
+const unnecessaryTypeArg = Promise.resolve<string>("x")
+const uselessEmptyExport = 1
+export {}
+const returnThis = class { method(): this { return this } }
+const assertCheck = (x: unknown) => { console.assert(x !== null, "msg") }
+const existenceIdx = (arr: number[]) => arr.indexOf(5) !== -1
+const escapeSeq = '\x41'
+const reverseArr = (arr: number[]) => arr.reverse()
+const sortArr = (arr: number[]) => arr.sort()
+const logSpaces = () => console.log(' hello ')
+const uselessSpread2 = [...[1, 2, 3]]
+const flatArr = (arrs: number[][]) => [].concat(...arrs)
+const bigintLit = BigInt("123")
+class FieldInit { private x: number; constructor() { this.x = 5 } }
+const mathMax = (x: number, y: number) => x > y ? x : y
+const setHas = (arr: number[], items: number[]) => { for (const i of items) arr.includes(i) }
+const setSize = (s: Set<number>) => [...s].length
+const strStartsWith = (s: string) => s.indexOf("foo") === 0
+const typeErr = (x: unknown) => { if (typeof x !== "string") throw new Error("bad") }
+const relUrl = new URL("./path", "https://example.com")
+const switchBraces = (x: number) => { switch (x) { case 1: return "a"; case 2: return "b"; default: return "c" } }
+const uselessRename = ({ foo: foo }: { foo: string }) => foo
+const preserveCaught = async () => { try { await Promise.resolve() } catch(err) { throw new Error("wrapped") } }
+const onlyRecursion = (n: number, _acc: number): number => n <= 0 ? 0 : onlyRecursion(n - 1, _acc)
+const noMapSpread2 = (arr: { x: number }[]) => arr.map(item => ({ ...item, z: 2 }))
+const uselessFallback = (obj: { a?: string }) => ({ ...obj, a: obj.a ?? "fallback" })
 export {
   mutableVar,
   neverReassigned,
@@ -239,5 +277,36 @@ export {
   preferSpread2,
   stringRaw,
   noUselessFallback,
+  arrayConstructor,
+  debuggerStmt,
+  isNanFunc,
+  confusingVoidExpr,
+  noImportTypeSide,
+  nonNullableAssertion,
+  unnecessaryTypeArg,
+  uselessEmptyExport,
+  returnThis,
+  assertCheck,
+  existenceIdx,
+  escapeSeq,
+  reverseArr,
+  sortArr,
+  logSpaces,
+  uselessSpread2,
+  flatArr,
+  bigintLit,
+  FieldInit,
+  mathMax,
+  setHas,
+  setSize,
+  strStartsWith,
+  typeErr,
+  relUrl,
+  switchBraces,
+  uselessRename,
+  preserveCaught,
+  onlyRecursion,
+  noMapSpread2,
+  uselessFallback,
 }
-export type { DuplicateUnion, IndexSig, FnInterface }
+export type { DuplicateUnion, IndexSig, FnInterface, TypeDef, Pkg }
