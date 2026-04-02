@@ -15,7 +15,9 @@
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
+    "@biomejs/biome": "latest",
     "lintmax": "latest",
+    "oxlint": "latest",
     "react-dom": "latest",
     "shiki": "latest"
   },
