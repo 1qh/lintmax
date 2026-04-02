@@ -42,7 +42,11 @@ const eslintResult = spawnSync({
   stderr: 'pipe',
   stdout: 'pipe'
 })
-const verboseOutput = [
+const ESC = String.fromCodePoint(27)
+const ANSI_RE = new RegExp(`${ESC}\\[[0-9;]*m`, 'gu')
+const PATH_RE = /\/[^\s:]+\//gu
+const stripAnsiAndPaths = (s: string) => s.replaceAll(ANSI_RE, '').replaceAll(PATH_RE, '/')
+const verboseRaw = [
   decoder.decode(biomeResult.stdout),
   decoder.decode(biomeResult.stderr),
   decoder.decode(oxlintResult.stdout),
@@ -50,6 +54,7 @@ const verboseOutput = [
   decoder.decode(eslintResult.stdout),
   decoder.decode(eslintResult.stderr)
 ].join('\n')
+const verboseOutput = stripAnsiAndPaths(verboseRaw)
 unlinkSync(workTs)
 unlinkSync(workTsx)
 process.stdout.write(`agent output:\n${agentOutput}\n`)
@@ -61,7 +66,7 @@ const verboseSize = verboseOutput.length
 const reduction = verboseSize > 0 ? 1 - agentSize / verboseSize : 0
 const pct = Math.round(reduction * 100)
 process.stdout.write(`agent output: ${agentSize} chars\n`)
-process.stdout.write(`verbose output: ${verboseSize} chars\n`)
+process.stdout.write(`verbose output (normalized): ${verboseSize} chars\n`)
 process.stdout.write(`reduction: ${pct}%\n`)
-if (verboseSize > 0 && agentSize > 0 && reduction <= 0.85) throw new Error(`expected >85% reduction, got ${pct}%`)
+if (verboseSize > 0 && agentSize > 0 && reduction <= 0.9) throw new Error(`expected >90% reduction, got ${pct}%`)
 process.stdout.write('coverage test passed\n')
