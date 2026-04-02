@@ -120,9 +120,12 @@ export const POST = async (request: Request) => {
       }
     } catch {}
 
+    const cwdLs = spawnSync('ls', [join(process.cwd(), 'node_modules', '.bin')], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
     const output = lines.join('\n')
     return NextResponse.json({
       debug: {
+        cwd: process.cwd(),
+        binLs: (cwdLs.stdout ?? '').split('\n').filter((l: string) => l.includes('biome') || l.includes('oxlint')).join(', '),
         biomeBin,
         biomeExit: biome.status,
         biomeStderr: biome.stderr?.toString().slice(0, 200) ?? '',
