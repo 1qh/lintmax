@@ -5,23 +5,31 @@ const root = join(import.meta.dir, '..')
 const cli = join(root, 'dist/cli.js')
 const workFile = join(root, 'src/coverage-work.ts')
 const DIRTY_FIXTURE = `/* eslint-disable @typescript-eslint/no-unused-vars */
-// biome-ignore lint: test fixture
+// biome-ignore lint: test fixture for non-fixable violations
+// explicit any
 const useAny = (x: any): any => x
+// double equals
 const compare = (a: number, b: number) => {
   if (a == b) return true
   if (a != b) return false
   return a === b
 }
+// shadow restricted name
 const shadow = (undefined: string) => undefined
+// empty block
 const emptyBlock = (x: number) => {
   if (x > 0) {
   }
 }
+// unused expression
 const noReturn = (x: number) => {
   x + 1
 }
+// self compare
 const selfCompare = (n: number) => n === n
+// type assertion
 const typeAssertion = {} as { name: string }
+// negated condition with else
 const negatedCondition = (x: boolean) => {
   if (!x) {
     return 'no'
@@ -29,7 +37,38 @@ const negatedCondition = (x: boolean) => {
     return 'yes'
   }
 }
-export { useAny, compare, shadow, emptyBlock, noReturn, selfCompare, typeAssertion, negatedCondition }
+// void return in non-void context
+const callAndIgnore = async () => {
+  const p = Promise.resolve(42)
+  return void p
+}
+// unnecessary type constraint
+const identity = <T extends unknown>(x: T): T => x
+// prefer optional chain
+const nested = (a: { b?: { c?: string } } | null) => {
+  return a && a.b && a.b.c
+}
+// no useless constructor
+class Base {}
+class Child extends Base {
+  constructor() {
+    super()
+  }
+}
+export {
+  useAny,
+  compare,
+  shadow,
+  emptyBlock,
+  noReturn,
+  selfCompare,
+  typeAssertion,
+  negatedCondition,
+  callAndIgnore,
+  identity,
+  nested,
+  Child
+}
 `
 const decoder = new TextDecoder()
 writeFileSync(workFile, DIRTY_FIXTURE)
@@ -67,6 +106,10 @@ const verboseOutput = [
   decoder.decode(eslintResult.stderr)
 ].join('\n')
 unlinkSync(workFile)
+process.stdout.write(`agent output:\n${agentOutput}\n`)
+const ruleLines = agentOutput.split('\n').filter(l => l.startsWith('  '))
+process.stdout.write(`unique rules triggered: ${ruleLines.length}\n`)
+if (ruleLines.length < 20) throw new Error(`expected at least 20 rule violations, got ${ruleLines.length}`)
 const agentSize = agentOutput.length
 const verboseSize = verboseOutput.length
 const reduction = verboseSize > 0 ? 1 - agentSize / verboseSize : 0
