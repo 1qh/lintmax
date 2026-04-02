@@ -11,6 +11,20 @@ const RATE_LIMIT = new Map<string, number[]>()
 const RATE_WINDOW_MS = 60_000
 const RATE_MAX = 10
 
+const findBin = (name: string): string => {
+  const result = spawnSync('which', [name], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+  if (result.status === 0) return result.stdout.trim()
+  const candidates = [
+    join(process.cwd(), 'node_modules', '.bin', name),
+    join(process.cwd(), '..', '..', 'node_modules', '.bin', name),
+  ]
+  for (const c of candidates) {
+    const check = spawnSync('test', ['-f', c], { stdio: ['pipe', 'pipe', 'pipe'] })
+    if (check.status === 0) return c
+  }
+  return name
+}
+
 const checkRateLimit = (ip: string): boolean => {
   const now = Date.now()
   const timestamps = RATE_LIMIT.get(ip) ?? []
@@ -46,18 +60,16 @@ export const POST = async (request: Request) => {
     await mkdir(dir, { recursive: true })
     await writeFile(filePath, code)
 
-    const biome = spawnSync('npx', ['@biomejs/biome', 'check', '--reporter=json', filePath], {
-      timeout: TIMEOUT_MS,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
-    const oxlint = spawnSync('npx', ['oxlint', '-f', 'json', filePath], {
-      timeout: TIMEOUT_MS,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
+    const biomeBin = findBin('biome')
+    const oxlintBin = findBin('oxlint')
 
     const lines: string[] = []
     const fileName = 'input.ts'
 
+    const biome = spawnSync(biomeBin, ['check', '--reporter=json', filePath], {
+      timeout: TIMEOUT_MS,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
     const biomeOut = biome.stdout?.toString() ?? ''
     try {
       const parsed = JSON.parse(biomeOut) as {
@@ -66,11 +78,12 @@ export const POST = async (request: Request) => {
       const byRule = new Map<string, number[]>()
       for (const d of parsed.diagnostics ?? []) {
         const rule = d.category
-        if (!rule) return
-        const line = d.location?.start?.line ?? 0
-        const arr = byRule.get(rule) ?? []
-        if (line > 0) arr.push(line)
-        byRule.set(rule, arr)
+        if (rule) {
+          const line = d.location?.start?.line ?? 0
+          const arr = byRule.get(rule) ?? []
+          if (line > 0) arr.push(line)
+          byRule.set(rule, arr)
+        }
       }
       if (byRule.size > 0) {
         lines.push(fileName)
@@ -80,6 +93,10 @@ export const POST = async (request: Request) => {
       }
     } catch {}
 
+    const oxlint = spawnSync(oxlintBin, ['-f', 'json', filePath], {
+      timeout: TIMEOUT_MS,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
     const oxOut = oxlint.stdout?.toString() ?? ''
     try {
       const parsed = JSON.parse(oxOut) as {
@@ -88,11 +105,12 @@ export const POST = async (request: Request) => {
       const byRule = new Map<string, number[]>()
       for (const d of parsed.diagnostics ?? []) {
         const rule = d.code
-        if (!rule) return
-        const line = d.labels?.[0]?.span?.line ?? 0
-        const arr = byRule.get(rule) ?? []
-        if (line > 0) arr.push(line)
-        byRule.set(rule, arr)
+        if (rule) {
+          const line = d.labels?.[0]?.span?.line ?? 0
+          const arr = byRule.get(rule) ?? []
+          if (line > 0) arr.push(line)
+          byRule.set(rule, arr)
+        }
       }
       if (byRule.size > 0) {
         if (lines.length === 0) lines.push(fileName)
