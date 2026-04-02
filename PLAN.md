@@ -92,28 +92,66 @@ Default is `true` (delete comments). Requires:
 
 ### Verified JSON schemas
 
+Empirically verified by running each tool on `/tmp/slop.ts` and inspecting output.
+
+biome `--reporter=json` outputs a SINGLE JSON object (not NDJSON):
+
+```json
+{ "summary": { ... }, "diagnostics": [{ "severity": "warning", "message": "...", "category": "lint/suspicious/noExplicitAny", "location": { "path": "/tmp/slop.ts", "start": { "line": 2, "column": 26 }, "end": { "line": 2, "column": 29 } } }], "command": "check" }
 ```
-biome --reporter=json
-  { diagnostics: [{ severity, message, category, location: { path, start: { line, column } } }] }
-  rule name in "category" field: "lint/suspicious/noExplicitAny"
 
-oxlint -f json
-  { diagnostics: [{ message, code, severity, filename, labels: [{ span: { line, column } }] }] }
-  rule name in "code" field: "eslint(no-unused-vars)"
+oxlint `-f json` outputs a SINGLE JSON object with `diagnostics` key (NOT ESLint-compatible array):
 
-eslint -f json
-  [{ filePath, messages: [{ ruleId, severity, message, line, column }] }]
-
-tsc --pretty false
-  file(line,col): error TSxxxx: message
-  regex: /^(.+)\((\d+),(\d+)\): error (TS\d+): (.+)$/
-
-prettier --list-different
-  one filename per line
-
-sort-package-json --check
-  exit code 1 if unsorted, one filename per line on stdout (may match multiple package.json files)
+```json
+{
+  "diagnostics": [
+    {
+      "message": "...",
+      "code": "eslint(no-unused-vars)",
+      "severity": "warning",
+      "filename": "/tmp/slop.ts",
+      "labels": [
+        {
+          "label": "...",
+          "span": { "offset": 167, "length": 6, "line": 5, "column": 7 }
+        }
+      ]
+    }
+  ],
+  "number_of_files": 1
+}
 ```
+
+eslint `-f json` outputs an array:
+
+```json
+[
+  {
+    "filePath": "/tmp/slop.ts",
+    "messages": [
+      {
+        "ruleId": "no-unused-vars",
+        "severity": 1,
+        "message": "...",
+        "line": 5,
+        "column": 7
+      }
+    ]
+  }
+]
+```
+
+tsc `--pretty false` outputs plain text, one error per line:
+
+```
+file.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.
+```
+
+regex: `/^(.+)\((\d+),(\d+)\): error (TS\d+): (.+)$/`
+
+prettier `--list-different` outputs one filename per line.
+
+sort-package-json `--check` exits 1 if unsorted, one filename per line on stdout (may match multiple package.json files).
 
 ## Default ignores
 
