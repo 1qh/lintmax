@@ -1,0 +1,81 @@
+---
+title: Getting Started
+description: Install and configure lintmax
+---
+
+## Install
+
+```bash
+bun add -d lintmax
+```
+
+## Quick Start
+
+```bash
+# Auto-fix everything (agent mode - silent on success)
+lintmax fix
+
+# Check for issues (agent mode - grouped output)
+lintmax check
+
+# Verbose output for humans
+lintmax check --human
+lintmax fix --human
+```
+
+## What it does
+
+lintmax combines biome, oxlint, eslint, prettier, and sort-package-json into one command. Default output is optimized for AI agents — grouped by file, then linter, then rule, with compressed line numbers.
+
+### Agent output (default)
+
+```
+src/utils.ts
+ biome
+  42,55,60 lint/suspicious/noExplicitAny
+  1312 lint/correctness/noChildrenProp
+ eslint
+  1184,1209 @typescript-eslint/no-unsafe-call
+ oxlint
+  800,804 eslint-plugin-react-perf(jsx-no-jsx-as-prop)
+```
+
+Zero output on success (exit code 0 is enough).
+
+### Human output (`--human`)
+
+Full verbose output from each linter, same as running them individually.
+
+## Configuration
+
+Create `lintmax.config.ts` in your project root:
+
+```ts
+import { defineConfig } from 'lintmax'
+
+export default defineConfig({
+  ignores: ['generated/**'],
+  comments: false, // disable comment deletion
+  tailwind: false, // disable tailwind rules
+})
+```
+
+## Comment Deletion
+
+By default, `lintmax fix` deletes all comments except:
+
+- JSDoc (`/** */`)
+- Lint directives (`eslint-disable`, `biome-ignore`, `@ts-expect-error`, etc.)
+- Shebangs (`#!/usr/bin/env`)
+
+Disable with `comments: false` in config.
+
+## Pre-commit Hook
+
+```json
+{
+  "simple-git-hooks": {
+    "pre-commit": "bun run verify && git add -u"
+  }
+}
+```

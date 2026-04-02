@@ -1,0 +1,61 @@
+---
+title: Output Format
+description: Token-efficient output format for AI agents
+---
+
+## Agent Mode (default)
+
+Grouped by file, then linter, then rule, with compressed line numbers:
+
+```
+file.ts
+ linter
+  line,line,line rule/name
+```
+
+### Example
+
+```
+apps/web/showcase.tsx
+ biome
+  42,55,60,78,92,103 lint/suspicious/noExplicitAny
+  1312 lint/correctness/noChildrenProp
+ eslint
+  1184,1209,1215,1220,1225 @typescript-eslint/no-unsafe-call
+ oxlint
+  800,804 eslint-plugin-react-perf(jsx-no-jsx-as-prop)
+ prettier
+  unformatted
+sync.ts
+ oxlint
+  37,66 eslint-plugin-unicorn(no-await-expression-member)
+```
+
+### Rules
+
+- Zero output on success (exit 0)
+- Exit 1 on errors with grouped output
+- Deduplication across linters (biome > oxlint > eslint priority)
+- Prettier violations show as `unformatted` (no line numbers)
+- sort-package-json violations show as `unsorted`
+- Comment violations show as `deletable`
+
+## Human Mode (`--human`)
+
+Pass `--human` to get full verbose output from each linter:
+
+```bash
+lintmax check --human
+lintmax fix --human
+```
+
+## CLI Reference
+
+```
+lintmax fix              # fix all, delete comments, silent on success
+lintmax fix --human      # fix all, show verbose output
+lintmax check            # compact error output
+lintmax check --human    # verbose output from each tool
+lintmax rules            # list all enabled rules (compact)
+lintmax rules --human    # list all enabled rules (table)
+```
