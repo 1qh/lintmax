@@ -9,14 +9,12 @@
     "start": "next start"
   },
   "dependencies": {
-    "@biomejs/biome": "latest",
-    "@biomejs/cli-linux-x64": "latest",
+    "@biomejs/js-api": "0.6.1",
+    "@biomejs/wasm-nodejs": "1.8.3",
     "fumadocs-core": "latest",
     "fumadocs-mdx": "latest",
     "fumadocs-ui": "latest",
     "lucide-react": "latest",
-    "@oxlint/binding-linux-x64-gnu": "latest",
-    "oxlint": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",

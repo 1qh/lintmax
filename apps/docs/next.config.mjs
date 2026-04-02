@@ -5,10 +5,7 @@ const withMDX = createMDX()
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: true,
-  serverExternalPackages: ['@biomejs/biome', 'oxlint'],
-  outputFileTracingIncludes: {
-    '/api/lint': ['./node_modules/.bin/*', './node_modules/@biomejs/**/*', './node_modules/oxlint/**/*', './node_modules/@oxlint/**/*'],
-  },
+  serverExternalPackages: ['@biomejs/js-api', '@biomejs/wasm-nodejs'],
 }
 
 export default withMDX(config)

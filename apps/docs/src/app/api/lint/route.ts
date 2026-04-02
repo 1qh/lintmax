@@ -1,38 +1,27 @@
 import { NextResponse } from 'next/server'
-import { existsSync, readdirSync } from 'node:fs'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
-import { execFileSync } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { Biome, Distribution } from '@biomejs/js-api'
 
 const MAX_INPUT_SIZE = 50_000
-const TIMEOUT_MS = 10_000
 const RATE_LIMIT = new Map<string, number[]>()
 const RATE_WINDOW_MS = 60_000
 const RATE_MAX = 10
 
-const findBinary = (name: string): string | null => {
-  const searchDirs = [
-    process.cwd(),
-    resolve(process.cwd(), '..'),
-    resolve(process.cwd(), '../..'),
-    '/var/task',
-    '/var/task/apps/docs',
-  ]
-  for (const base of searchDirs) {
-    const binPath = join(base, 'node_modules', '.bin', name)
-    if (existsSync(binPath)) return binPath
-  }
-  try {
-    const result = execFileSync('find', ['/var/task', '-name', name, '-path', '*/node_modules/.bin/*', '-maxdepth', '5'], {
-      encoding: 'utf8',
-      timeout: 3000,
-    })
-    const found = result.trim().split('\n')[0]
-    if (found && existsSync(found)) return found
-  } catch {}
-  return null
+let biome: Biome | null = null
+
+const getBiome = async (): Promise<Biome> => {
+  if (biome) return biome
+  biome = await Biome.create({ distribution: Distribution.NODE })
+  biome.applyConfiguration({
+    linter: {
+      rules: {
+        recommended: true,
+        suspicious: { noExplicitAny: 'error' },
+        style: { noVar: 'error', useTemplate: 'error' },
+        complexity: { useArrowFunction: 'error' },
+      },
+    },
+  })
+  return biome
 }
 
 const checkRateLimit = (ip: string): boolean => {
@@ -63,89 +52,39 @@ export const POST = async (request: Request) => {
   if (code.length > MAX_INPUT_SIZE)
     return NextResponse.json({ error: 'Code too large' }, { status: 400 })
 
-  const dir = join(tmpdir(), `lint-${randomUUID()}`)
-  const filePath = join(dir, 'input.ts')
-
   try {
-    await mkdir(dir, { recursive: true })
-    await writeFile(filePath, code)
+    const b = await getBiome()
+    const lint = b.lintContent(code, { filePath: 'input.ts' })
+    const fmt = b.formatContent(code, { filePath: 'input.ts' })
 
-    const biomeBin = findBinary('biome')
-    const oxlintBin = findBinary('oxlint')
+    const byRule = new Map<string, number[]>()
+    for (const d of lint.diagnostics) {
+      const rule = d.category ?? 'unknown'
+      const span = d.location?.span as { start: number } | undefined
+      const line = span ? code.slice(0, span.start).split('\n').length : 0
+      const arr = byRule.get(rule) ?? []
+      if (line > 0) arr.push(line)
+      byRule.set(rule, arr)
+    }
+    if (fmt.content !== code) byRule.set('format', [])
+
     const lines: string[] = []
-    const fileName = 'input.ts'
-
-    if (biomeBin) {
-      try {
-        execFileSync(biomeBin, ['check', '--reporter=json', filePath], { timeout: TIMEOUT_MS })
-      } catch (e: unknown) {
-        const err = e as { stdout?: Buffer }
-        const stdout = err.stdout?.toString() ?? ''
-        try {
-          const parsed = JSON.parse(stdout) as {
-            diagnostics?: { category?: string; location?: { start?: { line?: number } } }[]
-          }
-          const byRule = new Map<string, number[]>()
-          for (const d of parsed.diagnostics ?? []) {
-            if (d.category) {
-              const line = d.location?.start?.line ?? 0
-              const arr = byRule.get(d.category) ?? []
-              if (line > 0) arr.push(line)
-              byRule.set(d.category, arr)
-            }
-          }
-          if (byRule.size > 0) {
-            lines.push(fileName)
-            lines.push(' biome')
-            for (const [rule, nums] of [...byRule.entries()].sort((a, b) => a[0].localeCompare(b[0])))
-              lines.push(`  ${nums.length > 0 ? nums.join(',') + ' ' : ''}${rule}`)
-          }
-        } catch {}
-      }
+    if (byRule.size > 0) {
+      lines.push('input.ts')
+      lines.push(' biome')
+      for (const [rule, nums] of [...byRule.entries()].sort((a, b) => a[0].localeCompare(b[0])))
+        lines.push(`  ${nums.length > 0 ? nums.join(',') + ' ' : ''}${rule}`)
     }
-
-    if (oxlintBin) {
-      try {
-        execFileSync(oxlintBin, ['-f', 'json', filePath], { timeout: TIMEOUT_MS })
-      } catch (e: unknown) {
-        const err = e as { stdout?: Buffer }
-        const stdout = err.stdout?.toString() ?? ''
-        try {
-          const parsed = JSON.parse(stdout) as {
-            diagnostics?: { code?: string; labels?: { span?: { line?: number } }[] }[]
-          }
-          const byRule = new Map<string, number[]>()
-          for (const d of parsed.diagnostics ?? []) {
-            if (d.code) {
-              const line = d.labels?.[0]?.span?.line ?? 0
-              const arr = byRule.get(d.code) ?? []
-              if (line > 0) arr.push(line)
-              byRule.set(d.code, arr)
-            }
-          }
-          if (byRule.size > 0) {
-            if (lines.length === 0) lines.push(fileName)
-            lines.push(' oxlint')
-            for (const [rule, nums] of [...byRule.entries()].sort((a, b) => a[0].localeCompare(b[0])))
-              lines.push(`  ${nums.length > 0 ? nums.join(',') + ' ' : ''}${rule}`)
-          }
-        } catch {}
-      }
-    }
-
-    let varTaskLs = ''
-    try {
-      varTaskLs = readdirSync('/var/task').join(', ')
-    } catch {}
 
     const output = lines.join('\n')
     return NextResponse.json({
       exitCode: output.length > 0 ? 1 : 0,
-      output: output || (biomeBin || oxlintBin ? '' : `Linter binaries not available. cwd=${process.cwd()} /var/task=[${varTaskLs}]`),
+      output,
     })
-  } catch {
-    return NextResponse.json({ error: 'Lint failed' }, { status: 500 })
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
+  } catch (e) {
+    return NextResponse.json(
+      { error: `Lint failed: ${e instanceof Error ? e.message : 'unknown'}` },
+      { status: 500 },
+    )
   }
 }
