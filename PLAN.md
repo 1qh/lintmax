@@ -215,10 +215,6 @@ lintmax rules --human    # rule catalog (table)
 lintmax rules --fixable  # fixable rules only
 ```
 
-## Version strategy
-
-This is a breaking change (output format). Bump to next major version. Add a migration note: "Default output is now agent-optimized. Use `--human` for the previous verbose output."
-
 ## File changes
 
 - `src/pipeline.ts` - run linters with JSON/structured output, feed into aggregator
