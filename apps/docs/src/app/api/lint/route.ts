@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 
@@ -13,16 +13,25 @@ const RATE_WINDOW_MS = 60_000
 const RATE_MAX = 10
 
 const findBinary = (name: string): string | null => {
-  const paths = [
-    join(process.cwd(), 'node_modules', '.bin', name),
-    join(process.cwd(), '..', 'node_modules', '.bin', name),
-    join(process.cwd(), '..', '..', 'node_modules', '.bin', name),
-    '/var/task/node_modules/.bin/' + name,
-    '/var/task/apps/docs/node_modules/.bin/' + name,
+  const searchDirs = [
+    process.cwd(),
+    resolve(process.cwd(), '..'),
+    resolve(process.cwd(), '../..'),
+    '/var/task',
+    '/var/task/apps/docs',
   ]
-  for (const p of paths) {
-    if (existsSync(p)) return p
+  for (const base of searchDirs) {
+    const binPath = join(base, 'node_modules', '.bin', name)
+    if (existsSync(binPath)) return binPath
   }
+  try {
+    const result = execFileSync('find', ['/var/task', '-name', name, '-path', '*/node_modules/.bin/*', '-maxdepth', '5'], {
+      encoding: 'utf8',
+      timeout: 3000,
+    })
+    const found = result.trim().split('\n')[0]
+    if (found && existsSync(found)) return found
+  } catch {}
   return null
 }
 
@@ -124,10 +133,15 @@ export const POST = async (request: Request) => {
       }
     }
 
+    let varTaskLs = ''
+    try {
+      varTaskLs = readdirSync('/var/task').join(', ')
+    } catch {}
+
     const output = lines.join('\n')
     return NextResponse.json({
       exitCode: output.length > 0 ? 1 : 0,
-      output: output || (biomeBin || oxlintBin ? '' : 'Linter binaries not available'),
+      output: output || (biomeBin || oxlintBin ? '' : `Linter binaries not available. cwd=${process.cwd()} /var/task=[${varTaskLs}]`),
     })
   } catch {
     return NextResponse.json({ error: 'Lint failed' }, { status: 500 })
