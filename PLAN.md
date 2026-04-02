@@ -120,6 +120,39 @@ sort-package-json --check
 
 The current “compact” feature (removing consecutive blank lines in source files) is a fix step, not a lint step. It stays as-is, runs before linters in fix mode. Not part of the new output format.
 
+In agent mode, compact’s stdout output (`[compact] Scanned X files / Updated Y files`) must be suppressed. Only print on failure or in `--human` mode.
+
+## Biome double-run in fix mode
+
+`pipeline.ts` runs biome fix twice - before and after oxlint+eslint - to clean up after other fixers. In agent mode check, only capture JSON from the single check run. In fix mode, biome fix runs are silent (no JSON capture needed since they’re just fixing), then the final check run captures JSON for the report.
+
+## Flowmark
+
+`pipeline.ts` conditionally runs flowmark if installed. The plan treats it as a fix-only step (like compact). No JSON output, no parser needed. If flowmark fails, report it as a simple failure in the grouped output (no line numbers, just the tool name).
+
+## Config sync step
+
+`pipeline.ts:204-213` runs config sync before linting, using `run()` with `silent: true`. In agent mode, this should remain silent. In human mode, it’s already silent. No change needed for `--human` threading on this step.
+
+## Exit code disambiguation
+
+- exit 0 = success, no output
+- exit 1 + valid JSON = lint errors found, parse and format
+- exit 1 + invalid JSON = tool crashed, report as internal error with raw stderr
+- exit 2+ = tool crashed, same as above
+
+## Deduplication clarification
+
+Dedup by file+line removes only exact duplicates (same file, same line, from different linters). Two different rules on the same line from different linters are NOT deduped - they’re separate violations that happen to share a line.
+
+## Runtime config for comments
+
+`lintmax.json` runtime config (read at `pipeline.ts:216`) already has `compact?: boolean`. Add `comments?: boolean` to the same runtime config. Thread it into the pipeline: if `comments` is true (default), run comment deletion before linters in fix mode, report deletable comments in check mode.
+
+## Smoke test updates
+
+The smoke test (`script/smoke.ts`) will need updating after the output format changes. Assertions must match agent-mode behavior (silent on success, grouped format on failure). Update as part of each phase, not as a separate phase.
+
 ## Key blocker: `run()` cannot capture output
 
 The current `run()` in `src/core.ts` uses `spawnSync` with `stdout: 'inherit'` (or `'pipe'` with silent mode that dumps to stderr on failure). There is no way to capture and return stdout as a string for JSON parsing.
