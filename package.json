@@ -49,10 +49,10 @@
     "fix": "q bun dist/cli.js fix",
     "postinstall": "bash script/q-install.sh",
     "prepare": "bunx simple-git-hooks",
-    "prepublishOnly": "bun run build",
+    "prepublishOnly": "bun run verify",
     "postpublish": "bun run cleanup-old-versions",
-    "release": "bun run verify && q bun publish",
-    "release:dry": "bun run verify && q bun publish --dry-run",
+    "release": "q bun publish",
+    "release:dry": "q bun publish --dry-run",
     "smoke": "q bun script/smoke.ts",
     "verify": "bun clean && bun i && q bun run build && q bun run fix && q bun check && q bun run smoke"
   },

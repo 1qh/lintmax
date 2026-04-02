@@ -68,7 +68,8 @@ const DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
   'expo/**/metro.config.js',
   'expo/**/uniwind-env.d.ts',
   'expo/**/uniwind-types.d.ts',
-  '**/next-env.d.ts'
+  '**/next-env.d.ts',
+  'readonly/**'
 ]
 const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
   {
