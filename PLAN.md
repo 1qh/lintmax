@@ -40,34 +40,42 @@ Biome and eslint may flag the same thing (e.g. both catch `no-explicit-any`). De
 
 ## Comment deletion
 
-Delete all comments by default in fix mode. Code explains itself - comments are slop.
+Delete all comments by default. Code explains itself - comments are slop.
 
 Delete:
 
-- `// this function does X`
-- `/* TODO: refactor */`
-- `// added by @john`
-- all single-line `//` comments
-- all block `/* */` comments
+- all `//` comments
+- all `/* */` comments
 
 Keep:
 
-- lint ignore directives (`eslint-disable`, `biome-ignore`, `oxlint-disable`, `@ts-nocheck`, `@ts-expect-error`, `@ts-ignore`)
-- JSDoc `/** */` on exported declarations (API documentation, powers IDE hover)
+- `/**` JSDoc (always intentional)
+- lint ignore directives matching `/eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore/`
 - shebangs (`#!/usr/bin/env`)
 
 License headers: delete by default (the LICENSE file is in the repo root).
+
+In fix mode: delete comments then run linters. In check mode: report files with deletable comments as errors in the grouped output under `comments` linter:
+
+```
+src/utils.ts
+ comments
+  1,5,12 deletable
+```
 
 ### Parser
 
 Use the TypeScript compiler API (`typescript` package, already a dependency) to extract comment ranges. Deduplicate by position (comments attach to multiple AST nodes). No extra dependency needed.
 
-Keep rule is simple - no AST node association needed:
+### Config opt-out
 
-- `/**` → keep (JSDoc, always intentional)
-- `//` → delete (unless lint ignore pattern)
-- `/* */` → delete (unless lint ignore pattern)
-- Lint ignore pattern: `/eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore/`
+```ts
+export default defineConfig({
+  comments: false
+})
+```
+
+Default is `true` (delete comments).
 
 ### Verified JSON schemas
 
@@ -91,100 +99,103 @@ prettier --list-different
   one filename per line
 ```
 
-### Config opt-out
-
-Users who want to keep comments can set `comments: false` in lintmax config:
-
-```ts
-export default defineConfig({
-  comments: false
-})
-```
-
-Default is `true` (delete comments).
-
 ## Default ignores
 
 `readonly/**` ignored by default (generated code, same as `node_modules/` or `dist/`). Consumer repos using the `readonly/` convention no longer need `ignores: ['readonly/**']` in their config.
 
+## Existing compact step
+
+The current “compact” feature (removing consecutive blank lines in source files) is a fix step, not a lint step. It stays as-is, runs before linters in fix mode. Not part of the new output format.
+
 ## Implementation order
 
-Each phase builds on the previous. Phases marked independent can be done in parallel.
+Build end-to-end for one linter first (biome) as proof of concept: parse JSON → aggregate → output grouped format. Then add oxlint, eslint, tsc, prettier, comments one at a time.
 
-### Phase 1: JSON collection (foundation)
+### Phase 1: Biome end-to-end (proof of concept)
 
-Run each linter with structured output:
+- Run biome with `--reporter=json`, capture stdout
+- Parse `{ diagnostics: [{ category, location: { path, start: { line } } }] }`
+- Group by file → by rule → collect line numbers
+- Output grouped format
+- Test: run on a dirty fixture, verify output matches expected format
+- Once this works, the pattern is proven for all other linters
 
-- biome: `--reporter=json` → `{ diagnostics: [{ location: { path, span }, category }] }`
-- oxlint: `-f json` → `[{ filePath, messages: [{ line, column, ruleId }] }]`
-- eslint: `-f json` → `[{ filePath, messages: [{ line, column, ruleId }] }]`
-- tsc: `--pretty false` → parse `file(line,col): error TSxxxx: message` with regex
-- prettier: `--list-different` → one filename per line
+### Phase 2: Add remaining linters (extends Phase 1)
 
-Verify exact JSON schemas by running each tool on a test file and inspecting output before coding the parsers.
+Add parsers one at a time, feeding into the same aggregation pipeline:
 
-Parse all results into unified structure:
+- oxlint: parse `{ diagnostics: [{ code, filename, labels: [{ span: { line } }] }] }`
+- eslint: parse `[{ filePath, messages: [{ ruleId, line }] }]`
+- tsc: parse `file(line,col): error TSxxxx: message` with regex
+- prettier: parse `--list-different` filenames
+- comments: TypeScript compiler API comment extraction
 
-```ts
-type Diagnostic = { file: string; line: number; rule: string; linter: string }
-```
+Each parser produces `Diagnostic[]`, all feed into the same aggregator.
 
-### Phase 2: Aggregation (depends on Phase 1)
+### Phase 3: Aggregation + deduplication
 
-- Collect all diagnostics into one array
-- Deduplicate: group by file+line, if multiple linters report same location, keep biome > oxlint > eslint (priority order)
+- Collect all `Diagnostic[]` from all parsers
+- Deduplicate: same file+line from multiple linters → keep biome > oxlint > eslint
 - Group by file → by linter → by rule → collect line numbers
 - Sort files alphabetically, linters by priority, rules alphabetically
 
-### Phase 3: Output formatting (depends on Phase 2)
+### Phase 4: Output formatting
 
 Agent mode (default):
 
-- Build the grouped format string from aggregated diagnostics
+- Build grouped format string from aggregated diagnostics
 - Print to stdout
 - Zero output on success
 - Exit code 1 if any errors
 
 Human mode (`--human`):
 
-- Current behavior, pipe through to sub-tools with human-readable output
+- Current behavior: pipe through to sub-tools with their native human-readable output
+- In fix mode: still fix everything, then show verbose check output after
+- In check mode: show verbose output from each tool
 
-### Phase 4: Comment deletion (independent)
+### Phase 5: Comment deletion (independent)
 
-- Run before linters in fix mode
+- In fix mode: run before linters, delete comments, then linters fix the rest
+- In check mode: report deletable comment locations as diagnostics (linter = `comments`, rule = `deletable`)
 - Use TypeScript compiler API to get comment ranges
-- For each comment, check if it matches a keep pattern (lint ignore, JSDoc on exports, shebang)
-- Remove non-matching comments, preserve whitespace/newlines
+- Deduplicate by position
+- Check keep patterns (JSDoc `/**`, lint ignores, shebangs)
+- Remove non-matching comments, preserve surrounding whitespace
 - New file: `src/comments.ts`
 
-### Phase 5: tsc integration (independent)
+### Phase 6: tsc integration (independent)
 
-- Add optional `typecheck: true` in lintmax config
+- Optional `typecheck: true` in lintmax config
 - Run `tsc --noEmit --pretty false`
-- Parse with regex: `/^(.+)\((\d+),(\d+)\): error (TS\d+): (.+)$/`
-- Feed diagnostics into the same aggregation pipeline
+- Parse with regex
+- Feed diagnostics into aggregation pipeline
 - tsc errors are never fixable, always reported
 
-### Phase 6: Rule catalog (independent, after Phase 1)
+### Phase 7: Rule catalog (after Phase 2)
 
 Extract all rules programmatically:
 
 - oxlint: parse `--rules` markdown table output
-- biome: parse `biome.json` schema from `@biomejs/biome` package
+- biome: parse biome.json schema from `@biomejs/biome` package
 - eslint: use `--print-config` on a dummy file, extract rule keys
-- tsc: static list of error codes (published, rarely changes)
 
 New command: `lintmax rules` / `lintmax rules --fixable`
 
 Output as compact list for agents, table for `--human`.
 
-### Phase 7: Remove `q` wrapper (after Phase 3)
+### Phase 8: Remove `q` wrapper (after Phase 4)
 
-Once lintmax itself is silent on success, the `q` wrapper in package.json scripts is unnecessary. Remove `q` from all scripts, remove `script/q-install.sh`, remove `q` from `postinstall`.
+Once lintmax is silent on success by default, `q` is unnecessary:
+
+- Remove `q` from all package.json scripts
+- Remove `script/q-install.sh`
+- Remove `q` from `postinstall`
+- Update `verify` script to not use `q`
 
 ## Tests
 
-Test fixtures are also playground showcase examples. Write by hand to control the narrative - each fixture should look like recognizable AI-generated code.
+Test fixtures are also playground showcase examples. Write by hand - each fixture should look like recognizable AI-generated code.
 
 ### Test 1: Magic
 
@@ -193,11 +204,11 @@ A deliberately messy TypeScript file that looks like ChatGPT output: wrong quote
 - `lintmax check` → compact error output
 - `lintmax fix` → silence (exit 0)
 - `lintmax check` → silence (exit 0)
-- Assert: the fixed file has zero comments (except lint ignores), consistent formatting, no unused imports
+- Assert: the fixed file has zero comments (except lint ignores/JSDoc), consistent formatting, no unused imports
 
 ### Test 2: Coverage + Efficiency
 
-A TypeScript file violating every non-fixable rule. Written by hand guided by the rule catalog from Phase 6.
+A TypeScript file violating every non-fixable rule. Written by hand guided by the rule catalog from Phase 7.
 
 - `lintmax check` → compact output
 - Same file, run raw `biome check && oxlint && eslint` → capture verbose output
@@ -217,9 +228,13 @@ The playground IS the documentation. One Next.js app with fumadocs.
 - `/api/lint` route (runs lintmax server-side on posted code)
 - deployed on Vercel
 
-### API security
+### API
 
-`/api/lint` accepts a code string, writes to a temp file, runs lintmax on it, returns the compact output. No code execution - lintmax only parses and lints, never runs the code. Rate limit: 10 requests/minute per IP via Vercel Edge Config or simple in-memory counter.
+`/api/lint` accepts a code string, writes to a temp file, runs lintmax check on it, returns the compact output. No code execution - lintmax only parses and lints, never runs the code.
+
+- Rate limit: 10 requests/minute per IP
+- Timeout: 10 second max per request
+- Max input size: 50KB
 
 ### Landing page (playground)
 
@@ -238,20 +253,34 @@ Minimal:
 
 - Install: `bun add -d lintmax`
 - Config reference (auto-generated from TypeScript types)
-- Rules catalog (live searchable table from Phase 6 data)
+- Rules catalog (live searchable table from Phase 7 data)
 - Output format spec
 
 ## CLI
 
 ```
 lintmax fix              # agent: fix all, delete comments, silent on success
-lintmax fix --human      # human: verbose output
+lintmax fix --human      # human: fix all, show verbose check output after
 lintmax check            # agent: compact error output
-lintmax check --human    # human: verbose output
+lintmax check --human    # human: verbose output from each tool
 lintmax rules            # rule catalog (compact)
 lintmax rules --human    # rule catalog (table)
 lintmax rules --fixable  # fixable rules only
 ```
+
+## Pre-commit
+
+Using `simple-git-hooks` with config in package.json:
+
+```json
+"simple-git-hooks": {
+  "pre-commit": "bun run verify && git add ."
+}
+```
+
+`verify` = `bun clean && bun i && build && fix && check && smoke`.
+
+The `git add .` stages any auto-fixes (formatting, comment deletion, import sorting) so they’re included in the commit. This is intentional - the pre-commit ensures every commit is clean.
 
 ## File changes
 
@@ -267,4 +296,4 @@ lintmax rules --fixable  # fixable rules only
 - `tests/magic.test.ts` - Test 1 runner
 - `tests/coverage.test.ts` - Test 2 runner + token comparison
 - `docs/` - fumadocs site + playground
-- remove `script/q-install.sh` and `q` references (Phase 7)
+- remove `script/q-install.sh` and `q` references (Phase 8)
