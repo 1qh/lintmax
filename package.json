@@ -49,12 +49,16 @@
     "cleanup-old-versions": "bun script/cleanup-old-versions.ts",
     "fix": "q bun dist/cli.js fix",
     "postinstall": "bash script/q-install.sh",
+    "prepare": "bunx simple-git-hooks",
     "prepublishOnly": "bun run build",
     "postpublish": "bun run cleanup-old-versions",
     "release": "bun run verify && q bun publish",
     "release:dry": "bun run verify && q bun publish --dry-run",
     "smoke": "q bun script/smoke.ts",
     "verify": "q bun run build && q bun check && q bun run smoke"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "bun clean && bun i && bun run verify"
   },
   "dependencies": {
     "@biomejs/biome": "latest",
@@ -77,5 +81,8 @@
     "sort-package-json": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest"
+  },
+  "devDependencies": {
+    "simple-git-hooks": "latest"
   }
 }
