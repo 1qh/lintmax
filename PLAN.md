@@ -60,7 +60,7 @@ Delete:
 Keep:
 
 - `/**` JSDoc (always intentional)
-- tool directives matching `/eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|@refresh|@flow|istanbul ignore|c8 ignore|webpackChunkName|prettier-ignore|noinspection|nolint|@jsx|@jsxImportSource|@jsxFrag/`
+- tool directives matching `/eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|@refresh|@flow|istanbul ignore|c8 ignore|webpackChunkName|prettier-ignore|noinspection|nolint|@jsx|@jsxImportSource|@jsxFrag|@license|@preserve|type-coverage:ignore/`
 - shebangs (`#!/usr/bin/env`)
 
 License headers: delete by default (the LICENSE file is in the repo root).
@@ -112,7 +112,7 @@ prettier --list-different
   one filename per line
 
 sort-package-json --check
-  exit code 1 if unsorted, filename on stdout
+  exit code 1 if unsorted, one filename per line on stdout (may match multiple package.json files)
 ```
 
 ## Default ignores
@@ -166,7 +166,7 @@ Need a new `runCapture()` function in `src/core.ts`:
 const runCapture = ({ args, command, env, label }: RunOpts): { exitCode: number; stderr: string; stdout: string }
 ```
 
-This returns stdout/stderr as strings instead of piping to terminal. All JSON parsing depends on this.
+This returns stdout/stderr as strings instead of piping to terminal. Unlike `run()`, it does NOT throw on non-zero exit codes - the caller decides what to do based on exit code + JSON validity. All JSON parsing depends on this.
 
 ## `--human` flag plumbing
 
