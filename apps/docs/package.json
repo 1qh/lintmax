@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@biomejs/biome": "latest",
+    "@biomejs/cli-linux-x64": "latest",
     "fumadocs-core": "latest",
     "fumadocs-mdx": "latest",
     "fumadocs-ui": "latest",
     "lucide-react": "latest",
+    "@oxlint/binding-linux-x64-gnu": "latest",
     "oxlint": "latest",
     "next": "latest",
     "react": "latest",
