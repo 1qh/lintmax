@@ -4,8 +4,8 @@ import { useState } from 'react'
 interface PlaygroundProps {
   checkOutput: string
   checkTokens: number
-  dirtyCode: string
-  fixedCode: string
+  dirtyCodeHtml: string
+  fixedCodeHtml: string
   verboseOutput: string
   verboseTokens: number
 }
@@ -13,89 +13,84 @@ interface PlaygroundProps {
 export const Playground = ({
   checkOutput,
   checkTokens,
-  dirtyCode,
-  fixedCode,
+  dirtyCodeHtml,
+  fixedCodeHtml,
   verboseOutput,
   verboseTokens,
 }: PlaygroundProps) => {
   const [tab, setTab] = useState<'check' | 'fix'>('check')
   const [showRaw, setShowRaw] = useState(false)
 
+  const tokens = tab === 'check' ? (showRaw ? verboseTokens : checkTokens) : 0
+  const reduction = Math.round((1 - checkTokens / verboseTokens) * 100)
+
   return (
-    <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto">
+    <div className="flex flex-col gap-3 w-full max-w-4xl mx-auto">
       <div className="rounded-xl border border-fd-border overflow-hidden">
-        <div className="bg-fd-card px-4 py-2 border-b border-fd-border flex items-center justify-between">
-          <span className="text-sm font-mono text-fd-muted-foreground">dirty-fixture.ts</span>
-          <span className="text-xs text-fd-muted-foreground">before lintmax</span>
+        <div className="px-4 py-2 border-b border-fd-border flex items-center justify-between bg-fd-card">
+          <span className="text-xs font-mono text-fd-muted-foreground">before</span>
         </div>
-        <pre className="p-4 text-sm font-mono overflow-x-auto bg-black text-neutral-300 max-h-80 overflow-y-auto">
-          {dirtyCode}
-        </pre>
+        <div
+          className="p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-72 overflow-y-auto [&_pre]:!bg-transparent [&_code]:!bg-transparent"
+          dangerouslySetInnerHTML={{ __html: dirtyCodeHtml }}
+        />
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setTab('check')}
-          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            tab === 'check'
+          onClick={() => { setTab('check'); setShowRaw(false) }}
+          className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            tab === 'check' && !showRaw
               ? 'bg-fd-primary text-fd-primary-foreground'
-              : 'bg-fd-card border border-fd-border text-fd-muted-foreground'
+              : 'border border-fd-border text-fd-muted-foreground hover:text-fd-foreground'
           }`}
         >
-          check
+          lintmax check
+        </button>
+        <button
+          type="button"
+          onClick={() => { setTab('check'); setShowRaw(true) }}
+          className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            tab === 'check' && showRaw
+              ? 'bg-fd-primary text-fd-primary-foreground'
+              : 'border border-fd-border text-fd-muted-foreground hover:text-fd-foreground'
+          }`}
+        >
+          raw output
         </button>
         <button
           type="button"
           onClick={() => setTab('fix')}
-          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+          className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
             tab === 'fix'
               ? 'bg-fd-primary text-fd-primary-foreground'
-              : 'bg-fd-card border border-fd-border text-fd-muted-foreground'
+              : 'border border-fd-border text-fd-muted-foreground hover:text-fd-foreground'
           }`}
         >
-          fix
+          lintmax fix
         </button>
-        {tab === 'check' && (
-          <button
-            type="button"
-            onClick={() => setShowRaw(!showRaw)}
-            className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium bg-fd-card border border-fd-border text-fd-muted-foreground"
-          >
-            {showRaw ? 'compact output' : 'raw output'}
-          </button>
-        )}
+        <span className="ml-auto text-xs font-mono px-3 py-1 rounded-full bg-fd-accent text-fd-accent-foreground">
+          {tokens === 0 ? 'exit 0' : `~${tokens} tokens`}
+          {tab === 'check' && !showRaw && ` (${reduction}% smaller)`}
+        </span>
       </div>
 
       <div className="rounded-xl border border-fd-border overflow-hidden">
-        <div className="bg-fd-card px-4 py-2 border-b border-fd-border flex items-center justify-between">
-          <span className="text-sm font-mono text-fd-muted-foreground">
-            {tab === 'check' ? '$ lintmax check' : '$ lintmax fix && lintmax check'}
-          </span>
-          <span className="text-xs font-mono px-2 py-0.5 rounded bg-fd-accent text-fd-accent-foreground">
-            {tab === 'check'
-              ? showRaw
-                ? `${verboseTokens.toLocaleString()} tokens`
-                : `${checkTokens.toLocaleString()} tokens`
-              : '0 tokens'}
+        <div className="px-4 py-2 border-b border-fd-border flex items-center justify-between bg-fd-card">
+          <span className="text-xs font-mono text-fd-muted-foreground">
+            {tab === 'fix' ? 'after' : 'output'}
           </span>
         </div>
-        <pre className="p-4 text-sm font-mono overflow-x-auto bg-black text-neutral-300 max-h-96 overflow-y-auto whitespace-pre-wrap">
-          {tab === 'check'
-            ? showRaw
-              ? verboseOutput
-              : checkOutput
-            : ''}
-        </pre>
-        {tab === 'fix' && (
-          <div className="border-t border-fd-border">
-            <div className="bg-fd-card px-4 py-2 border-b border-fd-border">
-              <span className="text-sm font-mono text-fd-muted-foreground">fixed file</span>
-            </div>
-            <pre className="p-4 text-sm font-mono overflow-x-auto bg-black text-green-400 max-h-80 overflow-y-auto">
-              {fixedCode}
-            </pre>
-          </div>
+        {tab === 'fix' ? (
+          <div
+            className="p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-72 overflow-y-auto [&_pre]:!bg-transparent [&_code]:!bg-transparent"
+            dangerouslySetInnerHTML={{ __html: fixedCodeHtml }}
+          />
+        ) : (
+          <pre className="p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap text-neutral-400">
+            {showRaw ? verboseOutput : checkOutput}
+          </pre>
         )}
       </div>
     </div>
