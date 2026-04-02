@@ -36,13 +36,14 @@ Prettier has no rules - a file is either formatted or not. In the grouped output
 
 ### Deduplication
 
-Biome and eslint may flag the same thing (e.g. both catch `no-explicit-any`). Deduplicate by file+line: if two linters report the same file and same line, keep only the first linter's report (biome > oxlint > eslint priority, since biome is fastest to fix with).
+Biome and eslint may flag the same thing (e.g. both catch `no-explicit-any`). Deduplicate by file+line: if two linters report the same file and same line, keep only the first linter’s report (biome > oxlint > eslint priority, since biome is fastest to fix with).
 
 ## Comment deletion
 
 Delete all comments by default in fix mode. Code explains itself - comments are slop.
 
 Delete:
+
 - `// this function does X`
 - `/* TODO: refactor */`
 - `// added by @john`
@@ -50,6 +51,7 @@ Delete:
 - all block `/* */` comments
 
 Keep:
+
 - lint ignore directives (`eslint-disable`, `biome-ignore`, `oxlint-disable`, `@ts-nocheck`, `@ts-expect-error`, `@ts-ignore`)
 - JSDoc `/** */` on exported declarations (API documentation, powers IDE hover)
 - shebangs (`#!/usr/bin/env`)
@@ -58,11 +60,40 @@ License headers: delete by default (the LICENSE file is in the repo root).
 
 ### Parser
 
-Use the TypeScript compiler API (`typescript` package, already a dependency) to parse and remove comments. It handles JS/TS/JSX/TSX, gives exact comment ranges with AST node association, and can distinguish JSDoc from regular block comments. No extra dependency needed.
+Use the TypeScript compiler API (`typescript` package, already a dependency) to extract comment ranges. Deduplicate by position (comments attach to multiple AST nodes). No extra dependency needed.
+
+Keep rule is simple - no AST node association needed:
+- `/**` → keep (JSDoc, always intentional)
+- `//` → delete (unless lint ignore pattern)
+- `/* */` → delete (unless lint ignore pattern)
+- Lint ignore pattern: `/eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore/`
+
+### Verified JSON schemas
+
+```
+biome --reporter=json
+  { diagnostics: [{ severity, message, category, location: { path, start: { line, column } } }] }
+  rule name in "category" field: "lint/suspicious/noExplicitAny"
+
+oxlint -f json
+  { diagnostics: [{ message, code, severity, filename, labels: [{ span: { line, column } }] }] }
+  rule name in "code" field: "eslint(no-unused-vars)"
+
+eslint -f json
+  [{ filePath, messages: [{ ruleId, severity, message, line, column }] }]
+
+tsc --pretty false
+  file(line,col): error TSxxxx: message
+  regex: /^(.+)\((\d+),(\d+)\): error (TS\d+): (.+)$/
+
+prettier --list-different
+  one filename per line
+```
 
 ### Config opt-out
 
 Users who want to keep comments can set `comments: false` in lintmax config:
+
 ```ts
 export default defineConfig({
   comments: false
@@ -82,6 +113,7 @@ Each phase builds on the previous. Phases marked independent can be done in para
 ### Phase 1: JSON collection (foundation)
 
 Run each linter with structured output:
+
 - biome: `--reporter=json` → `{ diagnostics: [{ location: { path, span }, category }] }`
 - oxlint: `-f json` → `[{ filePath, messages: [{ line, column, ruleId }] }]`
 - eslint: `-f json` → `[{ filePath, messages: [{ line, column, ruleId }] }]`
@@ -91,6 +123,7 @@ Run each linter with structured output:
 Verify exact JSON schemas by running each tool on a test file and inspecting output before coding the parsers.
 
 Parse all results into unified structure:
+
 ```ts
 type Diagnostic = { file: string; line: number; rule: string; linter: string }
 ```
@@ -105,12 +138,14 @@ type Diagnostic = { file: string; line: number; rule: string; linter: string }
 ### Phase 3: Output formatting (depends on Phase 2)
 
 Agent mode (default):
+
 - Build the grouped format string from aggregated diagnostics
 - Print to stdout
 - Zero output on success
 - Exit code 1 if any errors
 
 Human mode (`--human`):
+
 - Current behavior, pipe through to sub-tools with human-readable output
 
 ### Phase 4: Comment deletion (independent)
@@ -132,6 +167,7 @@ Human mode (`--human`):
 ### Phase 6: Rule catalog (independent, after Phase 1)
 
 Extract all rules programmatically:
+
 - oxlint: parse `--rules` markdown table output
 - biome: parse `biome.json` schema from `@biomejs/biome` package
 - eslint: use `--print-config` on a dummy file, extract rule keys
@@ -190,14 +226,15 @@ Pre-computed examples from test fixtures (instant, no API call):
 
 - Dark code editor (shiki-highlighted), pre-loaded with Test 1 fixture (AI slop)
 - Below: two tabs
-  - "check" → compact output with token count badge
-  - "fix" → diff view showing cleaned code, zero output below
-- Toggle: "raw output" → switches to verbose linter output, token count jumps
-- "Try your own code" → clears editor, enables API mode, POST to `/api/lint` on submit
+  - “check” → compact output with token count badge
+  - “fix” → diff view showing cleaned code, zero output below
+- Toggle: “raw output” → switches to verbose linter output, token count jumps
+- “Try your own code” → clears editor, enables API mode, POST to `/api/lint` on submit
 
 ### Docs pages (fumadocs MDX)
 
 Minimal:
+
 - Install: `bun add -d lintmax`
 - Config reference (auto-generated from TypeScript types)
 - Rules catalog (live searchable table from Phase 6 data)
