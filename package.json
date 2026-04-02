@@ -42,8 +42,7 @@
     "oxlintrc.json"
   ],
   "scripts": {
-    "build": "q bun run build:raw",
-    "build:raw": "bun clean && bun install --silent && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
+    "build": "q tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
     "check": "q bun dist/cli.js check",
     "clean": "rm -rf node_modules bun.lock dist .cache",
     "cleanup-old-versions": "bun script/cleanup-old-versions.ts",
@@ -55,10 +54,10 @@
     "release": "bun run verify && q bun publish",
     "release:dry": "bun run verify && q bun publish --dry-run",
     "smoke": "q bun script/smoke.ts",
-    "verify": "q bun run build && q bun check && q bun run smoke"
+    "verify": "bun clean && bun i && q bun run build && q bun run fix && q bun check && q bun run smoke"
   },
   "simple-git-hooks": {
-    "pre-commit": "bun clean && bun i && bun run verify"
+    "pre-commit": "bun run verify && git add ."
   },
   "dependencies": {
     "@biomejs/biome": "latest",
