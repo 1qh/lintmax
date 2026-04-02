@@ -25,7 +25,7 @@ Uses `simple-git-hooks` configured in package.json. Hook runs `bun run verify &&
 
 - No comments in code (the tool deletes comments - practice what we preach)
 - Use `one-var: never` (separate const declarations)
-- Never use `q` wrapper for new code (being removed in Phase 8)
+- `q` wrapper has been removed - lintmax is silent on success by default
 - All changes must pass `bun run verify` via the pre-commit hook
 
 ## Current task

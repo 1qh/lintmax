@@ -123,6 +123,20 @@ const run = ({ args, command, env, label, silent = false }: RunOpts): void => {
   }
   throw new CliExitError({ code: result.exitCode })
 }
+const runCapture = ({ args, command, env }: RunOpts): { exitCode: number; stderr: string; stdout: string } => {
+  const result = spawnSync({
+    cmd: [command, ...args],
+    cwd,
+    env,
+    stderr: 'pipe',
+    stdout: 'pipe'
+  })
+  return {
+    exitCode: result.exitCode,
+    stderr: decodeText(result.stderr),
+    stdout: decodeText(result.stdout)
+  }
+}
 const readVersion = async () => {
   const pkg = await readRequiredJson<{ version: string }>({
     path: joinPath(lintmaxRoot, 'package.json')
@@ -136,6 +150,7 @@ const usage = ({ version }: { version: string }) => {
   process.stdout.write('  init     Scaffold config files for a new project\n')
   process.stdout.write('  fix      Auto-fix and format all files\n')
   process.stdout.write('  check    Check all files without modifying\n')
+  process.stdout.write('  rules    List all enabled rules\n')
   process.stdout.write('  --version  Show version\n')
 }
 export type { FailureRecord, Pkg, RunOpts, StepSpec }
@@ -155,6 +170,7 @@ export {
   readVersion,
   resolveBin,
   run,
+  runCapture,
   usage,
   writeJson
 }

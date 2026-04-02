@@ -65,10 +65,12 @@ const listCompactFiles = ({ env, root }: { env: Record<string, string | undefine
 }
 const runCompact = async ({
   env,
+  human = false,
   mode,
   root
 }: {
   env: Record<string, string | undefined>
+  human?: boolean
   mode: 'check' | 'fix'
   root: string
 }) => {
@@ -95,8 +97,10 @@ const runCompact = async ({
     if (result.changed) changed.push(result.relativePath)
   }
   if (mode === 'fix') {
-    process.stdout.write(`[compact] Scanned ${scanned} files\n`)
-    process.stdout.write(`[compact] Updated ${changed.length} files\n`)
+    if (human) {
+      process.stdout.write(`[compact] Scanned ${scanned} files\n`)
+      process.stdout.write(`[compact] Updated ${changed.length} files\n`)
+    }
     return
   }
   if (changed.length === 0) return
@@ -107,4 +111,4 @@ const runCompact = async ({
     message: `[compact]\nFiles requiring compaction:\n${shown.join('\n')}${suffix}\nRun: lintmax fix`
   })
 }
-export { runCompact }
+export { listCompactFiles, runCompact }

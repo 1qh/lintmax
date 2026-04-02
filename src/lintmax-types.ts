@@ -54,6 +54,7 @@ type SharedOverrideMapRuleOptions =
     }
 interface SyncOptions {
   biome?: BiomeOptions
+  comments?: boolean
   compact?: boolean
   eslint?: Omit<EslintOptions, 'append' | 'tailwind' | 'tsconfigRootDir'> & {
     append?: readonly (EslintImportAppendEntry | JsonObject)[]

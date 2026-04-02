@@ -1,6 +1,7 @@
 import { CliExitError, readVersion, usage } from './core.js'
 import { runInit } from './init.js'
 import { runLint } from './pipeline.js'
+import { extractAllRules, formatRulesCompact, formatRulesHuman } from './rules.js'
 const command = process.argv[2]
 const main = async () => {
   const version = await readVersion()
@@ -12,12 +13,20 @@ const main = async () => {
     process.stdout.write(`${version}\n`)
     return
   }
+  if (command === 'rules') {
+    const human = process.argv.includes('--human')
+    const rules = await extractAllRules()
+    const output = human ? formatRulesHuman(rules) : formatRulesCompact(rules)
+    process.stdout.write(`${output}\n`)
+    return
+  }
   if (command !== 'fix' && command !== 'check') {
     usage({ version })
     if (command === '--help' || command === '-h') return
     throw new CliExitError({ code: 1 })
   }
-  await runLint({ command })
+  const human = process.argv.includes('--human')
+  await runLint({ command, human })
 }
 try {
   await main()

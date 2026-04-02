@@ -960,7 +960,7 @@ const sync = async (options?: SyncOptions): Promise<void> => {
   const eslintConfig = eslintOptions
     ? `${importStatements.length > 0 ? `${importStatements}\n` : ''}import { eslint } from 'lintmax/eslint'\nconst options = ${JSON.stringify(eslintOptions)}\nfor (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {\n  const entry = options.append?.[index]\n  if (entry && typeof entry === 'object') entry[Symbol.for(${JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)})] = true\n}${importExpansion}export default eslint(options)\n`
     : "export { default } from 'lintmax/eslint'\n"
-  const runtimeConfig = { compact: options?.compact !== false }
+  const runtimeConfig = { comments: options?.comments !== false, compact: options?.compact !== false }
   await write(joinPath(dir, 'biome.json'), `${JSON.stringify(biomeConfig, null, 2)}\n`)
   await write(joinPath(dir, '.oxlintrc.json'), `${JSON.stringify(oxlintConfig, null, 2)}\n`)
   await write(joinPath(dir, 'eslint.generated.mjs'), eslintConfig)
