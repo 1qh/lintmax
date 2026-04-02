@@ -122,6 +122,14 @@ export const POST = async (request: Request) => {
 
     const output = lines.join('\n')
     return NextResponse.json({
+      debug: {
+        biomeBin,
+        biomeExit: biome.status,
+        biomeStderr: biome.stderr?.toString().slice(0, 200) ?? '',
+        oxlintBin,
+        oxlintExit: oxlint.status,
+        oxlintStderr: oxlint.stderr?.toString().slice(0, 200) ?? '',
+      },
       exitCode: output.length > 0 ? 1 : 0,
       output,
     })
