@@ -63,6 +63,7 @@ License headers: delete by default (the LICENSE file is in the repo root).
 Use the TypeScript compiler API (`typescript` package, already a dependency) to extract comment ranges. Deduplicate by position (comments attach to multiple AST nodes). No extra dependency needed.
 
 Keep rule is simple - no AST node association needed:
+
 - `/**` → keep (JSDoc, always intentional)
 - `//` → delete (unless lint ignore pattern)
 - `/* */` → delete (unless lint ignore pattern)
