@@ -57,7 +57,7 @@
     "verify": "bun clean && bun i && q bun run build && q bun run fix && q bun check && q bun run smoke"
   },
   "simple-git-hooks": {
-    "pre-commit": "bun run verify && git add ."
+    "pre-commit": "bun run verify && git add -u"
   },
   "dependencies": {
     "@biomejs/biome": "latest",

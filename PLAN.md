@@ -60,7 +60,7 @@ Delete:
 Keep:
 
 - `/**` JSDoc (always intentional)
-- lint ignore directives matching `/eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore/`
+- tool directives matching `/eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|@refresh|@flow|istanbul ignore|c8 ignore|webpackChunkName|prettier-ignore|noinspection|nolint|@jsx|@jsxImportSource|@jsxFrag/`
 - shebangs (`#!/usr/bin/env`)
 
 License headers: delete by default (the LICENSE file is in the repo root).
@@ -85,7 +85,10 @@ export default defineConfig({
 })
 ```
 
-Default is `true` (delete comments). Requires adding `comments?: boolean` to `SyncOptions` in `src/lintmax-types.ts`.
+Default is `true` (delete comments). Requires:
+
+- Adding `comments?: boolean` to `SyncOptions` in `src/lintmax-types.ts` (user-facing config)
+- Adding `comments?: boolean` to `lintmax.json` runtime config (generated from user config during sync)
 
 ### Verified JSON schemas
 
@@ -184,7 +187,7 @@ Build end-to-end for one linter first (biome) as proof of concept. Then add othe
 ### Phase 1: runCapture + Biome end-to-end (proof of concept)
 
 - Add `runCapture()` to `src/core.ts`
-- Run biome with `--reporter=json` via `runCapture()`, capture stdout
+- Run `biome check --reporter=json` (not `biome ci` - different exit code semantics) via `runCapture()`, capture stdout
 - Parse JSON with try/catch, handle malformed output
 - Minimal aggregator: group by file → by rule → collect line numbers
 - Minimal formatter: output grouped format string
@@ -224,7 +227,8 @@ Human mode (`--human`):
 
 - Current behavior: use existing `run()` with `inherit` for all tools
 - No JSON parsing, no aggregation, direct tool output
-- In fix mode: still fix everything, then show verbose check output after
+- In fix mode: un-silence fix steps (remove `silent: true`), show verbose output from each tool
+- In check mode: show verbose output from each tool
 
 Threading: `cli.ts` parses `--human`, passes boolean to `runLint`, `runLint` branches between agent path (runCapture + aggregate + format) and human path (existing run).
 
@@ -343,13 +347,13 @@ Using `simple-git-hooks` with config in package.json:
 
 ```json
 "simple-git-hooks": {
-  "pre-commit": "bun run verify && git add ."
+  "pre-commit": "bun run verify && git add -u"
 }
 ```
 
 `verify` = `bun clean && bun i && build && fix && check && smoke`.
 
-The `git add .` stages any auto-fixes so they’re included in the commit.
+The `git add -u` stages any auto-fixes so they’re included in the commit.
 
 ## File changes
 
