@@ -69,6 +69,7 @@ const DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
   'expo/**/uniwind-env.d.ts',
   'expo/**/uniwind-types.d.ts',
   '**/next-env.d.ts',
+  'dist/**',
   'readonly/**'
 ]
 const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [

@@ -1,0 +1,78 @@
+{
+  "name": "lintmax",
+  "version": "0.0.22",
+  "description": "Maximum strictness linting, formatting, and type-checking in one package",
+  "keywords": [
+    "biome",
+    "eslint",
+    "formatter",
+    "lint",
+    "linter",
+    "oxlint",
+    "prettier",
+    "typecheck",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/1qh/lintmax"
+  },
+  "license": "MIT",
+  "author": "1qh",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./eslint": {
+      "types": "./dist/eslint.d.ts",
+      "import": "./dist/eslint.js"
+    },
+    "./tsconfig": "./tsconfig.json",
+    "./tsconfig.json": "./tsconfig.json"
+  },
+  "bin": {
+    "lintmax": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "tsconfig.json",
+    "oxlintrc.json"
+  ],
+  "scripts": {
+    "build": "rm -rf dist .cache && tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
+    "check": "bun dist/cli.js check",
+    "clean": "rm -rf dist .cache",
+    "cleanup-old-versions": "bun script/cleanup-old-versions.ts",
+    "fix": "bun dist/cli.js fix",
+    "postpublish": "bun run cleanup-old-versions",
+    "release": "bun publish",
+    "release:dry": "bun publish --dry-run",
+    "smoke": "bun script/smoke.ts",
+    "test": "bun script/test-magic.ts && bun script/test-coverage.ts"
+  },
+  "dependencies": {
+    "@biomejs/biome": "latest",
+    "@eslint-react/eslint-plugin": "^2",
+    "@eslint/compat": "latest",
+    "@eslint/js": "latest",
+    "@next/eslint-plugin-next": "latest",
+    "@types/bun": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "9",
+    "eslint-plugin-better-tailwindcss": "latest",
+    "eslint-plugin-perfectionist": "latest",
+    "eslint-plugin-prefer-arrow-functions": "latest",
+    "eslint-plugin-react": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-turbo": "latest",
+    "oxlint": "latest",
+    "prettier": "latest",
+    "sort-package-json": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest"
+  },
+  "devDependencies": {}
+}

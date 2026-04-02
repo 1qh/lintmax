@@ -1,86 +1,22 @@
 {
-  "name": "lintmax",
-  "version": "0.0.22",
-  "description": "Maximum strictness linting, formatting, and type-checking in one package",
-  "keywords": [
-    "biome",
-    "eslint",
-    "formatter",
-    "lint",
-    "linter",
-    "oxlint",
-    "prettier",
-    "typecheck",
-    "typescript"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/1qh/lintmax"
-  },
-  "license": "MIT",
-  "author": "1qh",
-  "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./eslint": {
-      "types": "./dist/eslint.d.ts",
-      "import": "./dist/eslint.js"
-    },
-    "./tsconfig": "./tsconfig.json",
-    "./tsconfig.json": "./tsconfig.json"
-  },
-  "bin": {
-    "lintmax": "dist/cli.js"
-  },
-  "files": [
-    "dist",
-    "tsconfig.json",
-    "oxlintrc.json"
-  ],
+  "private": true,
+  "packageManager": "bun@1.3.11",
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && printf '#!/usr/bin/env bun\\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js",
-    "check": "bun dist/cli.js check",
-    "clean": "rm -rf node_modules bun.lock dist .cache",
-    "cleanup-old-versions": "bun script/cleanup-old-versions.ts",
-    "fix": "bun dist/cli.js fix",
+    "build": "turbo run build",
+    "check": "turbo run check",
+    "clean": "turbo run clean",
+    "fix": "turbo run fix",
     "prepare": "bunx simple-git-hooks",
-    "prepublishOnly": "bun run verify",
-    "postpublish": "bun run cleanup-old-versions",
-    "release": "bun publish",
-    "release:dry": "bun publish --dry-run",
-    "smoke": "bun script/smoke.ts",
-    "test": "bun script/test-magic.ts && bun script/test-coverage.ts",
-    "verify": "bun clean && bun i && bun run build && bun run fix && bun run check && bun run smoke && bun run test"
+    "smoke": "turbo run smoke",
+    "test": "turbo run test",
+    "verify": "rm -rf node_modules bun.lock packages/*/node_modules packages/*/dist packages/*/.cache && bun i --ignore-scripts && bunx simple-git-hooks && bun run build && bun run fix && bun run check && bun run smoke && bun run test"
   },
   "simple-git-hooks": {
     "pre-commit": "bun run verify && git add -u"
   },
-  "dependencies": {
-    "@biomejs/biome": "latest",
-    "@eslint-react/eslint-plugin": "^2",
-    "@eslint/compat": "latest",
-    "@eslint/js": "latest",
-    "@next/eslint-plugin-next": "latest",
-    "@types/bun": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "eslint": "9",
-    "eslint-plugin-better-tailwindcss": "latest",
-    "eslint-plugin-perfectionist": "latest",
-    "eslint-plugin-prefer-arrow-functions": "latest",
-    "eslint-plugin-react": "latest",
-    "eslint-plugin-react-hooks": "latest",
-    "eslint-plugin-turbo": "latest",
-    "oxlint": "latest",
-    "prettier": "latest",
-    "sort-package-json": "latest",
-    "typescript": "latest",
-    "typescript-eslint": "latest"
-  },
   "devDependencies": {
-    "simple-git-hooks": "latest"
+    "simple-git-hooks": "latest",
+    "turbo": "latest"
   }
 }

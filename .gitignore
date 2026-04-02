@@ -4,3 +4,5 @@ bun.lock
 .cache/
 .eslintcache
 *.tsbuildinfo
+.turbo/
+.turbo/
