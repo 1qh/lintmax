@@ -32,7 +32,17 @@ Token savings: ~325 tokens → ~22 tokens per 3 errors (93% reduction).
 
 ### Prettier in the grouped format
 
-Prettier has no rules - a file is either formatted or not. In the grouped output, prettier violations show as `unformatted` under the file. No line numbers since prettier reformats the whole file.
+Prettier currently only runs on `**/*.md`. In the grouped output, prettier violations show as `unformatted` under the file. No line numbers since prettier reformats the whole file.
+
+### sort-package-json in the grouped format
+
+sort-package-json currently checks/fixes `**/package.json`. In the grouped output, violations show as:
+
+```
+package.json
+ sort-package-json
+  unsorted
+```
 
 ### Deduplication
 
@@ -75,7 +85,7 @@ export default defineConfig({
 })
 ```
 
-Default is `true` (delete comments).
+Default is `true` (delete comments). Requires adding `comments?: boolean` to `SyncOptions` in `src/lintmax-types.ts`.
 
 ### Verified JSON schemas
 
@@ -97,38 +107,67 @@ tsc --pretty false
 
 prettier --list-different
   one filename per line
+
+sort-package-json --check
+  exit code 1 if unsorted, filename on stdout
 ```
 
 ## Default ignores
 
-`readonly/**` ignored by default (generated code, same as `node_modules/` or `dist/`). Consumer repos using the `readonly/` convention no longer need `ignores: ['readonly/**']` in their config.
+`readonly/**` already added to `DEFAULT_SHARED_IGNORE_PATTERNS` in `src/constants.ts`. Done.
 
 ## Existing compact step
 
 The current “compact” feature (removing consecutive blank lines in source files) is a fix step, not a lint step. It stays as-is, runs before linters in fix mode. Not part of the new output format.
 
+## Key blocker: `run()` cannot capture output
+
+The current `run()` in `src/core.ts` uses `spawnSync` with `stdout: 'inherit'` (or `'pipe'` with silent mode that dumps to stderr on failure). There is no way to capture and return stdout as a string for JSON parsing.
+
+Need a new `runCapture()` function in `src/core.ts`:
+
+```ts
+const runCapture = ({ args, command, env, label }: RunOpts): { exitCode: number; stderr: string; stdout: string }
+```
+
+This returns stdout/stderr as strings instead of piping to terminal. All JSON parsing depends on this.
+
+## `--human` flag plumbing
+
+The `--human` flag needs to thread through the entire pipeline:
+
+1. `src/cli.ts`: parse `--human` from `process.argv`, pass to `runLint`
+2. `src/pipeline.ts`: `runLint` receives `{ command, human }`. In human mode, use existing `run()` with `inherit`. In agent mode, use `runCapture()` with JSON flags.
+3. `createCheckSteps` / `createFixSteps` need to conditionally add JSON flags (e.g. `--reporter=json` for biome) based on the `human` flag.
+
+## JSON parse error handling
+
+Linters may crash, output partial JSON, or mix errors into stdout. Every `JSON.parse` call must be wrapped in try/catch. On failure: fall back to raw output as a single error message, and still exit with the tool’s exit code.
+
 ## Implementation order
 
-Build end-to-end for one linter first (biome) as proof of concept: parse JSON → aggregate → output grouped format. Then add oxlint, eslint, tsc, prettier, comments one at a time.
+Build end-to-end for one linter first (biome) as proof of concept. Then add others one at a time.
 
-### Phase 1: Biome end-to-end (proof of concept)
+### Phase 1: runCapture + Biome end-to-end (proof of concept)
 
-- Run biome with `--reporter=json`, capture stdout
-- Parse `{ diagnostics: [{ category, location: { path, start: { line } } }] }`
-- Group by file → by rule → collect line numbers
-- Output grouped format
+- Add `runCapture()` to `src/core.ts`
+- Run biome with `--reporter=json` via `runCapture()`, capture stdout
+- Parse JSON with try/catch, handle malformed output
+- Minimal aggregator: group by file → by rule → collect line numbers
+- Minimal formatter: output grouped format string
 - Test: run on a dirty fixture, verify output matches expected format
-- Once this works, the pattern is proven for all other linters
+- New files: `src/aggregate.ts`, `src/format.ts`
+- Modified files: `src/core.ts`, `src/pipeline.ts`
 
 ### Phase 2: Add remaining linters (extends Phase 1)
 
 Add parsers one at a time, feeding into the same aggregation pipeline:
 
-- oxlint: parse `{ diagnostics: [{ code, filename, labels: [{ span: { line } }] }] }`
-- eslint: parse `[{ filePath, messages: [{ ruleId, line }] }]`
-- tsc: parse `file(line,col): error TSxxxx: message` with regex
-- prettier: parse `--list-different` filenames
-- comments: TypeScript compiler API comment extraction
+- oxlint: parse `{ diagnostics: [{ code, filename, labels: [{ span: { line } }] }] }` with try/catch
+- eslint: parse `[{ filePath, messages: [{ ruleId, line }] }]` with try/catch
+- tsc (optional, if `typecheck: true` in config): parse `--pretty false` output with regex
+- prettier: parse `--list-different` filenames (no JSON, just split lines)
+- sort-package-json: check exit code, report filename if unsorted
 
 Each parser produces `Diagnostic[]`, all feed into the same aggregator.
 
@@ -139,7 +178,7 @@ Each parser produces `Diagnostic[]`, all feed into the same aggregator.
 - Group by file → by linter → by rule → collect line numbers
 - Sort files alphabetically, linters by priority, rules alphabetically
 
-### Phase 4: Output formatting
+### Phase 4: Output formatting + --human flag
 
 Agent mode (default):
 
@@ -150,9 +189,11 @@ Agent mode (default):
 
 Human mode (`--human`):
 
-- Current behavior: pipe through to sub-tools with their native human-readable output
+- Current behavior: use existing `run()` with `inherit` for all tools
+- No JSON parsing, no aggregation, direct tool output
 - In fix mode: still fix everything, then show verbose check output after
-- In check mode: show verbose output from each tool
+
+Threading: `cli.ts` parses `--human`, passes boolean to `runLint`, `runLint` branches between agent path (runCapture + aggregate + format) and human path (existing run).
 
 ### Phase 5: Comment deletion (independent)
 
@@ -163,16 +204,9 @@ Human mode (`--human`):
 - Check keep patterns (JSDoc `/**`, lint ignores, shebangs)
 - Remove non-matching comments, preserve surrounding whitespace
 - New file: `src/comments.ts`
+- Modified: `src/lintmax-types.ts` (add `comments?: boolean` to `SyncOptions`)
 
-### Phase 6: tsc integration (independent)
-
-- Optional `typecheck: true` in lintmax config
-- Run `tsc --noEmit --pretty false`
-- Parse with regex
-- Feed diagnostics into aggregation pipeline
-- tsc errors are never fixable, always reported
-
-### Phase 7: Rule catalog (after Phase 2)
+### Phase 6: Rule catalog (after Phase 2)
 
 Extract all rules programmatically:
 
@@ -184,14 +218,16 @@ New command: `lintmax rules` / `lintmax rules --fixable`
 
 Output as compact list for agents, table for `--human`.
 
-### Phase 8: Remove `q` wrapper (after Phase 4)
+Modified: `src/cli.ts` (add `rules` command handling, currently rejects anything not `fix`/`check`/`init`/`--version`/`--help`)
+
+### Phase 7: Remove `q` wrapper (after Phase 4)
 
 Once lintmax is silent on success by default, `q` is unnecessary:
 
 - Remove `q` from all package.json scripts
 - Remove `script/q-install.sh`
 - Remove `q` from `postinstall`
-- Update `verify` script to not use `q`
+- Update `verify`, `build`, `check`, `fix`, `smoke`, `release` scripts
 
 ## Tests
 
@@ -208,7 +244,7 @@ A deliberately messy TypeScript file that looks like ChatGPT output: wrong quote
 
 ### Test 2: Coverage + Efficiency
 
-A TypeScript file violating every non-fixable rule. Written by hand guided by the rule catalog from Phase 7.
+A TypeScript file violating every non-fixable rule. Written by hand guided by the rule catalog from Phase 6.
 
 - `lintmax check` → compact output
 - Same file, run raw `biome check && oxlint && eslint` → capture verbose output
@@ -253,7 +289,7 @@ Minimal:
 
 - Install: `bun add -d lintmax`
 - Config reference (auto-generated from TypeScript types)
-- Rules catalog (live searchable table from Phase 7 data)
+- Rules catalog (live searchable table from Phase 6 data)
 - Output format spec
 
 ## CLI
@@ -280,20 +316,23 @@ Using `simple-git-hooks` with config in package.json:
 
 `verify` = `bun clean && bun i && build && fix && check && smoke`.
 
-The `git add .` stages any auto-fixes (formatting, comment deletion, import sorting) so they’re included in the commit. This is intentional - the pre-commit ensures every commit is clean.
+The `git add .` stages any auto-fixes so they’re included in the commit.
 
 ## File changes
 
-- `src/pipeline.ts` - run linters with JSON/structured output, feed into aggregator
+- `src/core.ts` - add `runCapture()` function for JSON output capture
+- `src/pipeline.ts` - branch between agent (runCapture + JSON) and human (run + inherit) paths, accept `human` flag
 - `src/format.ts` - new: agent output formatter (grouped format)
 - `src/aggregate.ts` - new: deduplication, grouping, sorting
 - `src/comments.ts` - new: comment deletion using TypeScript compiler API
 - `src/rules.ts` - new: rule catalog extraction from all linters
-- `src/cli.ts` - `--human` flag, `rules` command
-- `src/constants.ts` - add `readonly/**` to default ignores
+- `src/cli.ts` - parse `--human` flag, add `rules` command, pass `human` to `runLint`
+- `src/lintmax-types.ts` - add `comments?: boolean` to `SyncOptions`
+- `src/constants.ts` - `readonly/**` already added (done)
 - `tests/fixtures/dirty-fixable.ts` - Test 1 (AI slop, all fixable violations)
 - `tests/fixtures/dirty-all.ts` - Test 2 (all rule violations)
 - `tests/magic.test.ts` - Test 1 runner
 - `tests/coverage.test.ts` - Test 2 runner + token comparison
 - `docs/` - fumadocs site + playground
-- remove `script/q-install.sh` and `q` references (Phase 8)
+- `script/q-install.sh` - remove (Phase 7)
+- `package.json` - remove `q` from all scripts (Phase 7)
