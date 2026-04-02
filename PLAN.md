@@ -151,14 +151,6 @@ Minimal, generated from code:
 - `/api/lint` route (runs lintmax server-side)
 - deployed on Vercel
 
-## CI optimization
-
-Skip CI on markdown-only changes:
-```yaml
-paths-ignore:
-  - '**.md'
-```
-
 ## CLI
 
 ```
