@@ -221,7 +221,8 @@ Build end-to-end for one linter first (biome) as proof of concept. Then add othe
 ### Phase 1: runCapture + Biome end-to-end (proof of concept)
 
 - Add `runCapture()` to `src/core.ts`
-- Run `biome check --reporter=json` (not `biome ci` - different exit code semantics) via `runCapture()`, capture stdout
+- Suppress compact stdout in agent mode (add `human` param to `runCompact`/`runCompactContinue`, guard `process.stdout.write` calls in `compact.ts:98-99`). Must be in Phase 1 to avoid violating “zero output on success” from day one
+- Run `biome check --reporter=json` via `runCapture()`, capture stdout. Note: current code uses `biome ci` which treats formatter violations as errors. `biome check` categorizes them as info/warnings. Drop `--diagnostic-level=error` and let the aggregator handle severity filtering - this preserves formatter violation detection that `biome ci` provided
 - Parse JSON with try/catch, handle malformed output
 - Minimal aggregator: group by file → by rule → collect line numbers
 - Minimal formatter: output grouped format string
