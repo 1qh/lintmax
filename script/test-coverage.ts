@@ -1,77 +1,15 @@
 import { spawnSync } from 'bun'
-import { unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 const root = join(import.meta.dir, '..')
 const cli = join(root, 'dist/cli.js')
-const workFile = join(root, 'src/coverage-work.ts')
-const DIRTY_FIXTURE = `/* eslint-disable @typescript-eslint/no-unused-vars */
-// biome-ignore lint: test fixture for non-fixable violations
-// explicit any
-const useAny = (x: any): any => x
-// double equals
-const compare = (a: number, b: number) => {
-  if (a == b) return true
-  if (a != b) return false
-  return a === b
-}
-// shadow restricted name
-const shadow = (undefined: string) => undefined
-// empty block
-const emptyBlock = (x: number) => {
-  if (x > 0) {
-  }
-}
-// unused expression
-const noReturn = (x: number) => {
-  x + 1
-}
-// self compare
-const selfCompare = (n: number) => n === n
-// type assertion
-const typeAssertion = {} as { name: string }
-// negated condition with else
-const negatedCondition = (x: boolean) => {
-  if (!x) {
-    return 'no'
-  } else {
-    return 'yes'
-  }
-}
-// void return in non-void context
-const callAndIgnore = async () => {
-  const p = Promise.resolve(42)
-  return void p
-}
-// unnecessary type constraint
-const identity = <T extends unknown>(x: T): T => x
-// prefer optional chain
-const nested = (a: { b?: { c?: string } } | null) => {
-  return a && a.b && a.b.c
-}
-// no useless constructor
-class Base {}
-class Child extends Base {
-  constructor() {
-    super()
-  }
-}
-export {
-  useAny,
-  compare,
-  shadow,
-  emptyBlock,
-  noReturn,
-  selfCompare,
-  typeAssertion,
-  negatedCondition,
-  callAndIgnore,
-  identity,
-  nested,
-  Child
-}
-`
+const fixtureTs = join(root, 'readonly/fixtures/fixture-fixable.ts')
+const fixtureTsx = join(root, 'readonly/fixtures/fixture-react-a11y.tsx')
+const workTs = join(root, 'src/coverage-work.ts')
+const workTsx = join(root, 'src/coverage-work.tsx')
 const decoder = new TextDecoder()
-writeFileSync(workFile, DIRTY_FIXTURE)
+copyFileSync(fixtureTs, workTs)
+copyFileSync(fixtureTsx, workTsx)
 const agentResult = spawnSync({
   cmd: ['bun', cli, 'check'],
   cwd: root,
@@ -80,19 +18,26 @@ const agentResult = spawnSync({
 })
 const agentOutput = decoder.decode(agentResult.stdout)
 const biomeResult = spawnSync({
-  cmd: ['bun', 'node_modules/.bin/biome', 'check', '--config-path', 'node_modules/.cache/lintmax', workFile],
+  cmd: ['bun', 'node_modules/.bin/biome', 'check', '--config-path', 'node_modules/.cache/lintmax', workTs, workTsx],
   cwd: root,
   stderr: 'pipe',
   stdout: 'pipe'
 })
 const oxlintResult = spawnSync({
-  cmd: ['bun', 'node_modules/.bin/oxlint', '-c', 'node_modules/.cache/lintmax/.oxlintrc.json', workFile],
+  cmd: ['bun', 'node_modules/.bin/oxlint', '-c', 'node_modules/.cache/lintmax/.oxlintrc.json', workTs, workTsx],
   cwd: root,
   stderr: 'pipe',
   stdout: 'pipe'
 })
 const eslintResult = spawnSync({
-  cmd: ['bun', 'node_modules/.bin/eslint', '--config', 'node_modules/.cache/lintmax/eslint.generated.mjs', workFile],
+  cmd: [
+    'bun',
+    'node_modules/.bin/eslint',
+    '--config',
+    'node_modules/.cache/lintmax/eslint.generated.mjs',
+    workTs,
+    workTsx
+  ],
   cwd: root,
   stderr: 'pipe',
   stdout: 'pipe'
@@ -105,11 +50,12 @@ const verboseOutput = [
   decoder.decode(eslintResult.stdout),
   decoder.decode(eslintResult.stderr)
 ].join('\n')
-unlinkSync(workFile)
+unlinkSync(workTs)
+unlinkSync(workTsx)
 process.stdout.write(`agent output:\n${agentOutput}\n`)
 const ruleLines = agentOutput.split('\n').filter(l => l.startsWith('  '))
-process.stdout.write(`unique rules triggered: ${ruleLines.length}\n`)
-if (ruleLines.length < 20) throw new Error(`expected at least 20 rule violations, got ${ruleLines.length}`)
+process.stdout.write(`unique rule violations: ${ruleLines.length}\n`)
+if (ruleLines.length < 100) throw new Error(`expected at least 100 rule violations, got ${ruleLines.length}`)
 const agentSize = agentOutput.length
 const verboseSize = verboseOutput.length
 const reduction = verboseSize > 0 ? 1 - agentSize / verboseSize : 0

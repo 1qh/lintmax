@@ -80,7 +80,10 @@ assert(checkStdout.includes('deletable'), 'check output should mention deletable
 process.stdout.write(`check output:\n${checkStdout}\n`)
 const fixResult = run(['fix'])
 const fixStdout = decoder.decode(fixResult.stdout)
-assert(fixResult.exitCode === 0, `fix should exit 0, got ${fixResult.exitCode}\n${decoder.decode(fixResult.stderr)}`)
+assert(
+  fixResult.exitCode === 0,
+  `fix should exit 0, got ${fixResult.exitCode}\n${fixStdout}\n${decoder.decode(fixResult.stderr)}`
+)
 assert(fixStdout.trim() === '', 'fix should be silent')
 const recheckResult = run(['check'])
 const recheckStdout = decoder.decode(recheckResult.stdout)
