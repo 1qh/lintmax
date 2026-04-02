@@ -2,55 +2,55 @@ import { $, file, spawnSync, write } from 'bun'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-const decoder = new TextDecoder(),
-  root = join(import.meta.dir, '..'),
-  pack = spawnSync({ cmd: ['bun', 'pm', 'pack'], cwd: root, stderr: 'pipe', stdout: 'pipe' }),
-  output = decoder.decode(pack.stdout).trim(),
-  tarball = output
-    .split('\n')
-    .find(l => l.endsWith('.tgz'))
-    ?.trim()
+const decoder = new TextDecoder()
+const root = join(import.meta.dir, '..')
+const pack = spawnSync({ cmd: ['bun', 'pm', 'pack'], cwd: root, stderr: 'pipe', stdout: 'pipe' })
+const output = decoder.decode(pack.stdout).trim()
+const tarball = output
+  .split('\n')
+  .find(l => l.endsWith('.tgz'))
+  ?.trim()
 if (pack.exitCode !== 0 || !tarball) throw new Error(`pack failed: ${decoder.decode(pack.stderr)}`)
-const dir = await mkdtemp(join(tmpdir(), 'lintmax-smoke-')),
-  cleanup = async () => rm(dir, { force: true, recursive: true }),
-  has = async (f: string) => file(join(dir, f)).exists(),
-  readJson = async <T>(f: string): Promise<T> => JSON.parse(await file(join(dir, f)).text()) as T,
-  lintmaxCli = 'node_modules/lintmax/dist/cli.js',
-  writeConfig = async ({ content }: { content: string }) => write(join(dir, 'lintmax.config.ts'), content),
-  required = [
-    'node_modules/lintmax/dist/cli.js',
-    'node_modules/lintmax/dist/constants.js',
-    'node_modules/lintmax/dist/eslint.js',
-    'node_modules/lintmax/dist/index.d.ts',
-    'node_modules/lintmax/dist/index.js',
-    'node_modules/lintmax/dist/lintmax-types.d.ts',
-    'node_modules/lintmax/oxlintrc.json',
-    'node_modules/lintmax/tsconfig.json'
-  ],
-  run = ({ cmd, label }: { cmd: string[]; label: string }) => {
-    const result = spawnSync({ cmd, cwd: dir, stderr: 'pipe', stdout: 'pipe' })
-    if (result.exitCode !== 0) {
-      process.stderr.write(`${label} failed:\n${decoder.decode(result.stdout)}\n${decoder.decode(result.stderr)}\n`)
-      throw new Error(`${label} exited ${result.exitCode}`)
-    }
-  },
-  runExpectFail = ({ cmd, expect, label }: { cmd: string[]; expect: string; label: string }) => {
-    const result = spawnSync({ cmd, cwd: dir, stderr: 'pipe', stdout: 'pipe' })
-    if (result.exitCode === 0) throw new Error(`${label} unexpectedly succeeded`)
-    const stderr = decoder.decode(result.stderr),
-      stdout = decoder.decode(result.stdout),
-      combinedOutput = `${stdout}\n${stderr}`
-    if (!combinedOutput.includes(expect))
-      throw new Error(`${label} did not include expected error: ${expect}\nActual output:\n${combinedOutput}`)
+const dir = await mkdtemp(join(tmpdir(), 'lintmax-smoke-'))
+const cleanup = async () => rm(dir, { force: true, recursive: true })
+const has = async (f: string) => file(join(dir, f)).exists()
+const readJson = async <T>(f: string): Promise<T> => JSON.parse(await file(join(dir, f)).text()) as T
+const lintmaxCli = 'node_modules/lintmax/dist/cli.js'
+const writeConfig = async ({ content }: { content: string }) => write(join(dir, 'lintmax.config.ts'), content)
+const required = [
+  'node_modules/lintmax/dist/cli.js',
+  'node_modules/lintmax/dist/constants.js',
+  'node_modules/lintmax/dist/eslint.js',
+  'node_modules/lintmax/dist/index.d.ts',
+  'node_modules/lintmax/dist/index.js',
+  'node_modules/lintmax/dist/lintmax-types.d.ts',
+  'node_modules/lintmax/oxlintrc.json',
+  'node_modules/lintmax/tsconfig.json'
+]
+const run = ({ cmd, label }: { cmd: string[]; label: string }) => {
+  const result = spawnSync({ cmd, cwd: dir, stderr: 'pipe', stdout: 'pipe' })
+  if (result.exitCode !== 0) {
+    process.stderr.write(`${label} failed:\n${decoder.decode(result.stdout)}\n${decoder.decode(result.stderr)}\n`)
+    throw new Error(`${label} exited ${result.exitCode}`)
   }
+}
+const runExpectFail = ({ cmd, expect, label }: { cmd: string[]; expect: string; label: string }) => {
+  const result = spawnSync({ cmd, cwd: dir, stderr: 'pipe', stdout: 'pipe' })
+  if (result.exitCode === 0) throw new Error(`${label} unexpectedly succeeded`)
+  const stderr = decoder.decode(result.stderr)
+  const stdout = decoder.decode(result.stdout)
+  const combinedOutput = `${stdout}\n${stderr}`
+  if (!combinedOutput.includes(expect))
+    throw new Error(`${label} did not include expected error: ${expect}\nActual output:\n${combinedOutput}`)
+}
 try {
-  const runCheck = ({ label }: { label: string }) => run({ cmd: ['bun', lintmaxCli, 'check'], label }),
-    runCheckExpectFail = ({ expect, label }: { expect: string; label: string }) =>
-      runExpectFail({
-        cmd: ['bun', lintmaxCli, 'check'],
-        expect,
-        label
-      })
+  const runCheck = ({ label }: { label: string }) => run({ cmd: ['bun', lintmaxCli, 'check'], label })
+  const runCheckExpectFail = ({ expect, label }: { expect: string; label: string }) =>
+    runExpectFail({
+      cmd: ['bun', lintmaxCli, 'check'],
+      expect,
+      label
+    })
   process.stdout.write(`smoke dir: ${dir}\n`)
   await $`bun init -y`.cwd(dir).quiet()
   await write(join(dir, 'index.ts'), "const ok = 'lintmax-smoke'\nexport { ok }\n")
@@ -63,8 +63,8 @@ try {
     content: "import { defineConfig } from 'lintmax'\nexport default defineConfig({ ignores: ['generated/**'] })\n"
   })
   runCheck({ label: 'shared ignores propagation' })
-  const biomeConfig = await readJson<{ files?: { includes?: string[] } }>('node_modules/.cache/lintmax/biome.json'),
-    oxlintConfig = await readJson<{ ignorePatterns?: string[] }>('node_modules/.cache/lintmax/.oxlintrc.json')
+  const biomeConfig = await readJson<{ files?: { includes?: string[] } }>('node_modules/.cache/lintmax/biome.json')
+  const oxlintConfig = await readJson<{ ignorePatterns?: string[] }>('node_modules/.cache/lintmax/.oxlintrc.json')
   if (!biomeConfig.files?.includes?.includes('!!**/generated/**'))
     throw new Error('shared ignores not propagated to biome config')
   if (!oxlintConfig.ignorePatterns?.includes('generated/**'))
@@ -74,9 +74,9 @@ try {
       "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({\n  biome: { ignores: ['biome-only/**'] },\n  eslint: { ignores: ['eslint-only/**'] },\n  oxlint: { ignores: ['oxlint-only/**'] }\n})\n"
   })
   runCheck({ label: 'per-linter ignores propagation' })
-  const biomeScopedIgnores = await readJson<{ files?: { includes?: string[] } }>('node_modules/.cache/lintmax/biome.json'),
-    oxlintScopedIgnores = await readJson<{ ignorePatterns?: string[] }>('node_modules/.cache/lintmax/.oxlintrc.json'),
-    eslintGenerated = await file(join(dir, 'node_modules/.cache/lintmax/eslint.generated.mjs')).text()
+  const biomeScopedIgnores = await readJson<{ files?: { includes?: string[] } }>('node_modules/.cache/lintmax/biome.json')
+  const oxlintScopedIgnores = await readJson<{ ignorePatterns?: string[] }>('node_modules/.cache/lintmax/.oxlintrc.json')
+  const eslintGenerated = await file(join(dir, 'node_modules/.cache/lintmax/eslint.generated.mjs')).text()
   if (!biomeScopedIgnores.files?.includes?.includes('!!**/biome-only/**'))
     throw new Error('biome.ignores not propagated to biome config')
   if (!oxlintScopedIgnores.ignorePatterns?.includes('oxlint-only/**'))

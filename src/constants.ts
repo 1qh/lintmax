@@ -7,104 +7,104 @@ interface OxlintOverrideConfig {
   rules: Readonly<Record<string, 'off'>>
 }
 const BIOME_RULES_OFF: readonly string[] = [
-    'noBarrelFile',
-    'noConditionalExpect',
-    'noConsole',
-    'noDefaultExport',
-    'noExcessiveCognitiveComplexity',
-    'noExcessiveLinesPerFile',
-    'noExcessiveLinesPerFunction',
-    'noExportedImports',
-    'noImplicitBoolean',
-    'noJsxLiterals',
-    'noJsxPropsBind',
-    'noMagicNumbers',
-    'noNestedTernary',
-    'noNodejsModules',
-    'noProcessGlobal',
-    'noReactSpecificProps',
-    'noSecrets',
-    'noSolidDestructuredProps',
-    'noTernary',
-    'noUndeclaredDependencies',
-    'noUnresolvedImports',
-    'useBlockStatements',
-    'useComponentExportOnlyModules',
-    'useDestructuring',
-    'useExplicitType',
-    'useImportExtensions',
-    'useNamingConvention',
-    'useQwikValidLexicalScope',
-    'useSingleVarDeclarator',
-    'useSolidForComponent',
-    'useSortedClasses'
-  ],
-  BIOME_IGNORE_PATTERNS: readonly string[] = [
-    '!!**/.build',
-    '!!**/.cache',
-    '!!**/.source',
-    '!!**/.next',
-    '!!**/.output',
-    '!!**/.turbo',
-    '!!**/.venv',
-    '!!**/.wxt',
-    '!!**/_generated',
-    '!!**/Android',
-    '!!**/Darwin',
-    '!!**/dist',
-    '!!**/maestro',
-    '!!**/module_bindings',
-    '!!**/playwright-report',
-    '!!**/test-results',
-    '!!**/*.xcassets'
-  ],
-  DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
-    '**/_generated/**',
-    '**/generated/**',
-    '**/module_bindings/**',
-    '.source/',
-    'expo/**/babel.config.js',
-    'expo/**/global.css',
-    'expo/**/metro.config.js',
-    'expo/**/uniwind-env.d.ts',
-    'expo/**/uniwind-types.d.ts',
-    '**/next-env.d.ts'
-  ],
-  BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
-    {
-      includes: ['**/expo/**'],
-      rules: ['style/noProcessEnv']
-    },
-    {
-      includes: ['**/maestro/**'],
-      rules: ['performance/noAwaitInLoops']
+  'noBarrelFile',
+  'noConditionalExpect',
+  'noConsole',
+  'noDefaultExport',
+  'noExcessiveCognitiveComplexity',
+  'noExcessiveLinesPerFile',
+  'noExcessiveLinesPerFunction',
+  'noExportedImports',
+  'noImplicitBoolean',
+  'noJsxLiterals',
+  'noJsxPropsBind',
+  'noMagicNumbers',
+  'noNestedTernary',
+  'noNodejsModules',
+  'noProcessGlobal',
+  'noReactSpecificProps',
+  'noSecrets',
+  'noSolidDestructuredProps',
+  'noTernary',
+  'noUndeclaredDependencies',
+  'noUnresolvedImports',
+  'useBlockStatements',
+  'useComponentExportOnlyModules',
+  'useDestructuring',
+  'useExplicitType',
+  'useImportExtensions',
+  'useNamingConvention',
+  'useQwikValidLexicalScope',
+  'useSingleVarDeclarator',
+  'useSolidForComponent',
+  'useSortedClasses'
+]
+const BIOME_IGNORE_PATTERNS: readonly string[] = [
+  '!!**/.build',
+  '!!**/.cache',
+  '!!**/.source',
+  '!!**/.next',
+  '!!**/.output',
+  '!!**/.turbo',
+  '!!**/.venv',
+  '!!**/.wxt',
+  '!!**/_generated',
+  '!!**/Android',
+  '!!**/Darwin',
+  '!!**/dist',
+  '!!**/maestro',
+  '!!**/module_bindings',
+  '!!**/playwright-report',
+  '!!**/test-results',
+  '!!**/*.xcassets'
+]
+const DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
+  '**/_generated/**',
+  '**/generated/**',
+  '**/module_bindings/**',
+  '.source/',
+  'expo/**/babel.config.js',
+  'expo/**/global.css',
+  'expo/**/metro.config.js',
+  'expo/**/uniwind-env.d.ts',
+  'expo/**/uniwind-types.d.ts',
+  '**/next-env.d.ts'
+]
+const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
+  {
+    includes: ['**/expo/**'],
+    rules: ['style/noProcessEnv']
+  },
+  {
+    includes: ['**/maestro/**'],
+    rules: ['performance/noAwaitInLoops']
+  }
+]
+const OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
+  {
+    files: ['**/expo/**/*.tsx', '**/expo/**/*.ts'],
+    rules: {
+      'react-perf/jsx-no-new-object-as-prop': 'off'
     }
-  ],
-  OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
-    {
-      files: ['**/expo/**/*.tsx', '**/expo/**/*.ts'],
-      rules: {
-        'react-perf/jsx-no-new-object-as-prop': 'off'
-      }
-    }
-  ],
-  TAILWIND_ENTRY_CANDIDATES: readonly string[] = [
-    'ui/src/styles/globals.css',
-    'src/styles/globals.css',
-    'app/globals.css',
-    'web/global.css',
-    'styles/globals.css',
-    'global.css'
-  ],
-  ESLINT_TEST_FILE_PATTERNS: readonly string[] = [
-    '**/*.test.ts',
-    '**/*.test.tsx',
-    '**/*.spec.ts',
-    '**/*.spec.tsx',
-    '**/__tests__/**/*.ts',
-    '**/__tests__/**/*.tsx'
-  ],
-  SHARED_OVERRIDE_SYMBOL_KEY = 'lintmax.sharedOverride'
+  }
+]
+const TAILWIND_ENTRY_CANDIDATES: readonly string[] = [
+  'ui/src/styles/globals.css',
+  'src/styles/globals.css',
+  'app/globals.css',
+  'web/global.css',
+  'styles/globals.css',
+  'global.css'
+]
+const ESLINT_TEST_FILE_PATTERNS: readonly string[] = [
+  '**/*.test.ts',
+  '**/*.test.tsx',
+  '**/*.spec.ts',
+  '**/*.spec.tsx',
+  '**/__tests__/**/*.ts',
+  '**/__tests__/**/*.tsx'
+]
+const SHARED_OVERRIDE_SYMBOL_KEY = 'lintmax.sharedOverride'
 export {
   BIOME_IGNORE_PATTERNS,
   BIOME_PATTERN_RULE_OVERRIDES,
