@@ -20,88 +20,15 @@ export const Playground = ({
 }: PlaygroundProps) => {
   const [tab, setTab] = useState<'check' | 'fix'>('check')
   const [showRaw, setShowRaw] = useState(false)
-  const [tryMode, setTryMode] = useState(false)
-  const [userCode, setUserCode] = useState('')
-  const [userOutput, setUserOutput] = useState('')
-  const [loading, setLoading] = useState(false)
 
   const tokens = tab === 'check' ? (showRaw ? verboseTokens : checkTokens) : 0
   const reduction = Math.round((1 - checkTokens / verboseTokens) * 100)
-
-  const handleSubmit = async () => {
-    if (!userCode.trim() || loading) return
-    setLoading(true)
-    setUserOutput('')
-    try {
-      const res = await fetch('/api/lint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: userCode }),
-      })
-      const data = (await res.json()) as { error?: string; exitCode?: number; output?: string }
-      setUserOutput(data.error ?? data.output ?? '')
-    } catch {
-      setUserOutput('Request failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (tryMode)
-    return (
-      <div className="flex flex-col gap-3 w-full max-w-4xl mx-auto">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setTryMode(false)}
-            className="px-4 py-1.5 rounded-full text-xs font-semibold border border-fd-border text-fd-muted-foreground hover:text-fd-foreground transition-colors"
-          >
-            back to demo
-          </button>
-          <span className="text-xs text-fd-muted-foreground ml-auto">paste TypeScript, hit check</span>
-        </div>
-        <div className="rounded-xl border border-fd-border overflow-hidden">
-          <textarea
-            value={userCode}
-            onChange={e => setUserCode(e.target.value)}
-            placeholder="paste your TypeScript here..."
-            className="w-full h-64 p-4 text-[13px] leading-relaxed font-mono bg-transparent text-fd-foreground resize-none focus:outline-none"
-            spellCheck={false}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={loading || !userCode.trim()}
-          className="self-start px-6 py-2 rounded-full text-sm font-semibold bg-fd-primary text-fd-primary-foreground disabled:opacity-50 transition-opacity"
-        >
-          {loading ? 'checking...' : 'lintmax check'}
-        </button>
-        {userOutput && (
-          <div className="rounded-xl border border-fd-border overflow-hidden">
-            <div className="px-4 py-2 border-b border-fd-border bg-fd-card">
-              <span className="text-xs font-mono text-fd-muted-foreground">output</span>
-            </div>
-            <pre className="p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap text-neutral-400">
-              {userOutput}
-            </pre>
-          </div>
-        )}
-      </div>
-    )
 
   return (
     <div className="flex flex-col gap-3 w-full max-w-4xl mx-auto">
       <div className="rounded-xl border border-fd-border overflow-hidden">
         <div className="px-4 py-2 border-b border-fd-border flex items-center justify-between bg-fd-card">
           <span className="text-xs font-mono text-fd-muted-foreground">before</span>
-          <button
-            type="button"
-            onClick={() => setTryMode(true)}
-            className="text-xs font-medium text-fd-muted-foreground hover:text-fd-foreground transition-colors"
-          >
-            try your own code &rarr;
-          </button>
         </div>
         <div
           className="p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-72 overflow-y-auto [&_pre]:!bg-transparent [&_code]:!bg-transparent"
