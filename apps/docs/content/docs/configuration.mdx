@@ -1,24 +1,35 @@
-# Advanced Configuration
+---
+title: Configuration
+description: All lintmax.config.ts options
+---
 
 All options live in `lintmax.config.ts`.
 
 ## Top-level options
 
-`ignores` (`string[]`)
+### ignores
 
 ```ts
 ignores: ['packages/ui/**', '.intlayer/cache/**']
 ```
 
-`compact` (`boolean`, default `true`)
+### compact
+
+Controls consecutive blank line removal in source files (default `true`).
 
 ```ts
 compact: false
 ```
 
-Compact normalization runs on code/config text files and excludes markdown by default.
+### comments
 
-`tailwind` (`boolean | string`)
+Controls comment deletion (default `true`).
+
+```ts
+comments: false
+```
+
+### tailwind
 
 ```ts
 tailwind: false
@@ -28,17 +39,19 @@ tailwind: false
 tailwind: 'src/styles/globals.css'
 ```
 
-When `tailwind` is omitted or `true`, lintmax auto-detects common entries. In monorepos, it prefers `ui/src/styles/globals.css` when multiple candidates exist.
+When omitted or `true`, lintmax auto-detects common entries. In monorepos, it prefers `ui/src/styles/globals.css` when multiple candidates exist.
 
-`tsconfigRootDir` (`string`)
+### tsconfigRootDir
 
 ```ts
 tsconfigRootDir: '/absolute/project/root'
 ```
 
-## `eslint`
+## eslint
 
-Use top-level `tailwind` and `tsconfigRootDir`. `eslint.off` (`string[]`)
+Use top-level `tailwind` and `tsconfigRootDir` instead of nesting them.
+
+### eslint.off
 
 ```ts
 eslint: {
@@ -46,7 +59,7 @@ eslint: {
 }
 ```
 
-`eslint.ignores` (`string[]`)
+### eslint.ignores
 
 ```ts
 eslint: {
@@ -54,9 +67,9 @@ eslint: {
 }
 ```
 
-`eslint.append` (`Array<Record<string, unknown> | EslintImportAppendEntry>`)
+### eslint.append
 
-For JSON-serializable inline config objects:
+For JSON-serializable inline config:
 
 ```ts
 eslint: {
@@ -64,7 +77,7 @@ eslint: {
 }
 ```
 
-For preset modules that include runtime plugin objects/rule functions, use `eslintImport(...)`:
+For preset modules with runtime plugins, use `eslintImport(...)`:
 
 ```ts
 import { defineConfig, eslintImport } from 'lintmax'
@@ -73,7 +86,7 @@ export default defineConfig({
   eslint: {
     append: [
       eslintImport({
-        files: ['backend/convex/**/*.ts', 'backend/convex/**/*.tsx'],
+        files: ['backend/convex/**/*.ts'],
         from: '@noboil/convex/eslint',
         name: 'recommended'
       })
@@ -82,9 +95,9 @@ export default defineConfig({
 })
 ```
 
-## `biome`
+## biome
 
-`biome.off` (`string[]`)
+### biome.off
 
 ```ts
 biome: {
@@ -92,7 +105,7 @@ biome: {
 }
 ```
 
-`biome.ignores` (`string[]`)
+### biome.ignores
 
 ```ts
 biome: {
@@ -100,7 +113,7 @@ biome: {
 }
 ```
 
-`biome.overrides` (`Array<{ includes, off }>`)
+### biome.overrides
 
 ```ts
 biome: {
@@ -108,9 +121,9 @@ biome: {
 }
 ```
 
-## `oxlint`
+## oxlint
 
-`oxlint.off` (`string[]`)
+### oxlint.off
 
 ```ts
 oxlint: {
@@ -118,7 +131,7 @@ oxlint: {
 }
 ```
 
-`oxlint.ignores` (`string[]`)
+### oxlint.ignores
 
 ```ts
 oxlint: {
@@ -126,7 +139,7 @@ oxlint: {
 }
 ```
 
-`oxlint.overrides` (`Array<{ files, off }>`)
+### oxlint.overrides
 
 ```ts
 oxlint: {
@@ -146,7 +159,7 @@ overrides: {
 }
 ```
 
-Each file-pattern entry must define at least one linter action: `biome`, `eslint`, or `oxlint`.
+Each entry must define at least one linter action: `biome`, `eslint`, or `oxlint`.
 
 ## TypeScript preset
 
