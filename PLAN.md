@@ -11,17 +11,17 @@ Default mode (agent): grouped by file, then by linter, lines compressed.
 ```
 apps/web/showcase.tsx
  biome
-  42,55,60,78,92,103 no-explicit-any
-  1312 no-children-prop
+  42,55,60,78,92,103 lint/suspicious/noExplicitAny
+  1312 lint/correctness/noChildrenProp
  eslint
-  1184,1209,1215,1220,1225 no-unsafe-call
+  1184,1209,1215,1220,1225 @typescript-eslint/no-unsafe-call
  oxlint
-  800,804 jsx-no-jsx-as-prop
+  800,804 eslint-plugin-react-perf(jsx-no-jsx-as-prop)
  prettier
   unformatted
 sync.ts
  oxlint
-  37,66 no-await-expression-member
+  37,66 eslint-plugin-unicorn(no-await-expression-member)
 ```
 
 Zero output on success (exit code 0 is enough).
@@ -46,7 +46,7 @@ package.json
 
 ### Deduplication
 
-Biome and eslint may flag the same thing (e.g. both catch `no-explicit-any`). Deduplicate by file+line: if two linters report the same file and same line, keep only the first linter’s report (biome > oxlint > eslint priority, since biome is fastest to fix with).
+Biome and eslint may flag the same violation on the same line. Deduplicate by file+line only when the same semantic rule is reported by multiple linters (e.g. biome’s `lint/suspicious/noExplicitAny` and eslint’s `no-explicit-any` on the same line). In that case, keep biome’s report (biome > oxlint > eslint priority). Two genuinely different rules on the same line from different linters are NOT deduped. Requires a rule equivalence map for known overlaps.
 
 ## Comment deletion
 
@@ -121,7 +121,7 @@ sort-package-json --check
 
 ## Existing compact step
 
-The current “compact” feature (removing consecutive blank lines in source files) is a fix step, not a lint step. It stays as-is, runs before linters in fix mode. Not part of the new output format.
+The current “compact” feature (removing consecutive blank lines in source files) is a fix step, not a lint step. It stays as-is, runs before linters in fix mode. Compact violations are intentionally unreported in agent check mode - run `lintmax fix` to discover and fix them.
 
 In agent mode, compact’s stdout output (`[compact] Scanned X files / Updated Y files`) must be suppressed. Only print on failure or in `--human` mode.
 
@@ -143,10 +143,6 @@ In agent mode, compact’s stdout output (`[compact] Scanned X files / Updated Y
 - exit 1 + valid JSON = lint errors found, parse and format
 - exit 1 + invalid JSON = tool crashed, report as internal error with raw stderr
 - exit 2+ = tool crashed, same as above
-
-## Deduplication clarification
-
-Dedup by file+line removes only exact duplicates (same file, same line, from different linters). Two different rules on the same line from different linters are NOT deduped - they’re separate violations that happen to share a line.
 
 ## Runtime config for comments
 
@@ -263,8 +259,9 @@ Once lintmax is silent on success by default, `q` is unnecessary:
 
 - Remove `q` from all package.json scripts
 - Remove `script/q-install.sh`
+- Remove `script/q-install.sh` from `files` array in package.json
 - Remove `q` from `postinstall`
-- Update `verify`, `build`, `check`, `fix`, `smoke`, `release` scripts
+- Update `verify` to: `bun clean && bun i && bun run build && bun run fix && bun run check && bun run smoke`
 
 ## Tests
 
