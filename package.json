@@ -65,6 +65,7 @@
     "@types/bun": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "bun-git-hooks": "latest",
     "eslint": "9",
     "eslint-plugin-better-tailwindcss": "latest",
     "eslint-plugin-perfectionist": "latest",
@@ -77,5 +78,8 @@
     "sort-package-json": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest"
+  },
+  "git-hooks": {
+    "pre-commit": "bun run verify"
   }
 }

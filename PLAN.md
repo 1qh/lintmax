@@ -33,6 +33,7 @@ Token savings: ~325 tokens → ~22 tokens per 3 errors (93% reduction).
 Delete all comments by default. Code explains itself - comments are slop.
 
 Delete:
+
 - `// this function does X`
 - `/* TODO: refactor */`
 - `// added by @john`
@@ -40,6 +41,7 @@ Delete:
 - all block `/* */` comments
 
 Keep:
+
 - lint ignore directives (`eslint-disable`, `biome-ignore`, `oxlint-disable`, `@ts-nocheck`, `@ts-expect-error`, `@ts-ignore`)
 - JSDoc `/** */` on exported declarations (API documentation, powers IDE hover)
 - shebangs (`#!/usr/bin/env`)
@@ -54,6 +56,7 @@ Keep:
 ### Phase 1: JSON collection
 
 Run each linter with structured output:
+
 - biome: `--reporter=json`
 - oxlint: `-f json`
 - eslint: `-f json`
@@ -61,6 +64,7 @@ Run each linter with structured output:
 - prettier: `--list-different` → filenames only
 
 Parse into unified structure:
+
 ```ts
 type Diagnostic = { file: string; line: number; rule: string; linter: string }
 ```
@@ -93,6 +97,7 @@ Human mode (`--human`): current verbose output.
 ### Phase 6: Rule catalog
 
 Extract all rules programmatically:
+
 - oxlint: `--rules` (markdown table with fixable column)
 - biome: parse schema or source metadata
 - eslint: `--print-config`
@@ -131,14 +136,15 @@ Pre-computed examples from test fixtures (no API call needed for demos):
 
 - Dark code editor, pre-loaded with AI slop (typical ChatGPT/Copilot output)
 - Below: two tabs
-  - "check" → compact output with token count badge
-  - "fix" → diff view showing cleaned code, silent output
-- Toggle: "raw linter output" → switches to verbose output, token count jumps from 22 to 325
-- "Try your own code" → POST to `/api/lint` → server runs lintmax → returns result
+  - “check” → compact output with token count badge
+  - “fix” → diff view showing cleaned code, silent output
+- Toggle: “raw linter output” → switches to verbose output, token count jumps from 22 to 325
+- “Try your own code” → POST to `/api/lint` → server runs lintmax → returns result
 
 ### Docs pages
 
 Minimal, generated from code:
+
 - Install (`bun add -d lintmax`)
 - Config reference
 - Rules catalog (live searchable, from rule extraction)
