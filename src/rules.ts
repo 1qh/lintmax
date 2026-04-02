@@ -28,8 +28,9 @@ const extractBiomeRules = async (): Promise<RuleEntry[]> => {
 }
 const OXLINT_FIX_MARKERS = new Set(['⚠️🛠️️', '💡', '🛠️', '🛠️💡'])
 const extractOxlintRules = (): RuleEntry[] => {
+  const configPath = joinPath(cwd, 'node_modules/.cache/lintmax/.oxlintrc.json')
   const result = spawnSync({
-    cmd: ['bun', 'node_modules/.bin/oxlint', '--rules'],
+    cmd: ['bun', 'node_modules/.bin/oxlint', '-c', configPath, '--rules'],
     cwd,
     stderr: 'pipe',
     stdout: 'pipe'
@@ -43,7 +44,8 @@ const extractOxlintRules = (): RuleEntry[] => {
       const ruleName = cols[1]
       const source = cols[2]
       const fixCol = cols[5] ?? ''
-      if (ruleName && source && ruleName !== '---')
+      const enabledCol = cols[4] ?? ''
+      if (ruleName && source && !ruleName.startsWith('---') && enabledCol.includes('✅'))
         results.push({
           fixable: OXLINT_FIX_MARKERS.has(fixCol.trim()),
           linter: 'oxlint',
@@ -71,12 +73,18 @@ const extractEslintRules = async (): Promise<RuleEntry[]> => {
   } catch {
     return []
   }
-  const rules = Object.keys(parsed.rules ?? {})
-  return rules.map(rule => ({
-    fixable: false,
-    linter: 'eslint',
-    rule
-  }))
+  const allRules = parsed.rules ?? {}
+  const results: RuleEntry[] = []
+  for (const [rule, config] of Object.entries(allRules)) {
+    const level = Array.isArray(config) ? (config as unknown[])[0] : config
+    if (level !== 0 && level !== 'off')
+      results.push({
+        fixable: false,
+        linter: 'eslint',
+        rule
+      })
+  }
+  return results
 }
 const extractAllRules = async (): Promise<RuleEntry[]> => {
   const oxlint = extractOxlintRules()
