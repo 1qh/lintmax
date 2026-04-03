@@ -18,6 +18,8 @@ const BIOME_RULES_OFF: readonly string[] = [
   'noImplicitBoolean',
   'noImportantStyles',
   'noInlineStyles',
+  'noLeakedRender',
+  'useConsistentCurlyBraces',
   'noJsxLiterals',
   'noJsxPropsBind',
   'noMagicNumbers',

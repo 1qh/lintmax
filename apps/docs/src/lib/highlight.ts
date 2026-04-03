@@ -1,7 +1,13 @@
 import type { BundledLanguage } from 'shiki'
 import { createHighlighter } from 'shiki'
+interface HighlightToken {
+  color: string
+  content: string
+  id: string
+}
 interface TokenLine {
-  tokens: { color: string; content: string }[]
+  id: string
+  tokens: HighlightToken[]
 }
 let highlighter: Awaited<ReturnType<typeof createHighlighter>> | null = null
 const highlight = async (code: string, lang: BundledLanguage = 'typescript'): Promise<TokenLine[]> => {
@@ -10,10 +16,12 @@ const highlight = async (code: string, lang: BundledLanguage = 'typescript'): Pr
     themes: ['github-dark']
   })
   const result = highlighter.codeToTokens(code, { lang, theme: 'github-dark' })
-  return result.tokens.map(line => ({
-    tokens: line.map(token => ({
+  return result.tokens.map((line, li) => ({
+    id: `L${li}`,
+    tokens: line.map((token, ti) => ({
       color: token.color ?? '#e1e4e8',
-      content: token.content
+      content: token.content,
+      id: `L${li}T${ti}`
     }))
   }))
 }

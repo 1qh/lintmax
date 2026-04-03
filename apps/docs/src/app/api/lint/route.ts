@@ -48,8 +48,8 @@ export const POST = async (request: Request) => {
     const fmt = b.formatContent(code, { filePath: 'input.ts' })
     const byRule = new Map<string, number[]>()
     for (const d of lint.diagnostics) {
-      const rule = d.category
-      const span = d.location?.span as undefined | { start: number }
+      const { category: rule } = d
+      const span = d.location.span as undefined | { start: number }
       const line = span ? code.slice(0, span.start).split('\n').length : 0
       const arr = byRule.get(rule) ?? []
       if (line > 0) arr.push(line)

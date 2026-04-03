@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import type { TokenLine } from '@/lib/highlight'
 interface PlaygroundProps {
   checkOutput: string
   checkTokens: number
@@ -8,26 +9,31 @@ interface PlaygroundProps {
   verboseOutput: string
   verboseTokens: number
 }
-interface TokenLine {
-  tokens: { color: string; content: string }[]
+const CodeBlock = ({ lines }: { lines: TokenLine[] }) => {
+  const styleMap = useMemo(() => {
+    const map = new Map<string, React.CSSProperties>()
+    for (const line of lines)
+      for (const token of line.tokens) if (!map.has(token.color)) map.set(token.color, { color: token.color })
+    return map
+  }, [lines])
+  return (
+    <pre className='p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-72 overflow-y-auto'>
+      <code>
+        {lines.map(line => (
+          <span key={line.id}>
+            {line.tokens.map(token => (
+              <span key={token.id} style={styleMap.get(token.color)}>
+                {token.content}
+              </span>
+            ))}
+            {'\n'}
+          </span>
+        ))}
+      </code>
+    </pre>
+  )
 }
-const CodeBlock = ({ lines }: { lines: TokenLine[] }) => (
-  <pre className='p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-72 overflow-y-auto'>
-    <code>
-      {lines.map((line, i) => (
-        <span key={i}>
-          {line.tokens.map((token, j) => (
-            <span key={j} style={{ color: token.color }}>
-              {token.content}
-            </span>
-          ))}
-          {'\n'}
-        </span>
-      ))}
-    </code>
-  </pre>
-)
-export const Playground = ({
+const Playground = ({
   checkOutput,
   checkTokens,
   dirtyCodeTokens,
@@ -43,24 +49,28 @@ export const Playground = ({
   const [loading, setLoading] = useState(false)
   const tokens = tab === 'check' ? (showRaw ? verboseTokens : checkTokens) : 0
   const reduction = Math.round((1 - checkTokens / verboseTokens) * 100)
-  const handleSubmit = async () => {
-    if (!userCode.trim() || loading) return
-    setLoading(true)
-    setUserOutput('')
-    try {
-      const res = await fetch('/api/lint', {
-        body: JSON.stringify({ code: userCode }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST'
-      })
-      const data = (await res.json()) as { error?: string; exitCode?: number; output?: string }
-      if (data.error) setUserOutput(data.error)
-      else if (data.exitCode === 0) setUserOutput('exit 0 — no issues found')
-      else setUserOutput(data.output ?? '')
-    } catch {
-      setUserOutput('Request failed')
-    } finally {
-      setLoading(false)
+  const handleSubmit = () => {
+    if (userCode.trim() && !loading) {
+      setLoading(true)
+      setUserOutput('')
+      const run = async () => {
+        try {
+          const res = await fetch('/api/lint', {
+            body: JSON.stringify({ code: userCode }),
+            headers: { 'Content-Type': 'application/json' },
+            method: 'POST'
+          })
+          const data = (await res.json()) as { error?: string; exitCode?: number; output?: string }
+          if (data.error) setUserOutput(data.error)
+          else if (data.exitCode === 0) setUserOutput('exit 0 — no issues found')
+          else setUserOutput(data.output ?? '')
+        } catch {
+          setUserOutput('Request failed')
+        } finally {
+          setLoading(false)
+        }
+      }
+      run()
     }
   }
   if (tryMode)
@@ -81,7 +91,7 @@ export const Playground = ({
           <textarea
             className='w-full h-64 p-4 text-[13px] leading-relaxed font-mono bg-transparent text-fd-foreground resize-none focus:outline-none'
             onChange={e => setUserCode(e.target.value)}
-            placeholder={'const x: any = 1\nexport { x }'}
+            placeholder='const x: any = 1&#10;export { x }'
             spellCheck={false}
             value={userCode}
           />
@@ -157,8 +167,8 @@ export const Playground = ({
           lintmax fix
         </button>
         <span className='ml-auto text-xs font-mono px-3 py-1 rounded-full bg-fd-accent text-fd-accent-foreground'>
-          {tokens === 0 ? 'exit 0' : `~${tokens} tokens`}
-          {tab === 'check' && !showRaw && ` (${reduction}% smaller)`}
+          {tokens > 0 ? `~${tokens} tokens` : 'exit 0'}
+          {tab === 'check' && !showRaw ? ` (${reduction}% smaller)` : null}
         </span>
       </div>
       <div className='rounded-xl border border-fd-border overflow-hidden'>
@@ -176,3 +186,4 @@ export const Playground = ({
     </div>
   )
 }
+export { Playground }
