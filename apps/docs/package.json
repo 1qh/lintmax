@@ -9,16 +9,13 @@
     "start": "next start"
   },
   "dependencies": {
-    "@biomejs/js-api": "0.6.1",
-    "@biomejs/wasm-nodejs": "1.8.3",
     "fumadocs-core": "latest",
     "fumadocs-mdx": "latest",
     "fumadocs-ui": "latest",
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest",
-    "shiki": "latest"
+    "react-dom": "latest"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "latest",
