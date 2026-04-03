@@ -1,7 +1,10 @@
+<div align="center">
+
 # lintmax
 
-The #1 anti AI slop typescript tooling. Designed for coding agents, not humans.
+The #1 anti AI slop typescript tooling.
+Designed for coding agents, not humans.
 
-## Docs
+[documentation](https://lintmax.vercel.app)
 
-[lintmax.vercel.app](https://lintmax.vercel.app)
+</div>
