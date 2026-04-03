@@ -3,16 +3,35 @@ import { useState } from 'react'
 interface PlaygroundProps {
   checkOutput: string
   checkTokens: number
-  dirtyCodeHtml: string
-  fixedCodeHtml: string
+  dirtyCodeTokens: TokenLine[]
+  fixedCodeTokens: TokenLine[]
   verboseOutput: string
   verboseTokens: number
 }
+interface TokenLine {
+  tokens: { color: string; content: string }[]
+}
+const CodeBlock = ({ lines }: { lines: TokenLine[] }) => (
+  <pre className='p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-72 overflow-y-auto'>
+    <code>
+      {lines.map((line, i) => (
+        <span key={i}>
+          {line.tokens.map((token, j) => (
+            <span key={j} style={{ color: token.color }}>
+              {token.content}
+            </span>
+          ))}
+          {'\n'}
+        </span>
+      ))}
+    </code>
+  </pre>
+)
 export const Playground = ({
   checkOutput,
   checkTokens,
-  dirtyCodeHtml,
-  fixedCodeHtml,
+  dirtyCodeTokens,
+  fixedCodeTokens,
   verboseOutput,
   verboseTokens
 }: PlaygroundProps) => {
@@ -98,10 +117,7 @@ export const Playground = ({
             try your own code &rarr;
           </button>
         </div>
-        <div
-          className='p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-72 overflow-y-auto [&_pre]:!bg-transparent [&_code]:!bg-transparent'
-          dangerouslySetInnerHTML={{ __html: dirtyCodeHtml }}
-        />
+        <CodeBlock lines={dirtyCodeTokens} />
       </div>
       <div className='flex items-center gap-2'>
         <button
@@ -150,10 +166,7 @@ export const Playground = ({
           <span className='text-xs font-mono text-fd-muted-foreground'>{tab === 'fix' ? 'after' : 'output'}</span>
         </div>
         {tab === 'fix' ? (
-          <div
-            className='p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-72 overflow-y-auto [&_pre]:!bg-transparent [&_code]:!bg-transparent'
-            dangerouslySetInnerHTML={{ __html: fixedCodeHtml }}
-          />
+          <CodeBlock lines={fixedCodeTokens} />
         ) : (
           <pre className='p-4 text-[13px] leading-relaxed font-mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap text-neutral-400'>
             {showRaw ? verboseOutput : checkOutput}

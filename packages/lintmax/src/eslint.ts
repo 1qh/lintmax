@@ -236,6 +236,7 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
           'perfectionist/sort-objects': 'off',
           'perfectionist/sort-variable-declarations': 'off',
           'preferArrow/prefer-arrow-functions': ['error', { returnStyle: 'implicit' }],
+          'require-atomic-updates': 'off',
           'sort-imports': 'off',
           'sort-keys': 'off',
           'sort-vars': 'off'

@@ -4,11 +4,11 @@ const MAX_INPUT_SIZE = 50_000
 const RATE_LIMIT = new Map<string, number[]>()
 const RATE_WINDOW_MS = 60_000
 const RATE_MAX = 10
-let biome: Biome | null = null
+let biomeInstance: Biome | null = null
 const getBiome = async (): Promise<Biome> => {
-  if (biome) return biome
-  biome = await Biome.create({ distribution: Distribution.NODE })
-  biome.applyConfiguration({
+  if (biomeInstance) return biomeInstance
+  const instance = await Biome.create({ distribution: Distribution.NODE })
+  instance.applyConfiguration({
     linter: {
       rules: {
         complexity: { useArrowFunction: 'error' },
@@ -18,7 +18,8 @@ const getBiome = async (): Promise<Biome> => {
       }
     }
   })
-  return biome
+  biomeInstance = instance
+  return instance
 }
 const checkRateLimit = (ip: string): boolean => {
   const now = Date.now()
@@ -47,7 +48,7 @@ export const POST = async (request: Request) => {
     const fmt = b.formatContent(code, { filePath: 'input.ts' })
     const byRule = new Map<string, number[]>()
     for (const d of lint.diagnostics) {
-      const rule = d.category ?? 'unknown'
+      const rule = d.category
       const span = d.location?.span as undefined | { start: number }
       const line = span ? code.slice(0, span.start).split('\n').length : 0
       const arr = byRule.get(rule) ?? []
@@ -59,7 +60,7 @@ export const POST = async (request: Request) => {
     if (byRule.size > 0) {
       lines.push('input.ts')
       lines.push(' biome')
-      for (const [rule, nums] of [...byRule.entries()].toSorted((a, b) => a[0].localeCompare(b[0])))
+      for (const [rule, nums] of [...byRule.entries()].toSorted((x, y) => x[0].localeCompare(y[0])))
         lines.push(`  ${nums.length > 0 ? `${nums.join(',')} ` : ''}${rule}`)
     }
     const output = lines.join('\n')
