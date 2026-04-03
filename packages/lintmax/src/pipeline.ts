@@ -11,6 +11,7 @@ import {
 } from './aggregate.js'
 import { checkComments, fixComments } from './comments.js'
 import { listCompactFiles, runCompact } from './compact.js'
+import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import {
   cacheDir,
   CliExitError,
@@ -407,7 +408,12 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     sortPkgJson
   })
   const shouldComments = runtime.comments !== false
-  const gitFiles = shouldComments ? listCompactFiles({ env, root: cwd }) : []
+  const isIgnored = (filePath: string): boolean =>
+    DEFAULT_SHARED_IGNORE_PATTERNS.some(pattern => {
+      const regex = new RegExp(`^${pattern.replaceAll('**/', '(.*/)?').replaceAll('*', '[^/]*')}$`, 'u')
+      return regex.test(filePath)
+    })
+  const gitFiles = shouldComments ? listCompactFiles({ env, root: cwd }).filter(f => !isIgnored(f)) : []
   if (command === 'fix') {
     if (shouldComments) await fixComments({ files: gitFiles })
     const fixSteps = createFixSteps({
