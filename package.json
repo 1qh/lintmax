@@ -7,7 +7,7 @@
   "scripts": {
     "build": "turbo run build",
     "check": "bun packages/lintmax/dist/cli.js check",
-    "clean": "turbo run clean",
+    "clean": "sh clean.sh",
     "fix": "bun packages/lintmax/dist/cli.js fix",
     "prepare": "bunx simple-git-hooks",
     "smoke": "turbo run smoke",
