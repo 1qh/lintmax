@@ -10,6 +10,7 @@
     "clean": "sh clean.sh",
     "fix": "bun packages/lintmax/dist/cli.js fix",
     "gen": "cd apps/docs && fumadocs-mdx",
+    "postinstall": "sherif",
     "prepare": "bunx simple-git-hooks",
     "smoke": "turbo run smoke",
     "test": "turbo run test",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "lintmax": "workspace:*",
+    "sherif": "latest",
     "simple-git-hooks": "latest",
     "turbo": "latest"
   },
