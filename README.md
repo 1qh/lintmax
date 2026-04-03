@@ -10,6 +10,8 @@ Designed for coding agents, not humans
 
 </h3>
 
+<br>
+
 > Just copy & paste to your coding agent
 
 ```
