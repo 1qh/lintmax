@@ -39,6 +39,7 @@ export default async function HomePage() {
         </div>
       </div>
 
+      {/* playground hidden until full-parity backend is ready
       <Playground
         checkOutput={checkOutput}
         checkTokens={checkTokens}
@@ -47,27 +48,8 @@ export default async function HomePage() {
         verboseOutput={verboseOutput}
         verboseTokens={verboseTokens}
       />
+      */}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl w-full">
-        <div className="rounded-xl border border-fd-border p-6">
-          <p className="font-semibold mb-2">Agent-first</p>
-          <p className="text-sm text-fd-muted-foreground">
-            Grouped output designed for LLM consumption. Zero output on success.
-          </p>
-        </div>
-        <div className="rounded-xl border border-fd-border p-6">
-          <p className="font-semibold mb-2">Comment deletion</p>
-          <p className="text-sm text-fd-muted-foreground">
-            Strips slop comments automatically. Keeps JSDoc, lint directives, and shebangs.
-          </p>
-        </div>
-        <div className="rounded-xl border border-fd-border p-6">
-          <p className="font-semibold mb-2">1,600 rules</p>
-          <p className="text-sm text-fd-muted-foreground">
-            Cross-linter dedup means no duplicate reports. Biome &gt; oxlint &gt; eslint priority.
-          </p>
-        </div>
-      </div>
     </div>
   )
 }
