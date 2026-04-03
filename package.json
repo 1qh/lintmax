@@ -1,12 +1,14 @@
 {
   "private": true,
-  "packageManager": "bun@1.3.11",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "build": "turbo run build",
-    "check": "turbo run check",
+    "check": "bun packages/lintmax/dist/cli.js check",
     "clean": "turbo run clean",
-    "fix": "turbo run fix",
+    "fix": "bun packages/lintmax/dist/cli.js fix",
     "prepare": "bunx simple-git-hooks",
     "smoke": "turbo run smoke",
     "test": "turbo run test",
@@ -16,7 +18,9 @@
     "pre-commit": "bun run verify && git add -u"
   },
   "devDependencies": {
+    "lintmax": "workspace:*",
     "simple-git-hooks": "latest",
     "turbo": "latest"
-  }
+  },
+  "packageManager": "bun@1.3.11"
 }

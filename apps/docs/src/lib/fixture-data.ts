@@ -31,24 +31,16 @@ const DEFAULT_TIMEOUT = 5000;
 const API_BASE = "https://api.example.com";
 // Export
 export { greet, processData, checkExists, buildPath, MAX_RETRIES, DEFAULT_TIMEOUT, API_BASE }`
-
 export const fixedCode = `import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-
 const greet = (name: string) => \`Hello, \${name}!\`
-
 const processData = (filePath: string) => readFileSync(filePath, 'utf-8')
-
 const checkExists = (p: string) => existsSync(p)
-
 const buildPath = (dir: string, file: string) => join(dir, file)
-
 const MAX_RETRIES = 3
 const DEFAULT_TIMEOUT = 5000
 const API_BASE = 'https://api.example.com'
-
 export { API_BASE, buildPath, checkExists, DEFAULT_TIMEOUT, greet, MAX_RETRIES, processData }`
-
 export const checkOutput = `src/magic-work.ts
  biome
   format
@@ -74,7 +66,6 @@ export const checkOutput = `src/magic-work.ts
   5,12,18,24,36,40,48 preferArrow/prefer-arrow-functions
  comments
   1,4,6,8,11,13,17,19,23,25,28,35,39,47,51,53 deletable`
-
 export const verboseOutput = `src/magic-work.ts
   5:7   error  Unexpected function expression  func-names
   7:19  error  Unexpected string concatenation  prefer-template
@@ -91,7 +82,6 @@ export const verboseOutput = `src/magic-work.ts
   3:1   error  Prefer node: protocol            prefer-node-protocol
   14:1  error  Use utf-8 instead of UTF-8       text-encoding-identifier-case
   54:1  error  Sort named exports               sort-named-exports
-
 src/magic-work.ts:5:7 lint/complexity/useArrowFunction
   Use an arrow function instead of a function expression.
     3 | import { join } from "path";
@@ -99,15 +89,12 @@ src/magic-work.ts:5:7 lint/complexity/useArrowFunction
   > 5 | const greet = function(name: string) {
       |               ^^^^^^^^^^^^^^^^^^^^^^^^
     6 |   // Build the message using concatenation
-
 src/magic-work.ts:7:19 lint/style/useTemplate
   Template literals are preferred over string concatenation.
     5 | const greet = function(name: string) {
     6 |   // Build the message using concatenation
   > 7 |   const message = "Hello, " + name + "!"
       |                   ^^^^^^^^^^^^^^^^^^^^^^^
-
 [...350+ more lines of verbose output from biome, oxlint, and eslint...]`
-
 export const checkTokens = 22
 export const verboseTokens = 325

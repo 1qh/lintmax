@@ -1,118 +1,80 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
 // biome-ignore lint: test fixture
 import React from "react";
 const props = { id: "x" };
-function BooleanValue() {
-  return <input disabled={true} readOnly={true} />;
-}
-function CurlyBracePresence() {
-  return <div className={"foo"} id={"bar"}>{"text content"}</div>;
-}
-function FragmentLong() {
-  return (
-    <React.Fragment>
+const BooleanValue = () => <input disabled readOnly />;
+const CurlyBracePresence = () => <div className="foo" id="bar">text content</div>;
+const FragmentLong = () => (<>
       <div />
       <span />
-    </React.Fragment>
-  );
-}
-function SpreadMulti() {
-  return <div {...props} {...props} />;
-}
-function SelfClosing() {
-  return <div></div>;
-}
-function SelfClosingSpan() {
-  return <span></span>;
-}
-function AriaInvalidProp() {
-  return <div aria-invalidprop="true" aria-fakething="yes" />;
-}
-function AriaUnsupportedElements() {
-  return <meta aria-hidden="true" />;
-}
-function NoAriaHiddenOnFocusable() {
-  return <button aria-hidden="true">click me</button>;
-}
-function RedundantRoles() {
-  return (
-    <div>
-      <nav role="navigation" />
+                            </>);
+const SpreadMulti = () => <div {...props} />;
+const SelfClosing = () => <div />;
+const SelfClosingSpan = () => <span />;
+const AriaInvalidProp = () => <div aria-fakething="yes" aria-invalidprop="true" />;
+const AriaUnsupportedElements = () => <meta  />;
+const NoAriaHiddenOnFocusable = () => <button >click me</button>;
+const RedundantRoles = () => (<div>
+      <nav  />
       <ul role="list" />
-      <button role="button" />
-    </div>
-  );
-}
-function ScopeOnNonTh() {
-  return <div scope="row" />;
-}
-function TailwindClassOrder() {
-  return <div className="flex-col p-4 mt-2 flex items-center mb-4 text-red-500 bg-blue-100 justify-center w-full h-full" />;
-}
-function TailwindDuplicateClasses() {
-  return <div className="flex flex items-center items-center p-4" />;
-}
-function TailwindUnnecessaryWhitespace() {
-  return <div className="  flex   items-center   p-4  " />;
-}
-function TailwindShorthand() {
-  return <div className="pt-4 pr-4 pb-4 pl-4" />;
-}
+      <button  />
+                              </div>);
+const ScopeOnNonTh = () => <div  />;
+const TailwindClassOrder = () => <div className="flex-col p-4 mt-2 flex items-center mb-4 text-red-500 bg-blue-100 justify-center w-full h-full" />;
+const TailwindDuplicateClasses = () => <div className="flex flex items-center items-center p-4" />;
+const TailwindUnnecessaryWhitespace = () => <div className="  flex   items-center   p-4  " />;
+const TailwindShorthand = () => <div className="pt-4 pr-4 pb-4 pl-4" />;
 export {
-  BooleanValue,
-  CurlyBracePresence,
-  FragmentLong,
-  SpreadMulti,
-  SelfClosing,
-  SelfClosingSpan,
   AriaInvalidProp,
   AriaUnsupportedElements,
-  NoAriaHiddenOnFocusable,
-  RedundantRoles,
-  ScopeOnNonTh,
-  TailwindClassOrder,
-  TailwindDuplicateClasses,
-  TailwindUnnecessaryWhitespace,
-  TailwindShorthand,
+  BooleanValue,
+  ClasslistToggle,
+  CurlyBracePresence,
   DomAppend,
   DomDataset,
   DomTextContent,
+  FragmentLong,
   KeyboardEvent,
+  NoAriaHiddenOnFocusable,
   QuerySelector,
-  ClasslistToggle,
+  RedundantRoles,
+  ScopeOnNonTh,
+  SelfClosing,
+  SelfClosingSpan,
+  SpreadMulti,
+  TailwindClassOrder,
+  TailwindDuplicateClasses,
+  TailwindShorthand,
+  TailwindUnnecessaryWhitespace,
 };
-function DomAppend() {
+const DomAppend = () => {
   const el = document.createElement("div")
   const child = document.createElement("span")
-  el.appendChild(child)
+  el.append(child)
   return <div />
-}
-function DomDataset() {
+};
+const DomDataset = () => {
   const el = document.createElement("div")
-  el.setAttribute("data-value", "1")
+  el.dataset.value = "1"
   return <div />
-}
-function DomTextContent() {
+};
+const DomTextContent = () => {
   const el = document.createElement("div")
-  const text = el.innerText
+  const text = el.textContent
   return <div>{text}</div>
-}
-function KeyboardEvent() {
+};
+const KeyboardEvent = () => {
   document.addEventListener("keydown", (e) => {
-    if (e.keyCode === 13) return
+    if (e.key === 'Enter') return
   })
   return <div />
-}
-function QuerySelector() {
-  const el = document.getElementById("app")
+};
+const QuerySelector = () => {
+  const el = document.querySelector("#app")
   return <div>{el?.id}</div>
-}
-function ClasslistToggle() {
+};
+const ClasslistToggle = () => {
   const el = document.createElement("div")
-  if (el.classList.contains("active")) {
-    el.classList.remove("active")
-  } else {
-    el.classList.add("active")
-  }
+  el.classList.toggle("active", !(el.classList.contains("active")));
   return <div />
-}
+};

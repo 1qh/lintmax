@@ -59,19 +59,20 @@ const BIOME_IGNORE_PATTERNS: readonly string[] = [
   '!!**/*.xcassets'
 ]
 const DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
-  '**/_generated/**',
-  '**/generated/**',
-  '**/module_bindings/**',
-  '.source/',
+  '_generated/**',
+  '.next/**',
+  '.source/**',
+  'dist/**',
+  'generated/**',
+  'module_bindings/**',
+  'next-env.d.ts',
+  'readonly/**',
   'expo/**/babel.config.js',
   'expo/**/global.css',
   'expo/**/metro.config.js',
   'expo/**/uniwind-env.d.ts',
-  'expo/**/uniwind-types.d.ts',
-  '**/next-env.d.ts',
-  'dist/**',
-  'readonly/**'
-]
+  'expo/**/uniwind-types.d.ts'
+].map(p => (p.startsWith('**/') ? p : `**/${p}`))
 const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
   {
     includes: ['**/expo/**'],

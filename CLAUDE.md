@@ -31,4 +31,3 @@ Uses `simple-git-hooks` configured in package.json. Hook runs `bun run verify &&
 ## Current task
 
 Implementing the overhaul described in PLAN.md. Start with Phase 1.
-

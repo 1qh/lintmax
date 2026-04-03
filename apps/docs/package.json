@@ -26,6 +26,7 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "lintmax": "latest",
     "postcss": "latest",
     "tailwindcss": "latest",
     "typescript": "latest"
