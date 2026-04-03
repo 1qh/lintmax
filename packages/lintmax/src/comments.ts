@@ -22,7 +22,7 @@ const findDeletableComments = ({ sourceText }: { sourceText: string }): { end: n
       if (!seen.has(range.pos)) {
         seen.add(range.pos)
         const text = sourceText.slice(range.pos, range.end)
-        if (!(text.startsWith('#!') || text.startsWith('/**') || KEEP_PATTERN.test(text))) {
+        if (!(text.startsWith('#!') || text.startsWith('/**') || text.startsWith('/// <') || KEEP_PATTERN.test(text))) {
           const line = sourceFile.getLineAndCharacterOfPosition(range.pos).line + 1
           deletable.push({ end: range.end, line, start: range.pos })
         }
