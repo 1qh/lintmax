@@ -9,6 +9,7 @@
     "check": "bun packages/lintmax/dist/cli.js check",
     "clean": "sh clean.sh",
     "fix": "bun packages/lintmax/dist/cli.js fix",
+    "gen": "cd apps/docs && fumadocs-mdx",
     "prepare": "bunx simple-git-hooks",
     "smoke": "turbo run smoke",
     "test": "turbo run test",
