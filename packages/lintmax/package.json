@@ -80,6 +80,5 @@
     "sort-package-json": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest"
-  },
-  "devDependencies": {}
+  }
 }

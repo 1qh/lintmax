@@ -17,13 +17,21 @@
     "verify": "rm -rf node_modules bun.lock packages/*/node_modules packages/*/dist packages/*/.cache && bun i --ignore-scripts && bunx simple-git-hooks && bun run build && bun run fix && bun run check && bun run smoke && bun run test"
   },
   "simple-git-hooks": {
-    "pre-commit": "bun run verify && git add -u"
+    "pre-commit": "sh up.sh && git add -u"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "latest",
+    "@types/mdx": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
     "lintmax": "workspace:*",
+    "postcss": "latest",
     "sherif": "latest",
     "simple-git-hooks": "latest",
-    "turbo": "latest"
+    "tailwindcss": "latest",
+    "turbo": "latest",
+    "typescript": "latest"
   },
   "packageManager": "bun@1.3.11"
 }
