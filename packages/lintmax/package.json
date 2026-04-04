@@ -68,7 +68,7 @@
     "@types/bun": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "eslint": "9",
+    "eslint": "^9",
     "eslint-plugin-better-tailwindcss": "latest",
     "eslint-plugin-perfectionist": "latest",
     "eslint-plugin-prefer-arrow-functions": "latest",
