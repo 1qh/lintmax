@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { CliExitError, readVersion, usage } from './core.js'
 import { runInit } from './init.js'
 import { runLint } from './pipeline.js'

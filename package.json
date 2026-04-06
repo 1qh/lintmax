@@ -6,9 +6,9 @@
   ],
   "scripts": {
     "build": "turbo build --output-logs=errors-only",
-    "check": "bun packages/lintmax/dist/cli.js check",
+    "check": "lintmax check",
     "clean": "sh clean.sh",
-    "fix": "bun packages/lintmax/dist/cli.js fix",
+    "fix": "lintmax fix",
     "gen": "cd apps/docs && fumadocs-mdx",
     "postinstall": "sherif",
     "prepare": "bunx simple-git-hooks",
@@ -31,6 +31,7 @@
     "sherif": "latest",
     "simple-git-hooks": "latest",
     "tailwindcss": "latest",
+    "tsdown": "latest",
     "turbo": "latest",
     "typescript": "latest"
   },
