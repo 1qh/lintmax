@@ -49,13 +49,15 @@ const scanIgnores = async (cwd: string): Promise<Map<string, Set<string>>> => {
   }
   const excludes = DEFAULT_SHARED_IGNORE_PATTERNS.flatMap(p => ['-g', `!${p}`])
   const result =
-    await $`rg -n "eslint-disable|oxlint-disable|biome-ignore|@ts-ignore|@ts-expect-error|@ts-nocheck" ${cwd} -g '*.ts' -g '*.tsx' -g '!node_modules' -g '!*.d.ts' ${excludes} --no-filename`
+    await $`rg -n "^\s*//\s*eslint-disable|^\s*/\*\s*eslint-disable|^\s*//\s*oxlint-disable|^\s*/\*\s*oxlint-disable|^\s*/\*\*\s*biome-ignore|^\s*//\s*@ts-ignore|^\s*//\s*@ts-expect-error|^\s*//\s*@ts-nocheck|^\s*/\*\s*@ts-nocheck" ${cwd} -g '*.ts' -g '*.tsx' -g '!node_modules' -g '!*.d.ts' ${excludes}`
       .quiet()
       .nothrow()
   const lines = result.stdout.toString().trim().split('\n').filter(Boolean)
   for (const line of lines) {
-    const file = line.split(':')[0] ?? ''
-    const content = line.slice(line.indexOf(':') + 1)
+    const firstColon = line.indexOf(':')
+    const secondColon = line.indexOf(':', firstColon + 1)
+    const file = line.slice(0, firstColon).replace(`${cwd}/`, '')
+    const content = secondColon > firstColon ? line.slice(secondColon + 1) : line.slice(firstColon + 1)
     for (const rule of parseRules(content, eslintDisableRe)) add(rule, file)
     for (const rule of parseRules(content, oxlintDisableRe)) add(rule, file)
     for (const rule of parseRules(content, biomeIgnoreRe)) add(rule, file)
