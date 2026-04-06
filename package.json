@@ -5,10 +5,11 @@
     "apps/*"
   ],
   "scripts": {
+    "action": "bun i --ignore-scripts && bun run verify",
     "build": "turbo build --output-logs=errors-only",
-    "check": "lintmax check",
+    "check": "bun packages/lintmax/dist/cli.mjs check",
     "clean": "sh clean.sh",
-    "fix": "lintmax fix",
+    "fix": "bun packages/lintmax/dist/cli.mjs fix",
     "gen": "cd apps/docs && fumadocs-mdx",
     "postinstall": "sherif",
     "prepare": "bunx simple-git-hooks",
