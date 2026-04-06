@@ -267,6 +267,16 @@ NEVER use template literals for conditional classNames.
 
 ---
 
+## Library Publishing
+
+- Use `tsdown` for building and publishing packages
+- ESM format with declaration files
+- `prepublishOnly` script to build before publish
+- Never bundle dependencies that consumers should install themselves
+- Export all types used in public API — DTS generation fails on unexported internal types leaking through re-exports
+
+---
+
 ## Code Style
 
 - Only arrow functions — no `function` declarations
