@@ -20,6 +20,11 @@ const main = async () => {
     process.stdout.write(`${output}\n`)
     return
   }
+  if (command === 'ignores') {
+    const { runIgnores } = await import('./ignores.js')
+    await runIgnores(process.argv.includes('--verbose'))
+    return
+  }
   if (command !== 'fix' && command !== 'check') {
     usage({ version })
     if (command === '--help' || command === '-h') return
