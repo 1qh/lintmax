@@ -9,6 +9,17 @@ const tsIgnoreRe = /@ts-(?:ignore|expect-error|nocheck)/gu
 const trailingCommentRe = /\s*--.*$/u
 const trailingCloseRe = /\s*\*\/$/u
 const tsInlineRe = /@ts-(?:ignore|expect-error|nocheck)/u
+const DANGEROUS_PATTERNS = [
+  'no-unsafe-',
+  'no-explicit-any',
+  'no-non-null-assertion',
+  '@ts-ignore',
+  '@ts-expect-error',
+  '@ts-nocheck',
+  'noExplicitAny',
+  'noNonNullAssertion'
+]
+const isDangerous = (rule: string): boolean => DANGEROUS_PATTERNS.some(p => rule.includes(p))
 interface IgnoreEntry {
   count: number
   files: string[]
@@ -61,10 +72,23 @@ const formatIgnores = (ruleFiles: Map<string, Set<string>>, verbose: boolean): s
   const entries: IgnoreEntry[] = [...ruleFiles.entries()]
     .map(([rule, files]) => ({ count: files.size, files: [...files], rule }))
     .toSorted((a, b) => b.count - a.count)
+  const dangerous = entries.filter(e => isDangerous(e.rule))
+  const safe = entries.filter(e => !isDangerous(e.rule))
   const total = entries.reduce((sum, e) => sum + e.count, 0)
+  const lines: string[] = []
+  if (dangerous.length > 0) {
+    const dangerousCount = dangerous.reduce((sum, e) => sum + e.count, 0)
+    lines.push(`!! ${dangerousCount} dangerous suppressions — fix these:`, '')
+    const maxRule = Math.max(...dangerous.map(e => e.rule.length))
+    for (const e of dangerous) {
+      lines.push(`  ${e.rule.padEnd(maxRule)}  ${String(e.count).padStart(3)}`)
+      if (verbose) for (const f of e.files) lines.push(`    ${f}`)
+    }
+    lines.push('')
+  }
+  lines.push(`${total} suppressions across ${entries.length} rules`, '')
   const maxRule = Math.max(...entries.map(e => e.rule.length))
-  const lines = [`${total} suppressions across ${entries.length} rules`, '']
-  for (const e of entries) {
+  for (const e of safe) {
     lines.push(`  ${e.rule.padEnd(maxRule)}  ${String(e.count).padStart(3)}`)
     if (verbose) for (const f of e.files) lines.push(`    ${f}`)
   }
