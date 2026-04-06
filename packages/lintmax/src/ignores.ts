@@ -1,7 +1,7 @@
 /* eslint-disable prefer-named-capture-group */
 /** biome-ignore-all lint/nursery/useNamedCaptureGroup: not needed */
-import { $ } from 'bun'
-import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
+import { $, Glob } from 'bun'
+import { DEFAULT_SHARED_IGNORE_PATTERNS, ESLINT_TEST_FILE_PATTERNS } from './constants.js'
 const eslintDisableRe = /eslint-disable(?:-next-line)?\s+(.+?)(?:\s*\*\/|\s*$)/gu
 const oxlintDisableRe = /oxlint-disable(?:-next-line)?\s+(.+?)(?:\s*\*\/|\s*$)/gu
 const biomeIgnoreRe = /biome-ignore(?:-all)?\s+([\w/]+)/gu
@@ -9,17 +9,14 @@ const tsIgnoreRe = /@ts-(?:ignore|expect-error|nocheck)/gu
 const trailingCommentRe = /\s*--.*$/u
 const trailingCloseRe = /\s*\*\/$/u
 const tsInlineRe = /@ts-(?:ignore|expect-error|nocheck)/u
-const DANGEROUS_PATTERNS = [
-  'no-unsafe-',
-  'no-explicit-any',
-  'no-non-null-assertion',
-  '@ts-ignore',
-  '@ts-expect-error',
-  '@ts-nocheck',
-  'noExplicitAny',
-  'noNonNullAssertion'
-]
-const isDangerous = (rule: string): boolean => DANGEROUS_PATTERNS.some(p => rule.includes(p))
+const DANGEROUS_PATTERNS = ['no-unsafe-', 'no-non-null-assertion', '@ts-ignore', '@ts-nocheck', 'noNonNullAssertion']
+const DANGEROUS_NON_TEST_PATTERNS = ['@ts-expect-error', 'no-explicit-any', 'noExplicitAny']
+const isTestFile = (f: string): boolean => ESLINT_TEST_FILE_PATTERNS.some(p => new Glob(p).match(f))
+const isDangerousEntry = (rule: string, files: string[]): boolean => {
+  if (DANGEROUS_PATTERNS.some(p => rule.includes(p))) return true
+  if (DANGEROUS_NON_TEST_PATTERNS.some(p => rule.includes(p))) return files.some(f => !isTestFile(f))
+  return false
+}
 interface IgnoreEntry {
   count: number
   files: string[]
@@ -74,8 +71,8 @@ const formatIgnores = (ruleFiles: Map<string, Set<string>>, verbose: boolean): s
   const entries: IgnoreEntry[] = [...ruleFiles.entries()]
     .map(([rule, files]) => ({ count: files.size, files: [...files], rule }))
     .toSorted((a, b) => b.count - a.count)
-  const dangerous = entries.filter(e => isDangerous(e.rule))
-  const safe = entries.filter(e => !isDangerous(e.rule))
+  const dangerous = entries.filter(e => isDangerousEntry(e.rule, e.files))
+  const safe = entries.filter(e => !isDangerousEntry(e.rule, e.files))
   const total = entries.reduce((sum, e) => sum + e.count, 0)
   const lines: string[] = []
   if (dangerous.length > 0) {
