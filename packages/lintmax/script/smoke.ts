@@ -19,11 +19,9 @@ const lintmaxCli = 'node_modules/lintmax/dist/cli.mjs'
 const writeConfig = async ({ content }: { content: string }) => write(join(dir, 'lintmax.config.ts'), content)
 const required = [
   'node_modules/lintmax/dist/cli.mjs',
-  'node_modules/lintmax/dist/constants.js',
-  'node_modules/lintmax/dist/eslint.js',
-  'node_modules/lintmax/dist/index.d.ts',
-  'node_modules/lintmax/dist/index.js',
-  'node_modules/lintmax/dist/lintmax-types.d.ts',
+  'node_modules/lintmax/dist/eslint.mjs',
+  'node_modules/lintmax/dist/index.d.mts',
+  'node_modules/lintmax/dist/index.mjs',
   'node_modules/lintmax/oxlintrc.json',
   'node_modules/lintmax/tsconfig.json'
 ]
