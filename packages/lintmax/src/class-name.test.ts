@@ -171,8 +171,15 @@ describe('edge cases', () => {
     const violations = check('<MyComponent className={`text-${color}`} />')
     expect(violations).toHaveLength(1)
   })
-  test('array join pattern is not caught (method call, edge case)', () => {
-    expect(check('<div className={["a", "b"].join(" ")} />')).toHaveLength(0)
+  test('catches array join pattern', () => {
+    const violations = check('<div className={["a", "b"].join(" ")} />')
+    expect(violations).toHaveLength(1)
+    expect(violations[0]?.rule).toBe('cn/no-join')
+  })
+  test('catches variable.join() in className', () => {
+    const violations = check('<div className={classes.join(" ")} />')
+    expect(violations).toHaveLength(1)
+    expect(violations[0]?.rule).toBe('cn/no-join')
   })
   test('object access className is fine', () => {
     expect(check('<div className={styles.container} />')).toHaveLength(0)

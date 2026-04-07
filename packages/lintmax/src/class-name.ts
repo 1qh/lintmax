@@ -9,6 +9,8 @@ const isJsxClassName = (node: ts.Node): boolean =>
   ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === 'className'
 const isCallToCn = (node: ts.Node): boolean =>
   ts.isCallExpression(node) && ts.isIdentifier(node.expression) && CN_NAMES.has(node.expression.text)
+const isJoinCall = (node: ts.Node): boolean =>
+  ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'join'
 const isBannedCallee = (node: ts.Node): boolean =>
   ts.isCallExpression(node) && ts.isIdentifier(node.expression) && BANNED_CALLEE_NAMES.has(node.expression.text)
 const isStringLiteral = (node: ts.Node): boolean => ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
@@ -32,6 +34,7 @@ const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violat
           else if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.PlusToken)
             violations.push({ line, rule: 'cn/no-concatenation' })
           else if (isBannedCallee(expr)) violations.push({ line, rule: 'cn/no-banned-callee' })
+          else if (isJoinCall(expr)) violations.push({ line, rule: 'cn/no-join' })
           else if (ts.isCallExpression(expr) && !isCallToCn(expr)) {
             const callee = expr.expression
             if (ts.isIdentifier(callee) && BANNED_CALLEE_NAMES.has(callee.text))
