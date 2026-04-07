@@ -210,6 +210,7 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
           '@typescript-eslint/no-misused-promises': [2, { checksVoidReturn: { attributes: false } }],
           '@typescript-eslint/no-unnecessary-condition': ['error', { allowConstantLoopConditions: true }],
           '@typescript-eslint/no-unsafe-type-assertion': 'off',
+          '@typescript-eslint/no-useless-default-assignment': 'off',
           '@typescript-eslint/prefer-destructuring': ['error', { array: false, object: true }],
           '@typescript-eslint/prefer-readonly-parameter-types': 'off',
           '@typescript-eslint/strict-boolean-expressions': 'off',
