@@ -9,6 +9,7 @@ import {
   parsePrettierOutput,
   parseSortPackageJsonOutput
 } from './aggregate.js'
+import { checkClassName } from './class-name.js'
 import { checkComments, fixComments } from './comments.js'
 import { listCompactFiles, runCompact } from './compact.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
@@ -449,6 +450,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       const commentDiags = await checkComments({ files: gitFiles })
       allDiagnostics.push(...commentDiags)
     }
+    const cnDiags = await checkClassName({ root: cwd })
+    allDiagnostics.push(...cnDiags)
     throwAgentResults({ diagnostics: allDiagnostics, failures })
     return
   }
@@ -472,6 +475,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     const commentDiags = await checkComments({ files: gitFiles })
     allDiagnostics.push(...commentDiags)
   }
+  const cnDiags = await checkClassName({ root: cwd })
+  allDiagnostics.push(...cnDiags)
   if (allDiagnostics.length > 0 || failures.length > 0) {
     const grouped = aggregate({ diagnostics: allDiagnostics })
     const output = formatGrouped({ files: grouped })
