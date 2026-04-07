@@ -1,6 +1,6 @@
 {
   "name": "lintmax",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "The #1 anti AI slop typescript tooling. Designed for coding agents, not humans.",
   "keywords": [
     "agent",
