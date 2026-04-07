@@ -457,6 +457,13 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   }
   if (human) {
     runSteps({ steps: checkSteps })
+    const cnDiagsHuman = await checkClassName({ root: cwd })
+    if (cnDiagsHuman.length > 0) {
+      const grouped = aggregate({ diagnostics: cnDiagsHuman })
+      const output = formatGrouped({ files: grouped })
+      if (output.length > 0) process.stdout.write(`${output}\n`)
+      failures.push({ code: 1, label: 'cn' })
+    }
     throwIfFailures()
     return
   }
