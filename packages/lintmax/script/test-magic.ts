@@ -3,7 +3,7 @@ import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 const root = join(import.meta.dir, '..')
 const workFile = join(root, 'src/magic-work.ts')
-const cli = join(root, 'dist/cli.js')
+const cli = join(root, 'dist/cli.mjs')
 const DIRTY_FIXTURE = `// Helper function to add two numbers
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";

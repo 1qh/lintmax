@@ -3,7 +3,7 @@ import { copyFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 const root = join(import.meta.dir, '..')
 const monorepoRoot = join(root, '..', '..')
-const cli = join(root, 'dist/cli.js')
+const cli = join(root, 'dist/cli.mjs')
 const fixtureTs = join(root, 'readonly/fixtures/fixture-fixable.ts')
 const fixtureTsx = join(root, 'readonly/fixtures/fixture-react-a11y.tsx')
 const workTs = join(root, 'src/coverage-work.ts')
