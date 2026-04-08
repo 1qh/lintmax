@@ -5,7 +5,7 @@ const fonts = [sans.variable, mono.variable, 'font-sans'].join(' ')
 export default function Layout({ children }: LayoutProps<'/'>) {
   return (
     <html className={fonts} lang='en' suppressHydrationWarning>
-      <body className='flex flex-col min-h-screen'>
+      <body className='flex flex-col min-h-screen antialiased'>
         <Providers>{children}</Providers>
       </body>
     </html>
