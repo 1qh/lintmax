@@ -36,6 +36,7 @@ const BIOME_RULES_OFF: readonly string[] = [
   'useBlockStatements',
   'useComponentExportOnlyModules',
   'useDestructuring',
+  'useExplicitReturnType',
   'useExplicitType',
   'useImportExtensions',
   'useNamingConvention',
