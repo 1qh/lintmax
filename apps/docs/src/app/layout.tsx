@@ -1,13 +1,17 @@
+import type { Metadata } from 'next'
 import { mono, sans } from './fonts'
 import './global.css'
 import { Providers } from './providers'
-const fonts = [sans.variable, mono.variable, 'font-sans'].join(' ')
-export default function Layout({ children }: LayoutProps<'/'>) {
-  return (
-    <html className={fonts} lang='en' suppressHydrationWarning>
-      <body className='flex flex-col min-h-screen antialiased'>
-        <Providers>{children}</Providers>
-      </body>
-    </html>
-  )
+const metadata: Metadata = {
+  title: 'lintmax docs'
 }
+const fonts = [sans.variable, mono.variable, 'font-sans', 'tracking-[-0.02em]'].join(' ')
+const Layout = ({ children }: LayoutProps<'/'>) => (
+  <html className={fonts} lang='en' suppressHydrationWarning>
+    <body className='flex flex-col min-h-screen antialiased'>
+      <Providers>{children}</Providers>
+    </body>
+  </html>
+)
+export { metadata }
+export default Layout
