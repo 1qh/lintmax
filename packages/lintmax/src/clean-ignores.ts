@@ -126,4 +126,4 @@ const cleanIgnores = async (filePaths: string[]): Promise<CleanResult> => {
   }
   return { cleaned, files }
 }
-export { buildActiveRuleSet, cleanFileIgnores, cleanIgnores }
+export { buildActiveRuleSet, cleanFileIgnores, cleanIgnores, isRuleActive, normalizeRule }
