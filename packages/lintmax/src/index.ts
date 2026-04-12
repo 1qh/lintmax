@@ -796,7 +796,7 @@ const createBiomeConfig = async ({
       parser: { tailwindDirectives: true }
     },
     files: {
-      experimentalScannerIgnores: ['**/node_modules', '**/.next', '**/.turbo', '**/dist', '**/.cache', '**/.build'],
+      experimentalScannerIgnores: ignorePatterns.map(p => (p.startsWith('!!') ? p.slice(2) : p)),
       includes: ['**', ...ignorePatterns]
     },
     formatter: { indentStyle: 'space', lineWidth: 123 },
