@@ -795,7 +795,10 @@ const createBiomeConfig = async ({
       formatter: { enabled: true, quoteStyle: 'single' },
       parser: { tailwindDirectives: true }
     },
-    files: { includes: ['**', ...ignorePatterns] },
+    files: {
+      experimentalScannerIgnores: ['**/node_modules', '**/.next', '**/.turbo', '**/dist', '**/.cache', '**/.build'],
+      includes: ['**', ...ignorePatterns]
+    },
     formatter: { indentStyle: 'space', lineWidth: 123 },
     javascript: {
       formatter: {
