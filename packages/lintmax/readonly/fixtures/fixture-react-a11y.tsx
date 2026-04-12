@@ -1,5 +1,4 @@
  
-// biome-ignore lint: test fixture
 import React from "react";
 const props = { id: "x" };
 const BooleanValue = () => <input disabled readOnly />;

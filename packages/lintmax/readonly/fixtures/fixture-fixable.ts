@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// biome-ignore lint: test fixture for fixable rule coverage
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 const mutableVar = 1

@@ -1,3 +1,5 @@
+/* eslint-disable complexity */
+/* oxlint-disable eslint/complexity */
 import { env as bunEnv, spawnSync } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
@@ -10,6 +12,7 @@ import {
   parseSortPackageJsonOutput
 } from './aggregate.js'
 import { checkClassName } from './class-name.js'
+import { cleanIgnores } from './clean-ignores.js'
 import { checkComments, fixComments } from './comments.js'
 import { listCompactFiles, runCompact } from './compact.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
@@ -417,6 +420,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   const gitFiles = shouldComments ? listCompactFiles({ env, root: cwd }).filter(f => !isIgnored(f)) : []
   if (command === 'fix') {
     if (shouldComments) await fixComments({ files: gitFiles })
+    if (gitFiles.length > 0) await cleanIgnores(gitFiles.map(f => joinPath(cwd, f)))
     const fixSteps = createFixSteps({
       biomeBin,
       dir,
