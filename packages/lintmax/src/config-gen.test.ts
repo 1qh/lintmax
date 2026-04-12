@@ -1,8 +1,10 @@
 /** biome-ignore-all lint/suspicious/useAwait: async test fns */
+import { Glob } from 'bun'
 import { afterAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { sync } from './index.js'
 const tmp = mkdtempSync(join(tmpdir(), 'config-gen-test-'))
 const cacheDir = join(tmp, 'node_modules', '.cache', 'lintmax')
@@ -54,5 +56,42 @@ describe('biome config generation', () => {
       files?: Record<string, unknown>
     }
     expect(config.files).not.toHaveProperty('ignore')
+  })
+})
+describe('Glob-based isIgnored matching', () => {
+  const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
+  const isIgnored = (p: string): boolean => ignoreGlobs.some(g => g.match(p))
+  test('matches readonly/ui/src/components/foo.tsx', () => {
+    expect(isIgnored('readonly/ui/src/components/foo.tsx')).toBe(true)
+  })
+  test('matches readonly/ui/src/styles/globals.css', () => {
+    expect(isIgnored('readonly/ui/src/styles/globals.css')).toBe(true)
+  })
+  test('matches .next/server/app/page.js', () => {
+    expect(isIgnored('.next/server/app/page.js')).toBe(true)
+  })
+  test('matches web/stdb/blog/.next/cache/x.js', () => {
+    expect(isIgnored('web/stdb/blog/.next/cache/x.js')).toBe(true)
+  })
+  test('matches dist/index.js', () => {
+    expect(isIgnored('dist/index.js')).toBe(true)
+  })
+  test('matches _generated/api.ts', () => {
+    expect(isIgnored('_generated/api.ts')).toBe(true)
+  })
+  test('matches nested _generated', () => {
+    expect(isIgnored('lib/spacetimedb/src/generated/index.ts')).toBe(true)
+  })
+  test('matches module_bindings', () => {
+    expect(isIgnored('backend/spacetimedb/module_bindings/index.ts')).toBe(true)
+  })
+  test('does NOT match lib/shared/src/constants.ts', () => {
+    expect(isIgnored('lib/shared/src/constants.ts')).toBe(false)
+  })
+  test('does NOT match web/stdb/blog/src/app/page.tsx', () => {
+    expect(isIgnored('web/stdb/blog/src/app/page.tsx')).toBe(false)
+  })
+  test('does NOT match src/index.ts', () => {
+    expect(isIgnored('src/index.ts')).toBe(false)
   })
 })
