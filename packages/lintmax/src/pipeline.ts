@@ -1,6 +1,6 @@
 /* eslint-disable complexity */
 /* oxlint-disable eslint/complexity */
-import { env as bunEnv, spawnSync } from 'bun'
+import { env as bunEnv, Glob, spawnSync } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
 import {
@@ -412,11 +412,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     sortPkgJson
   })
   const shouldComments = runtime.comments !== false
-  const isIgnored = (filePath: string): boolean =>
-    DEFAULT_SHARED_IGNORE_PATTERNS.some(pattern => {
-      const regex = new RegExp(`^${pattern.replaceAll('**/', '(.*/)?').replaceAll('*', '[^/]*')}$`, 'u')
-      return regex.test(filePath)
-    })
+  const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
+  const isIgnored = (filePath: string): boolean => ignoreGlobs.some(g => g.match(filePath))
   const gitFiles = shouldComments ? listCompactFiles({ env, root: cwd }).filter(f => !isIgnored(f)) : []
   if (command === 'fix') {
     if (shouldComments) await fixComments({ files: gitFiles })
