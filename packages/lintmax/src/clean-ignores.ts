@@ -10,7 +10,7 @@ const biomeLineRe = /^(\s*(?:\/\/|\/\*\*)\s*biome-ignore(?:-all)?\s+)([\w/]+)(.*
 const trailingCommentRe = /\s*--.*$/u
 const trailingCloseRe = /\s*\*\/$/u
 const oxlintPrefixRe =
-  /^(?:eslint|typescript-eslint|react|react-hooks|jsx-a11y|import|nextjs|jsdoc|promise|unicorn|vitest|jest|eslint-plugin-react-perf|react-perf)[\\/(/]/u
+  /^(?:oxc|eslint|typescript-eslint|typescript_eslint|react|react-hooks|react_hooks|jsx-a11y|jsx_a11y|import|nextjs|next|jsdoc|promise|unicorn|vitest|jest|eslint-plugin-react-perf|eslint-plugin-jsx-a11y|eslint-plugin-react|eslint-plugin-promise|eslint-plugin-unicorn|react-perf|react_perf|@next\/next|@typescript-eslint|@eslint-react)[\\/(/]/u
 const trailingParenRe = /\)$/u
 const trailingSepRe = /[\\/(/]$/u
 const eslintPluginPrefixRe = /^eslint-plugin-/u
