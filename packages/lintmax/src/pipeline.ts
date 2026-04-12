@@ -31,6 +31,7 @@ import {
 } from './core.js'
 import { formatGrouped } from './format.js'
 import { sync } from './index.js'
+import { checkJsxExtension } from './jsx-extension.js'
 import { dirnamePath, joinPath } from './path.js'
 const createStepExecutor = ({
   env,
@@ -452,15 +453,18 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       allDiagnostics.push(...commentDiags)
     }
     const cnDiags = await checkClassName({ root: cwd })
-    allDiagnostics.push(...cnDiags)
+    const jsxDiags = await checkJsxExtension({ root: cwd })
+    allDiagnostics.push(...cnDiags, ...jsxDiags)
     throwAgentResults({ diagnostics: allDiagnostics, failures })
     return
   }
   if (human) {
     runSteps({ steps: checkSteps })
     const cnDiagsHuman = await checkClassName({ root: cwd })
-    if (cnDiagsHuman.length > 0) {
-      const grouped = aggregate({ diagnostics: cnDiagsHuman })
+    const jsxDiagsHuman = await checkJsxExtension({ root: cwd })
+    const humanCustomDiags = [...cnDiagsHuman, ...jsxDiagsHuman]
+    if (humanCustomDiags.length > 0) {
+      const grouped = aggregate({ diagnostics: humanCustomDiags })
       const output = formatGrouped({ files: grouped })
       if (output.length > 0) process.stdout.write(`${output}\n`)
       failures.push({ code: 1, label: 'cn' })
@@ -484,7 +488,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     allDiagnostics.push(...commentDiags)
   }
   const cnDiags = await checkClassName({ root: cwd })
-  allDiagnostics.push(...cnDiags)
+  const jsxDiags = await checkJsxExtension({ root: cwd })
+  allDiagnostics.push(...cnDiags, ...jsxDiags)
   if (allDiagnostics.length > 0 || failures.length > 0) {
     const grouped = aggregate({ diagnostics: allDiagnostics })
     const output = formatGrouped({ files: grouped })
