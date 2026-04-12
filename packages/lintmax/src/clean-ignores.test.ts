@@ -220,3 +220,33 @@ describe('isRuleActive', () => {
     expect(isRuleActive('react-perf/jsx-no-new-object-as-prop', s)).toBe(true)
   })
 })
+describe('cleanFileIgnores — multi-file batch', () => {
+  test('cleans multiple files independently', async () => {
+    const a = await writeAndClean('batch-a.ts', '/* eslint-disable fake-a */\nconst a = 1\n')
+    const b = await writeAndClean('batch-b.ts', '/* eslint-disable no-console */\nconst b = 2\n')
+    const c = await writeAndClean('batch-c.ts', 'const c = 3\n')
+    expect(a.removed).toBe(1)
+    expect(a.content).toBe('const a = 1\n')
+    expect(b.removed).toBe(0)
+    expect(b.content).toContain('no-console')
+    expect(c.removed).toBe(0)
+  })
+  test('handles file with multiple ignore types', async () => {
+    const { content, removed } = await writeAndClean(
+      'mixed.ts',
+      '/* eslint-disable fake-rule */\n/* oxlint-disable fake/thing */\n/** biome-ignore-all lint/fake/x: y */\nconst x = 1\n'
+    )
+    expect(removed).toBe(3)
+    expect(content).toBe('const x = 1\n')
+  })
+  test('handles file with mix of active and inactive', async () => {
+    const { content, removed } = await writeAndClean(
+      'mixed-active.ts',
+      '/* eslint-disable no-console */\n/* eslint-disable fake-rule */\n/** biome-ignore-all lint/style/noProcessEnv: x */\nconst x = 1\n'
+    )
+    expect(removed).toBe(1)
+    expect(content).toContain('no-console')
+    expect(content).toContain('lint/style/noProcessEnv')
+    expect(content).not.toContain('fake-rule')
+  })
+})
