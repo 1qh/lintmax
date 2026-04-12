@@ -47,6 +47,7 @@ const BIOME_RULES_OFF: readonly string[] = [
   'useSortedClasses'
 ]
 const BIOME_IGNORE_PATTERNS: readonly string[] = [
+  '!!**/node_modules',
   '!!**/.build',
   '!!**/.cache',
   '!!**/.source',
