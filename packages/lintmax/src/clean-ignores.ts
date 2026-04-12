@@ -13,6 +13,7 @@ const oxlintPrefixRe =
   /^(?:eslint|typescript-eslint|react|react-hooks|jsx-a11y|import|nextjs|jsdoc|promise|unicorn|vitest|jest|eslint-plugin-react-perf|react-perf)[\\/(/]/u
 const trailingParenRe = /\)$/u
 const trailingSepRe = /[\\/(/]$/u
+const eslintPluginPrefixRe = /^eslint-plugin-/u
 const normalizeRule = (rule: string): string[] => {
   const variants = [rule]
   const oxMatch = oxlintPrefixRe.exec(rule)
@@ -24,10 +25,21 @@ const normalizeRule = (rule: string): string[] => {
     variants.push(`${prefix}(${bare})`)
     if (prefix === 'eslint') variants.push(bare)
     if (prefix === 'typescript-eslint') variants.push(`@typescript-eslint/${bare}`)
+    if (prefix.startsWith('eslint-plugin-')) {
+      const short = prefix.replace(eslintPluginPrefixRe, '')
+      variants.push(`${short}/${bare}`)
+      variants.push(`${short}(${bare})`)
+    }
   }
   if (rule.startsWith('@typescript-eslint/')) variants.push(`typescript-eslint(${rule.slice(19)})`)
   if (rule.startsWith('@next/next/')) variants.push(`nextjs(${rule.slice(11)})`)
   if (rule.startsWith('@eslint-react/')) variants.push(`react(${rule.slice(14)})`)
+  const extra: string[] = []
+  for (const v of variants) {
+    if (v.includes('_')) extra.push(v.replaceAll('_', '-'))
+    if (v.includes('-')) extra.push(v.replaceAll('-', '_'))
+  }
+  for (const e of extra) variants.push(e)
   return variants
 }
 const buildActiveRuleSet = async (): Promise<Set<string>> => {
