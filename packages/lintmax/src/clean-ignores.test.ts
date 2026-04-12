@@ -1,8 +1,11 @@
+/* eslint-disable prefer-named-capture-group */
+/** biome-ignore-all lint/nursery/useNamedCaptureGroup: test fixtures */
 import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { cleanFileIgnores, isRuleActive, normalizeRule } from './clean-ignores.js'
+import { cleanFileIgnores, isRuleActive, normalizeRule, splitRules } from './clean-ignores.js'
+import { parseRules } from './ignores.js'
 const tmp = mkdtempSync(join(tmpdir(), 'clean-ignores-test-'))
 afterAll(() => rmSync(tmp, { recursive: true }))
 const active = new Set([
@@ -248,5 +251,56 @@ describe('cleanFileIgnores — multi-file batch', () => {
     expect(content).toContain('no-console')
     expect(content).toContain('lint/style/noProcessEnv')
     expect(content).not.toContain('fake-rule')
+  })
+})
+describe('splitRules', () => {
+  test('single rule', () => {
+    expect(splitRules('no-console')).toEqual(['no-console'])
+  })
+  test('comma-separated', () => {
+    expect(splitRules('no-console, complexity')).toEqual(['no-console', 'complexity'])
+  })
+  test('strips trailing */', () => {
+    expect(splitRules('no-console */')).toEqual(['no-console'])
+  })
+  test('strips trailing --comment', () => {
+    expect(splitRules('no-console -- reason here')).toEqual(['no-console'])
+  })
+  test('empty string', () => {
+    expect(splitRules('')).toEqual([])
+  })
+  test('whitespace only', () => {
+    expect(splitRules('  ,  ')).toEqual([])
+  })
+  test('mixed with trailing junk', () => {
+    expect(splitRules('no-console, complexity -- note */')).toEqual(['no-console', 'complexity'])
+  })
+})
+describe('parseRules (ignores.ts)', () => {
+  const eslintRe = /eslint-disable(?:-next-line)?\s+(.+?)(?:\s*\*\/|\s*$)/gu
+  const oxlintRe = /oxlint-disable(?:-next-line)?\s+(.+?)(?:\s*\*\/|\s*$)/gu
+  const biomeRe = /biome-ignore(?:-all)?\s+([\w/]+)/gu
+  test('parses eslint-disable single rule', () => {
+    expect(parseRules('/* eslint-disable no-console */', eslintRe)).toEqual(['no-console'])
+  })
+  test('parses eslint-disable multi rule', () => {
+    expect(parseRules('/* eslint-disable no-console, complexity */', eslintRe)).toEqual(['no-console', 'complexity'])
+  })
+  test('parses eslint-disable-next-line', () => {
+    expect(parseRules('// eslint-disable-next-line no-console', eslintRe)).toEqual(['no-console'])
+  })
+  test('parses oxlint-disable', () => {
+    expect(parseRules('/* oxlint-disable react-perf/jsx-no-new-object-as-prop */', oxlintRe)).toEqual([
+      'react-perf/jsx-no-new-object-as-prop'
+    ])
+  })
+  test('parses biome-ignore', () => {
+    expect(parseRules('/** biome-ignore lint/style/noProcessEnv: reason */', biomeRe)).toEqual(['lint/style/noProcessEnv'])
+  })
+  test('parses biome-ignore-all', () => {
+    expect(parseRules('/** biome-ignore-all lint/nursery/noForIn: reason */', biomeRe)).toEqual(['lint/nursery/noForIn'])
+  })
+  test('returns empty for no match', () => {
+    expect(parseRules('const x = 1', eslintRe)).toEqual([])
   })
 })

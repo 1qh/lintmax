@@ -44,4 +44,4 @@ const checkJsxExtension = async ({ root }: { root: string }): Promise<Diagnostic
   }
   return diagnostics
 }
-export { checkJsxExtension }
+export { checkJsxExtension, hasJsx }

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkJsxExtension } from './jsx-extension.js'
+import { checkJsxExtension, hasJsx } from './jsx-extension.js'
 const tmp = mkdtempSync(join(tmpdir(), 'jsx-ext-test-'))
 afterAll(() => rmSync(tmp, { recursive: true }))
 const write = (name: string, code: string) => writeFileSync(join(tmp, name), code)
@@ -88,4 +88,20 @@ describe('jsx-requires-tsx-extension', () => {
     expect(match?.linter).toBe('lintmax')
     expect(match?.line).toBe(1)
   })
+})
+describe('hasJsx — direct unit tests', () => {
+  test('true for JSX element', () => expect(hasJsx('const X = () => <div>hi</div>')).toBe(true))
+  test('true for JSX fragment', () => expect(hasJsx('const X = () => <>hi</>')).toBe(true))
+  test('true for self-closing', () => expect(hasJsx('const X = () => <br />')).toBe(true))
+  test('true for nested JSX', () => expect(hasJsx('const X = () => <div><span>a</span></div>')).toBe(true))
+  test('true for JSX in return', () => expect(hasJsx('const X = () => { return <p>hi</p> }')).toBe(true))
+  test('false for generic fn', () => expect(hasJsx('const f = <T>(x: T): T => x')).toBe(false))
+  test('false for generic interface', () => expect(hasJsx('interface Box<T> { value: T }')).toBe(false))
+  test('false for comparison', () => expect(hasJsx('const x = a < b && c > d')).toBe(false))
+  test('false for type assertion', () => expect(hasJsx('const x = value as string')).toBe(false))
+  test('false for empty file', () => expect(hasJsx('')).toBe(false))
+  test('false for plain code', () => expect(hasJsx('const x = 1\nconst y = 2')).toBe(false))
+  test('false for async generic', () => expect(hasJsx('const f = async <T>(x: T): Promise<T> => x')).toBe(false))
+  test('true for Context.Provider', () =>
+    expect(hasJsx('<MyContext.Provider value={1}>{children}</MyContext.Provider>')).toBe(true))
 })
