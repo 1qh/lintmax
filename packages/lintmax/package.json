@@ -50,9 +50,8 @@
   "scripts": {
     "build": "tsdown",
     "check": "bun dist/cli.mjs check",
-    "cleanup-old-versions": "bun script/cleanup-old-versions.ts",
     "fix": "bun dist/cli.mjs fix",
-    "postpublish": "bun run cleanup-old-versions",
+    "postpublish": "bunx pm4ai@latest cleanup",
     "release": "bun publish",
     "release:dry": "bun publish --dry-run",
     "smoke": "bun script/smoke.ts",
