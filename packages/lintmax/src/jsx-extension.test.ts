@@ -26,6 +26,24 @@ describe('jsx-requires-tsx-extension', () => {
     const found = await check()
     expect(found.has('self.ts')).toBe(true)
   })
+  test('catches Context.Provider pattern in .ts', async () => {
+    write(
+      'ctx.ts',
+      "import { createContext } from 'react'\nconst Ctx = createContext([])\nconst P = ({ children }: { children: unknown }) => <Ctx value={[]}>{children}</Ctx>"
+    )
+    const found = await check()
+    expect(found.has('ctx.ts')).toBe(true)
+  })
+  test('catches JSX inside ternary in .ts', async () => {
+    write('ternary.ts', 'const X = ({ ok }: { ok: boolean }) => ok ? <span>yes</span> : null')
+    const found = await check()
+    expect(found.has('ternary.ts')).toBe(true)
+  })
+  test('catches JSX with only type imports in .ts', async () => {
+    write('typeimport.ts', "import type { ReactNode } from 'react'\nconst X = (): ReactNode => <p>hi</p>")
+    const found = await check()
+    expect(found.has('typeimport.ts')).toBe(true)
+  })
   test('ignores generics in .ts', async () => {
     write('generic.ts', 'const f = <T>(x: T): T => x')
     const found = await check()
@@ -40,6 +58,16 @@ describe('jsx-requires-tsx-extension', () => {
     write('compare.ts', 'const x = a < b && c > d')
     const found = await check()
     expect(found.has('compare.ts')).toBe(false)
+  })
+  test('ignores async generic functions', async () => {
+    write('asyncgen.ts', 'const f = async <T>(x: T): Promise<T> => x')
+    const found = await check()
+    expect(found.has('asyncgen.ts')).toBe(false)
+  })
+  test('ignores generic interfaces and types', async () => {
+    write('iface.ts', 'interface Box<T> { value: T }\ntype Fn<A, B> = (a: A) => B')
+    const found = await check()
+    expect(found.has('iface.ts')).toBe(false)
   })
   test('ignores .d.ts files', async () => {
     write('types.d.ts', 'declare const X: () => <div />')
