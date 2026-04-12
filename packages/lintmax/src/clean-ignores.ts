@@ -90,7 +90,9 @@ interface CleanResult {
   files: string[]
 }
 const cleanFileIgnores = async (filePath: string, active: Set<string>): Promise<number> => {
-  const content = await file(filePath).text()
+  const f = file(filePath)
+  if (!(await f.exists())) return 0
+  const content = await f.text()
   const lines = content.split('\n')
   const result: string[] = []
   let removed = 0
