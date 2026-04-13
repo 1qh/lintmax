@@ -415,10 +415,11 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   const shouldComments = runtime.comments !== false
   const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
   const isIgnored = (filePath: string): boolean => ignoreGlobs.some(g => g.match(filePath))
-  const gitFiles = shouldComments ? listCompactFiles({ env, root: cwd }).filter(f => !isIgnored(f)) : []
+  const allGitFiles = shouldComments ? listCompactFiles({ env, root: cwd }) : []
+  const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
   if (command === 'fix') {
-    if (shouldComments) await fixComments({ files: gitFiles })
-    if (gitFiles.length > 0) await cleanIgnores(gitFiles.map(f => joinPath(cwd, f)))
+    if (shouldComments) await fixComments({ files: allGitFiles })
+    if (sourceFiles.length > 0) await cleanIgnores(sourceFiles.map(f => joinPath(cwd, f)))
     const fixSteps = createFixSteps({
       biomeBin,
       dir,
@@ -449,7 +450,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       sortPkgJson
     })
     if (shouldComments) {
-      const commentDiags = await checkComments({ files: gitFiles })
+      const commentDiags = await checkComments({ files: allGitFiles })
       allDiagnostics.push(...commentDiags)
     }
     const cnDiags = await checkClassName({ root: cwd })
@@ -484,7 +485,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     sortPkgJson
   })
   if (shouldComments) {
-    const commentDiags = await checkComments({ files: gitFiles })
+    const commentDiags = await checkComments({ files: allGitFiles })
     allDiagnostics.push(...commentDiags)
   }
   const cnDiags = await checkClassName({ root: cwd })
