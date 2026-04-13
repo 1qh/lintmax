@@ -3,6 +3,8 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential file writes */
 /** biome-ignore-all lint/nursery/useNamedCaptureGroup: not needed */
 import { file, write } from 'bun'
+import { cacheDir, readRequiredJson } from './core.js'
+import { joinPath } from './path.js'
 import { extractAllRules } from './rules.js'
 const eslintLineRe = /^(\s*(?:\/\/|\/\*)\s*(?:eslint-disable(?:-next-line)?)\s+)(.+?)(\s*\*\/)?$/u
 const oxlintLineRe = /^(\s*(?:\/\/|\/\*)\s*(?:oxlint-disable(?:-next-line)?)\s+)(.+?)(\s*\*\/)?$/u
@@ -42,6 +44,22 @@ const normalizeRule = (rule: string): string[] => {
   for (const e of extra) variants.push(e)
   return variants
 }
+const loadOxlintOffRules = async (): Promise<Set<string>> => {
+  const configPath = joinPath(process.cwd(), cacheDir, '.oxlintrc.json')
+  const config = await readRequiredJson<{
+    rules?: Record<string, unknown>
+  }>({ path: configPath }).catch(() => null)
+  if (!config) return new Set()
+  const off = new Set<string>()
+  for (const [rule, val] of Object.entries(config.rules ?? {})) {
+    const severity = Array.isArray(val) ? String(val[0]) : val
+    if (severity === 'off') {
+      off.add(rule)
+      for (const v of normalizeRule(rule)) off.add(v)
+    }
+  }
+  return off
+}
 const buildActiveRuleSet = async (): Promise<Set<string>> => {
   const rules = await extractAllRules()
   const active = new Set<string>()
@@ -51,10 +69,13 @@ const buildActiveRuleSet = async (): Promise<Set<string>> => {
   }
   return active
 }
-const isRuleActive = (rule: string, active: Set<string>): boolean => {
+const isRuleActive = (rule: string, active: Set<string>, oxlintOff?: Set<string>): boolean => {
   if (active.has(rule)) return true
   for (const v of normalizeRule(rule)) if (active.has(v)) return true
-  return false
+  if (!oxlintOff) return false
+  if (oxlintOff.has(rule)) return false
+  for (const v of normalizeRule(rule)) if (oxlintOff.has(v)) return false
+  return true
 }
 const splitRules = (str: string): string[] =>
   str
@@ -63,20 +84,24 @@ const splitRules = (str: string): string[] =>
     .filter(Boolean)
 const processMultiRuleLine = ({
   active,
+  isOxlint,
   line,
   match,
+  oxlintOff,
   result
 }: {
   active: Set<string>
+  isOxlint?: boolean
   line: string
   match: RegExpExecArray
+  oxlintOff?: Set<string>
   result: string[]
 }): number => {
   const prefix = match[1] ?? ''
   const rulesStr = match[2] ?? ''
   const suffix = match[3] ?? ''
   const rules = splitRules(rulesStr)
-  const kept = rules.filter(r => isRuleActive(r, active))
+  const kept = rules.filter(r => isRuleActive(r, active, isOxlint ? oxlintOff : undefined))
   if (kept.length === 0) return rules.length
   if (kept.length < rules.length) {
     result.push(`${prefix}${kept.join(', ')}${suffix}`)
@@ -89,7 +114,7 @@ interface CleanResult {
   cleaned: number
   files: string[]
 }
-const cleanFileIgnores = async (filePath: string, active: Set<string>): Promise<number> => {
+const cleanFileIgnores = async (filePath: string, active: Set<string>, oxlintOff?: Set<string>): Promise<number> => {
   const f = file(filePath)
   if (!(await f.exists())) return 0
   const content = await f.text()
@@ -104,7 +129,8 @@ const cleanFileIgnores = async (filePath: string, active: Set<string>): Promise<
     if (eslintMatch) removed += processMultiRuleLine({ active, line, match: eslintMatch, result })
     else {
       const oxlintMatch = oxlintLineRe.exec(line)
-      if (oxlintMatch) removed += processMultiRuleLine({ active, line, match: oxlintMatch, result })
+      if (oxlintMatch)
+        removed += processMultiRuleLine({ active, isOxlint: true, line, match: oxlintMatch, oxlintOff, result })
       else {
         const biomeMatch = biomeLineRe.exec(line)
         if (biomeMatch && !isRuleActive(biomeMatch[2] ?? '', active)) removed += 1
@@ -117,10 +143,11 @@ const cleanFileIgnores = async (filePath: string, active: Set<string>): Promise<
 }
 const cleanIgnores = async (filePaths: string[]): Promise<CleanResult> => {
   const active = await buildActiveRuleSet()
+  const oxlintOff = await loadOxlintOffRules()
   let cleaned = 0
   const files: string[] = []
   for (const fp of filePaths) {
-    const count = await cleanFileIgnores(fp, active)
+    const count = await cleanFileIgnores(fp, active, oxlintOff)
     if (count > 0) {
       cleaned += count
       files.push(fp)
