@@ -47,6 +47,7 @@
     "init-declarations": "off",
     "jest/no-conditional-in-test": "off",
     "jest/prefer-each": "off",
+    "jest/prefer-importing-jest-globals": "off",
     "jest/require-hook": "off",
     "jsdoc/require-param": "off",
     "jsdoc/require-param-type": "off",
