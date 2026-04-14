@@ -69,12 +69,12 @@ const parseOxlintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] =>
   if (!Array.isArray(parsed.diagnostics)) return []
   const results: Diagnostic[] = []
   for (const d of parsed.diagnostics) {
-    const filePath = d.filename
+    const filePath = d.filename ?? ''
     const rule = d.code
-    if (filePath && rule) {
+    if (rule) {
       const line = d.labels?.[0]?.span?.line ?? 0
       results.push({
-        file: normalizePath(filePath),
+        file: filePath.length > 0 ? normalizePath(filePath) : '<unknown>',
         line,
         linter: 'oxlint',
         rule
