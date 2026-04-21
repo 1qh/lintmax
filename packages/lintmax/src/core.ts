@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useConsistentMemberAccessibility: biome+eslint conflict */
 import { env as bunEnv, file, spawnSync, write } from 'bun'
 import { isRecord } from './normalize.js'
 import { dirnamePath, fromFileUrl, joinPath } from './path.js'
@@ -24,9 +25,9 @@ interface StepSpec {
   silent?: boolean
 }
 class CliExitError extends Error {
-  code: number
-  override name = 'CliExitError'
-  constructor({ code, message }: { code: number; message?: string }) {
+  public code: number
+  public override name = 'CliExitError'
+  public constructor({ code, message }: { code: number; message?: string }) {
     super(message ?? '')
     this.code = code
   }

@@ -37,7 +37,7 @@ const sharedOverrideMarker = Symbol.for(SHARED_OVERRIDE_SYMBOL_KEY)
 const normalizeAppendInput = ({ append }: { append: EslintOptions['append'] }): Linter.Config[] => {
   const out: Linter.Config[] = []
   for (const value of normalizeObjectListInput({ allowNonPlain: true, label: 'eslint.append', value: append }))
-    out.push(value as Linter.Config)
+    out.push(value)
   return out
 }
 const validateEslintOptions = ({ options }: { options?: EslintOptions }) => {
@@ -256,7 +256,7 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
         }
       }
     ),
-    ...defineConfig(reactHooks.configs.flat['recommended-latest'] as { rules: Linter.RulesRecord }, {
+    ...defineConfig(reactHooks.configs.flat['recommended-latest'], {
       files: ['**/*.ts', '**/*.tsx'],
       ...reactPlugin.configs.flat.all,
       ...reactPlugin.configs.flat['jsx-runtime'],
@@ -362,7 +362,7 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
             const out: Record<string, unknown> = {}
             if (shared.files !== undefined) out.files = shared.files
             if (shared.rules !== undefined) out.rules = shared.rules
-            return out as Linter.Config
+            return out
           })()
     configs.push(sanitized.rules ? { ...sanitized, rules: warnToError(sanitized.rules) } : sanitized)
   }

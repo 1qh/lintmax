@@ -1,6 +1,15 @@
 import { file, spawnSync, write } from 'bun'
+import { lstatSync } from 'node:fs'
+import { join } from 'node:path'
 import { CliExitError, decodeText } from './core.js'
 import { joinPath } from './path.js'
+const lstatSafe = (p: string) => {
+  try {
+    return lstatSync(p)
+  } catch {
+    return null
+  }
+}
 const COMPACT_REGEX = /(?:\r?\n){2,}/gu
 const compactBasenames = new Set(['.env.example', '.gitignore', '.npmrc', '.prettierignore', 'Dockerfile', 'Makefile'])
 const compactExtensions = new Set([
@@ -58,10 +67,10 @@ const listCompactFiles = ({ env, root }: { env: Record<string, string | undefine
       message: stderr.length > 0 ? stderr : 'Failed to list files for compact step'
     })
   }
-  const entries = decodeText(result.stdout).split('\0')
-  const files: string[] = []
-  for (const entry of entries) if (entry.length > 0 && entry !== 'bun.lock') files.push(entry)
-  return files
+  const entries = decodeText(result.stdout)
+    .split('\0')
+    .filter(e => e.length > 0 && e !== 'bun.lock')
+  return entries.filter(e => !lstatSafe(join(root, e))?.isSymbolicLink())
 }
 const runCompact = async ({
   env,

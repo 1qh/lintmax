@@ -1,6 +1,7 @@
 import type { Linter } from 'eslint'
-import { file, write } from 'bun'
-import { relative as relativePath } from 'node:path'
+import { file, spawnSync, write } from 'bun'
+import { lstatSync } from 'node:fs'
+import { join as joinFs, relative as relativePath } from 'node:path'
 import type {
   BiomeOptions,
   EslintImportAppendEntry,
@@ -90,9 +91,6 @@ interface SharedOverrideEntry {
   eslintRules?: Record<string, 'off'>
   files: string[]
   oxlintRules?: Record<string, 'off'>
-}
-interface SyncEslintImportMarker {
-  __lintmaxImportRef: number
 }
 interface SyncEslintImportRef {
   exportName: string
@@ -629,7 +627,7 @@ const buildEslintOptions = ({
     if (eslintIgnores.length > 0) eslintOptions.ignores = eslintIgnores
     const appendEntries: Linter.Config[] = []
     for (const entry of eslintSource?.append ?? [])
-      if ('config' in entry) appendEntries.push(entry.config as Linter.Config)
+      if ('config' in entry) appendEntries.push(entry.config)
       else {
         const importRefIndex = eslintImportRefs.push({
           exportName: entry.name,
@@ -639,7 +637,7 @@ const buildEslintOptions = ({
         })
         appendEntries.push({
           [ESLINT_IMPORT_MARKER_KEY]: importRefIndex - 1
-        } as SyncEslintImportMarker as Linter.Config)
+        } as Linter.Config)
       }
     const mergedAppend: Linter.Config[] = [...sharedRuleOverrides, ...appendEntries]
     if (mergedAppend.length > 0) eslintOptions.append = mergedAppend
@@ -902,6 +900,29 @@ const resolveSyncImportSource = ({ cwd, dir, source }: { cwd: string; dir: strin
   const relativeSource = relativePath(dir, absoluteSource).replaceAll('\\', '/')
   return relativeSource.startsWith('.') ? relativeSource : `./${relativeSource}`
 }
+const discoverSymlinkPatterns = ({ root }: { root: string }): readonly string[] => {
+  const result = spawnSync({
+    cmd: ['git', '-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    stderr: 'pipe',
+    stdout: 'pipe'
+  })
+  if (result.exitCode !== 0) return []
+  const entries = new TextDecoder()
+    .decode(result.stdout)
+    .split('\0')
+    .filter(e => e.length > 0)
+  const out: string[] = []
+  for (const entry of entries) {
+    let isSymlink: boolean
+    try {
+      isSymlink = lstatSync(joinFs(root, entry)).isSymbolicLink()
+    } catch {
+      isSymlink = false
+    }
+    if (isSymlink) out.push(entry)
+  }
+  return out
+}
 const sync = async (options?: SyncOptions): Promise<void> => {
   const { biome, eslint, oxlint, sharedOverrides, tailwind, topLevelIgnores, tsconfigRootDir } = validateSyncOptions({
     options
@@ -909,8 +930,9 @@ const sync = async (options?: SyncOptions): Promise<void> => {
   const cwd = process.cwd()
   const dir = joinPath(cwd, cacheDir)
   const userIgnorePatterns = buildUserIgnorePatterns({ topLevelIgnores })
+  const symlinkIgnorePatterns = discoverSymlinkPatterns({ root: cwd })
   const sharedIgnorePatterns = mergeIgnorePatternGroups({
-    groups: [DEFAULT_SHARED_IGNORE_PATTERNS, userIgnorePatterns]
+    groups: [DEFAULT_SHARED_IGNORE_PATTERNS, symlinkIgnorePatterns, userIgnorePatterns]
   })
   const biomeOptions = buildBiomeOptions({
     biomeSource: biome,
