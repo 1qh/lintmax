@@ -49,6 +49,8 @@
     "jest/prefer-each": "off",
     "jest/prefer-importing-jest-globals": "off",
     "jest/require-hook": "off",
+    "jest/require-top-level-describe": "off",
+    "jest/valid-title": "off",
     "jsdoc/require-param": "off",
     "jsdoc/require-param-type": "off",
     "jsdoc/require-returns": "off",
@@ -100,6 +102,8 @@
     "unicorn/no-null": "off",
     "unicorn/prefer-global-this": "off",
     "unicorn/switch-case-braces": ["error", "avoid"],
-    "vitest/prefer-importing-vitest-globals": "off"
+    "vitest/prefer-importing-vitest-globals": "off",
+    "vitest/prefer-strict-boolean-matchers": "off",
+    "vitest/require-test-timeout": "off"
   }
 }
