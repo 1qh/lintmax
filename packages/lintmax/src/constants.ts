@@ -83,6 +83,14 @@ const DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
   'expo/**/uniwind-env.d.ts',
   'expo/**/uniwind-types.d.ts'
 ].map(p => (p.startsWith('**/') ? p : `**/${p}`))
+const ESLINT_TEST_FILE_PATTERNS: readonly string[] = [
+  '**/*.test.ts',
+  '**/*.test.tsx',
+  '**/*.spec.ts',
+  '**/*.spec.tsx',
+  '**/__tests__/**/*.ts',
+  '**/__tests__/**/*.tsx'
+]
 const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
   {
     includes: ['**/expo/**'],
@@ -91,6 +99,16 @@ const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
   {
     includes: ['**/maestro/**'],
     rules: ['performance/noAwaitInLoops']
+  },
+  {
+    includes: ESLINT_TEST_FILE_PATTERNS,
+    rules: [
+      'complexity/useLiteralKeys',
+      'correctness/noUndeclaredVariables',
+      'performance/noAwaitInLoops',
+      'style/noProcessEnv',
+      'suspicious/useAwait'
+    ]
   }
 ]
 const OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
@@ -98,6 +116,14 @@ const OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
     files: ['**/expo/**/*.tsx', '**/expo/**/*.ts'],
     rules: {
       'react-perf/jsx-no-new-object-as-prop': 'off'
+    }
+  },
+  {
+    files: [...ESLINT_TEST_FILE_PATTERNS],
+    rules: {
+      'eslint-plugin-unicorn/consistent-function-scoping': 'off',
+      'eslint-plugin-unicorn/no-array-for-each': 'off',
+      'eslint-plugin-unicorn/no-useless-promise-resolve-reject': 'off'
     }
   }
 ]
@@ -108,14 +134,6 @@ const TAILWIND_ENTRY_CANDIDATES: readonly string[] = [
   'web/global.css',
   'styles/globals.css',
   'global.css'
-]
-const ESLINT_TEST_FILE_PATTERNS: readonly string[] = [
-  '**/*.test.ts',
-  '**/*.test.tsx',
-  '**/*.spec.ts',
-  '**/*.spec.tsx',
-  '**/__tests__/**/*.ts',
-  '**/__tests__/**/*.tsx'
 ]
 const SHARED_OVERRIDE_SYMBOL_KEY = 'lintmax.sharedOverride'
 export {
