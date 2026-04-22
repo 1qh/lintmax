@@ -94,21 +94,15 @@ const ESLINT_TEST_FILE_PATTERNS: readonly string[] = [
 const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
   {
     includes: ['**/expo/**'],
-    rules: ['style/noProcessEnv']
+    rules: ['noProcessEnv']
   },
   {
     includes: ['**/maestro/**'],
-    rules: ['performance/noAwaitInLoops']
+    rules: ['noAwaitInLoops']
   },
   {
     includes: ESLINT_TEST_FILE_PATTERNS,
-    rules: [
-      'complexity/useLiteralKeys',
-      'correctness/noUndeclaredVariables',
-      'performance/noAwaitInLoops',
-      'style/noProcessEnv',
-      'suspicious/useAwait'
-    ]
+    rules: ['noAwaitInLoops', 'noProcessEnv', 'noUndeclaredVariables', 'useAwait', 'useLiteralKeys']
   }
 ]
 const OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
