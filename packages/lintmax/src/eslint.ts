@@ -321,7 +321,9 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
     ...defineConfig({
       files: [...ESLINT_TEST_FILE_PATTERNS],
       rules: {
-        '@typescript-eslint/require-await': 'off'
+        '@typescript-eslint/require-await': 'off',
+        'no-await-in-loop': 'off',
+        'no-control-regex': 'off'
       }
     })
   )
