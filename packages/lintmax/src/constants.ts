@@ -102,7 +102,16 @@ const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
   },
   {
     includes: ESLINT_TEST_FILE_PATTERNS,
-    rules: ['noAwaitInLoops', 'noProcessEnv', 'noUndeclaredVariables', 'useAwait', 'useLiteralKeys']
+    rules: [
+      'noAwaitInLoops',
+      'noDelete',
+      'noEmptyBlockStatements',
+      'noProcessEnv',
+      'noUndeclaredVariables',
+      'useAwait',
+      'useLiteralKeys',
+      'useTopLevelRegex'
+    ]
   }
 ]
 const OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
@@ -115,11 +124,16 @@ const OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
   {
     files: [...ESLINT_TEST_FILE_PATTERNS],
     rules: {
+      'eslint-plugin-jest/valid-expect': 'off',
       'eslint-plugin-promise/param-names': 'off',
       'eslint-plugin-unicorn/consistent-function-scoping': 'off',
       'eslint-plugin-unicorn/no-array-for-each': 'off',
+      'eslint-plugin-unicorn/no-immediate-mutation': 'off',
       'eslint-plugin-unicorn/no-useless-promise-resolve-reject': 'off',
-      'eslint-plugin-vitest/prefer-called-times': 'off'
+      'eslint-plugin-unicorn/number-literal-case': 'off',
+      'eslint-plugin-vitest/prefer-called-times': 'off',
+      'no-await-in-loop': 'off',
+      'no-control-regex': 'off'
     }
   }
 ]
