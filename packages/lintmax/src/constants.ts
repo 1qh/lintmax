@@ -115,9 +115,11 @@ const OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
   {
     files: [...ESLINT_TEST_FILE_PATTERNS],
     rules: {
+      'eslint-plugin-promise/param-names': 'off',
       'eslint-plugin-unicorn/consistent-function-scoping': 'off',
       'eslint-plugin-unicorn/no-array-for-each': 'off',
-      'eslint-plugin-unicorn/no-useless-promise-resolve-reject': 'off'
+      'eslint-plugin-unicorn/no-useless-promise-resolve-reject': 'off',
+      'eslint-plugin-vitest/prefer-called-times': 'off'
     }
   }
 ]
