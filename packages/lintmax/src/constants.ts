@@ -28,6 +28,7 @@ const BIOME_RULES_OFF: readonly string[] = [
   'noNestedTernary',
   'noNodejsModules',
   'noProcessGlobal',
+  'noReactNativeRawText',
   'noReactSpecificProps',
   'noSecrets',
   'noSolidDestructuredProps',
@@ -101,6 +102,14 @@ const BIOME_PATTERN_RULE_OVERRIDES: readonly BiomePatternRuleOverride[] = [
     rules: ['noAwaitInLoops']
   },
   {
+    includes: ['**/auth.config.js'],
+    rules: ['noUndeclaredEnvVars', 'noUndeclaredVariables', 'noProcessEnv']
+  },
+  {
+    includes: ['**/*Script.ts', '**/*.generated.ts'],
+    rules: ['noTemplateCurlyInString']
+  },
+  {
     includes: ESLINT_TEST_FILE_PATTERNS,
     rules: [
       'noAwaitInLoops',
@@ -119,6 +128,18 @@ const OXLINT_PATTERN_RULE_OVERRIDES: readonly OxlintOverrideConfig[] = [
     files: ['**/expo/**/*.tsx', '**/expo/**/*.ts'],
     rules: {
       'react-perf/jsx-no-new-object-as-prop': 'off'
+    }
+  },
+  {
+    files: ['**/convex/**/*.ts'],
+    rules: {
+      'eslint-plugin-unicorn/filename-case': 'off'
+    }
+  },
+  {
+    files: ['**/*Script.ts', '**/*.generated.ts'],
+    rules: {
+      'eslint/no-template-curly-in-string': 'off'
     }
   },
   {

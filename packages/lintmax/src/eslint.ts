@@ -321,9 +321,34 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
     ...defineConfig({
       files: [...ESLINT_TEST_FILE_PATTERNS],
       rules: {
+        '@typescript-eslint/await-thenable': 'off',
+        '@typescript-eslint/no-misused-promises': 'off',
         '@typescript-eslint/require-await': 'off',
+        '@typescript-eslint/strict-void-return': 'off',
         'no-await-in-loop': 'off',
         'no-control-regex': 'off'
+      }
+    }),
+    ...defineConfig({
+      files: ['**/convex/**/*.test.ts', '**/test-utils/**/*.ts'],
+      rules: {
+        '@typescript-eslint/no-unsafe-argument': 'off',
+        '@typescript-eslint/no-unsafe-assignment': 'off',
+        '@typescript-eslint/no-unsafe-call': 'off',
+        '@typescript-eslint/no-unsafe-member-access': 'off',
+        '@typescript-eslint/no-unsafe-return': 'off'
+      }
+    }),
+    ...defineConfig({
+      files: ['**/*Script.ts', '**/*.generated.ts'],
+      rules: {
+        'no-template-curly-in-string': 'off'
+      }
+    }),
+    ...defineConfig({
+      files: ['**/auth.config.js'],
+      rules: {
+        'no-undef': 'off'
       }
     })
   )
