@@ -75,11 +75,11 @@ const buildActiveRuleSet = async (): Promise<Set<string>> => {
   return active
 }
 const isRuleActive = (rule: string, active: Set<string>, oxlintOff?: Set<string>): boolean => {
+  if (oxlintOff?.has(rule)) return false
+  if (oxlintOff) for (const v of normalizeRule(rule)) if (oxlintOff.has(v)) return false
   if (active.has(rule)) return true
   for (const v of normalizeRule(rule)) if (active.has(v)) return true
   if (!oxlintOff) return false
-  if (oxlintOff.has(rule)) return false
-  for (const v of normalizeRule(rule)) if (oxlintOff.has(v)) return false
   return true
 }
 const splitRules = (str: string): string[] =>
