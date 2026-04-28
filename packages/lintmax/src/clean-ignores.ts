@@ -3,6 +3,7 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential file writes */
 /** biome-ignore-all lint/nursery/useNamedCaptureGroup: not needed */
 import { file, write } from 'bun'
+import { OXLINT_CLI_ALLOW } from './constants.js'
 import { cacheDir, readRequiredJson } from './core.js'
 import { joinPath } from './path.js'
 import { extractAllRules } from './rules.js'
@@ -57,6 +58,10 @@ const loadOxlintOffRules = async (): Promise<Set<string>> => {
       off.add(rule)
       for (const v of normalizeRule(rule)) off.add(v)
     }
+  }
+  for (const rule of OXLINT_CLI_ALLOW) {
+    off.add(rule)
+    for (const v of normalizeRule(rule)) off.add(v)
   }
   return off
 }

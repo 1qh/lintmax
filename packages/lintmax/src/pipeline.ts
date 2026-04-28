@@ -15,7 +15,7 @@ import { checkClassName } from './class-name.js'
 import { cleanIgnores } from './clean-ignores.js'
 import { checkComments, fixComments } from './comments.js'
 import { listCompactFiles, runCompact } from './compact.js'
-import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
+import { DEFAULT_SHARED_IGNORE_PATTERNS, OXLINT_CLI_ALLOW } from './constants.js'
 import {
   cacheDir,
   CliExitError,
@@ -141,28 +141,31 @@ const createCheckSteps = ({
   oxlintBin: string
   prettierBin: string
   sortPkgJson: string
-}): StepSpec[] => [
-  {
-    args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
-    label: 'sort-package-json'
-  },
-  {
-    args: [biomeBin, 'ci', '--config-path', dir, '--diagnostic-level=error'],
-    label: 'biome'
-  },
-  {
-    args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--quiet'],
-    label: 'oxlint'
-  },
-  {
-    args: [eslintBin, '--no-error-on-unmatched-pattern', ...eslintArgs],
-    label: 'eslint'
-  },
-  {
-    args: [prettierBin, ...PRETTIER_MD_ARGS, '--check', '--no-error-on-unmatched-pattern', '**/*.md'],
-    label: 'prettier'
-  }
-]
+}): StepSpec[] => {
+  const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
+  return [
+    {
+      args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
+      label: 'sort-package-json'
+    },
+    {
+      args: [biomeBin, 'ci', '--config-path', dir, '--diagnostic-level=error'],
+      label: 'biome'
+    },
+    {
+      args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--quiet', ...oxlintCliAllow],
+      label: 'oxlint'
+    },
+    {
+      args: [eslintBin, '--no-error-on-unmatched-pattern', ...eslintArgs],
+      label: 'eslint'
+    },
+    {
+      args: [prettierBin, ...PRETTIER_MD_ARGS, '--check', '--no-error-on-unmatched-pattern', '**/*.md'],
+      label: 'prettier'
+    }
+  ]
+}
 const createFixSteps = ({
   biomeBin,
   dir,
@@ -182,6 +185,7 @@ const createFixSteps = ({
   prettierBin: string
   sortPkgJson: string
 }): StepSpec[] => {
+  const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
   const steps: StepSpec[] = [
     {
       args: [sortPkgJson, '**/package.json', '--ignore', '**/node_modules/**'],
@@ -194,7 +198,7 @@ const createFixSteps = ({
       silent: true
     },
     {
-      args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet'],
+      args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet', ...oxlintCliAllow],
       label: 'oxlint',
       silent: true
     },
@@ -273,6 +277,7 @@ const runAgentCheck = ({
   prettierBin: string
   sortPkgJson: string
 }): Diagnostic[] => {
+  const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
   const allDiagnostics: Diagnostic[] = []
   const push = (d: Diagnostic[]) => {
     if (d.length > 0) allDiagnostics.push(...d)
@@ -307,7 +312,7 @@ const runAgentCheck = ({
       failures,
       label: 'oxlint',
       opts: {
-        args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--quiet', '-f', 'json'],
+        args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--quiet', '-f', 'json', ...oxlintCliAllow],
         command: 'bun'
       },
       parser: ({ stdout }) => parseOxlintDiagnostics({ stdout })
