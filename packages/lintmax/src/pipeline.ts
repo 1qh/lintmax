@@ -248,7 +248,7 @@ const captureAndParse = ({
   failures.push({
     code: result.exitCode,
     label,
-    message: result.stderr.length > 0 ? result.stderr.trim() : undefined
+    message: result.stderr.length > 0 ? result.stderr.trim() : result.stdout.trim() || undefined
   })
   return []
 }

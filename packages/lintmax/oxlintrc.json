@@ -80,6 +80,7 @@
     "oxc/no-optional-chaining": "off",
     "oxc/no-rest-spread-properties": "off",
     "react-perf/jsx-no-new-function-as-prop": "off",
+    "react/forbid-component-props": "off",
     "react/jsx-filename-extension": [
       "error",
       {
