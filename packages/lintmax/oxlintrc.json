@@ -48,6 +48,8 @@
     "jest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expectOk", "expectErr", "ok", "err"] }],
     "jest/max-expects": "off",
     "jest/no-conditional-in-test": "off",
+    "vitest/no-conditional-in-test": "off",
+    "vitest/no-conditional-tests": "off",
     "jest/no-hooks": "off",
     "jest/prefer-ending-with-an-expect": "off",
     "jest/prefer-each": "off",
