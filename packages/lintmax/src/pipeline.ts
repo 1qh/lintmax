@@ -132,6 +132,7 @@ const createCheckSteps = ({
   eslintBin,
   oxlintBin,
   prettierBin,
+  prettierMarkdownTargets,
   sortPkgJson
 }: {
   biomeBin: string
@@ -140,10 +141,11 @@ const createCheckSteps = ({
   eslintBin: string
   oxlintBin: string
   prettierBin: string
+  prettierMarkdownTargets: string[]
   sortPkgJson: string
 }): StepSpec[] => {
   const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
-  return [
+  const steps: StepSpec[] = [
     {
       args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
       label: 'sort-package-json'
@@ -159,12 +161,14 @@ const createCheckSteps = ({
     {
       args: [eslintBin, '--no-error-on-unmatched-pattern', ...eslintArgs],
       label: 'eslint'
-    },
-    {
-      args: [prettierBin, ...PRETTIER_MD_ARGS, '--check', '--no-error-on-unmatched-pattern', '**/*.md'],
-      label: 'prettier'
     }
   ]
+  if (prettierMarkdownTargets.length > 0)
+    steps.push({
+      args: [prettierBin, ...PRETTIER_MD_ARGS, '--check', '--no-error-on-unmatched-pattern', ...prettierMarkdownTargets],
+      label: 'prettier'
+    })
+  return steps
 }
 const createFixSteps = ({
   biomeBin,
@@ -174,6 +178,7 @@ const createFixSteps = ({
   hasFlowmark,
   oxlintBin,
   prettierBin,
+  prettierMarkdownTargets,
   sortPkgJson
 }: {
   biomeBin: string
@@ -183,6 +188,7 @@ const createFixSteps = ({
   hasFlowmark: boolean
   oxlintBin: string
   prettierBin: string
+  prettierMarkdownTargets: string[]
   sortPkgJson: string
 }): StepSpec[] => {
   const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
@@ -220,11 +226,12 @@ const createFixSteps = ({
       label: 'flowmark',
       silent: true
     })
-  steps.push({
-    args: [prettierBin, ...PRETTIER_MD_ARGS, '--write', '--no-error-on-unmatched-pattern', '**/*.md'],
-    label: 'prettier',
-    silent: true
-  })
+  if (prettierMarkdownTargets.length > 0)
+    steps.push({
+      args: [prettierBin, ...PRETTIER_MD_ARGS, '--write', '--no-error-on-unmatched-pattern', ...prettierMarkdownTargets],
+      label: 'prettier',
+      silent: true
+    })
   return steps
 }
 const captureAndParse = ({
@@ -265,6 +272,7 @@ const runAgentCheck = ({
   failures,
   oxlintBin,
   prettierBin,
+  prettierMarkdownTargets,
   sortPkgJson
 }: {
   biomeBin: string
@@ -275,6 +283,7 @@ const runAgentCheck = ({
   failures: FailureRecord[]
   oxlintBin: string
   prettierBin: string
+  prettierMarkdownTargets: string[]
   sortPkgJson: string
 }): Diagnostic[] => {
   const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
@@ -330,19 +339,43 @@ const runAgentCheck = ({
       parser: ({ stdout }) => parseEslintDiagnostics({ stdout })
     })
   )
-  push(
-    captureAndParse({
-      env,
-      failures,
-      label: 'prettier',
-      opts: {
-        args: [prettierBin, ...PRETTIER_MD_ARGS, '--list-different', '--no-error-on-unmatched-pattern', '**/*.md'],
-        command: 'bun'
-      },
-      parser: ({ stdout }) => parsePrettierOutput({ stdout })
-    })
-  )
+  if (prettierMarkdownTargets.length > 0)
+    push(
+      captureAndParse({
+        env,
+        failures,
+        label: 'prettier',
+        opts: {
+          args: [
+            prettierBin,
+            ...PRETTIER_MD_ARGS,
+            '--list-different',
+            '--no-error-on-unmatched-pattern',
+            ...prettierMarkdownTargets
+          ],
+          command: 'bun'
+        },
+        parser: ({ stdout }) => parsePrettierOutput({ stdout })
+      })
+    )
   return allDiagnostics
+}
+const isGitWorkTree = ({ env, root }: { env: Record<string, string | undefined>; root: string }): boolean =>
+  spawnSync({
+    cmd: ['git', '-C', root, 'rev-parse', '--is-inside-work-tree'],
+    env,
+    stderr: 'pipe',
+    stdout: 'pipe'
+  }).exitCode === 0
+const createPrettierMarkdownTargets = ({
+  gitFiles,
+  gitWorkTree
+}: {
+  gitFiles: string[]
+  gitWorkTree: boolean
+}): string[] => {
+  if (!gitWorkTree) return ['**/*.md']
+  return gitFiles.filter(filePath => filePath.endsWith('.md'))
 }
 const throwAgentResults = ({ diagnostics, failures }: { diagnostics: Diagnostic[]; failures: FailureRecord[] }) => {
   if (diagnostics.length === 0 && failures.length === 0) return
@@ -408,6 +441,9 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       stderr: 'pipe',
       stdout: 'pipe'
     }).exitCode === 0
+  const gitWorkTree = isGitWorkTree({ env, root: cwd })
+  const allGitFiles = gitWorkTree ? listCompactFiles({ env, root: cwd }) : []
+  const prettierMarkdownTargets = createPrettierMarkdownTargets({ gitFiles: allGitFiles, gitWorkTree })
   const checkSteps = createCheckSteps({
     biomeBin,
     dir,
@@ -415,12 +451,12 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     eslintBin,
     oxlintBin,
     prettierBin,
+    prettierMarkdownTargets,
     sortPkgJson
   })
   const shouldComments = runtime.comments !== false
   const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
   const isIgnored = (filePath: string): boolean => ignoreGlobs.some(g => g.match(filePath))
-  const allGitFiles = shouldComments ? listCompactFiles({ env, root: cwd }) : []
   const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
   if (command === 'fix') {
     if (shouldComments) await fixComments({ files: allGitFiles })
@@ -433,6 +469,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       hasFlowmark,
       oxlintBin,
       prettierBin,
+      prettierMarkdownTargets,
       sortPkgJson
     })
     if (human) runSteps({ steps: fixSteps })
@@ -452,6 +489,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       failures,
       oxlintBin,
       prettierBin,
+      prettierMarkdownTargets,
       sortPkgJson
     })
     if (shouldComments) {
@@ -487,6 +525,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     failures,
     oxlintBin,
     prettierBin,
+    prettierMarkdownTargets,
     sortPkgJson
   })
   if (shouldComments) {
