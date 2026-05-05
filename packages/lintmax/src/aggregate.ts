@@ -86,7 +86,7 @@ const parseOxlintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] =>
 const parseEslintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] => {
   let parsed: {
     filePath?: string
-    messages?: { line?: number; ruleId?: null | string; severity?: number }[]
+    messages?: { fatal?: boolean; line?: number; message?: string; ruleId?: null | string; severity?: number }[]
   }[]
   try {
     parsed = JSON.parse(stdout) as typeof parsed
@@ -99,7 +99,8 @@ const parseEslintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] =>
     const { filePath } = fileEntry
     if (filePath && Array.isArray(fileEntry.messages))
       for (const msg of fileEntry.messages) {
-        const rule = msg.ruleId
+        const rule =
+          msg.ruleId ?? (msg.severity === 2 || msg.fatal ? `parse-error: ${msg.message?.slice(0, 80) ?? 'unknown'}` : null)
         if (rule)
           results.push({
             file: normalizePath(filePath),

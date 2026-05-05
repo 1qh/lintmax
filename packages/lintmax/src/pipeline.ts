@@ -256,11 +256,12 @@ const captureAndParse = ({
   if (result.exitCode === 0) return []
   const diagnostics = parser(result)
   if (diagnostics.length > 0) return diagnostics
-  failures.push({
-    code: result.exitCode,
-    label,
-    message: result.stderr.length > 0 ? result.stderr.trim() : result.stdout.trim() || undefined
-  })
+  const stderr = result.stderr.trim()
+  const stdout = result.stdout.trim()
+  const stdoutFirst = stdout.split('\n', 1)[0]?.trimStart() ?? ''
+  const stdoutIsJson = stdoutFirst.startsWith('[') || stdoutFirst.startsWith('{')
+  const message = stderr.length > 0 ? stderr : stdoutIsJson ? undefined : stdout || undefined
+  failures.push({ code: result.exitCode, label, message })
   return []
 }
 const runAgentCheck = ({
