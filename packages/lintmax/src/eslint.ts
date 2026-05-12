@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-deprecated */
 import type { Linter } from 'eslint'
 import eslintReact from '@eslint-react/eslint-plugin'
 import { includeIgnoreFile } from '@eslint/compat'
