@@ -3,7 +3,6 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential file io */
 /** biome-ignore-all lint/style/noProcessEnv: linter env passthrough */
 import { file, write } from 'bun'
-import { tmpdir } from 'node:os'
 import { parseBiomeDiagnostics, parseOxlintDiagnostics } from './aggregate.js'
 import { normalizeRule } from './clean-ignores.js'
 import { cacheDir, resolveBin, runCapture } from './core.js'
@@ -32,11 +31,23 @@ const extractJson = (stdout: string): string => {
   if (start === -1) return stdout
   return stdout.slice(start)
 }
-const extOf = (filePath: string): string => {
-  const base = filePath.slice(filePath.lastIndexOf('/') + 1)
-  const dot = base.lastIndexOf('.')
-  if (dot <= 0) return ''
-  return base.slice(dot)
+const stripAndLint = async ({
+  filePath,
+  lint,
+  origContent,
+  strippedContent
+}: {
+  filePath: string
+  lint: () => Set<string>
+  origContent: string
+  strippedContent: string
+}): Promise<Set<string>> => {
+  await write(filePath, strippedContent)
+  try {
+    return lint()
+  } finally {
+    await write(filePath, origContent)
+  }
 }
 const splitOxlintRules = (str: string): string[] =>
   str
@@ -59,15 +70,15 @@ const rebuildBiomeLine = ({ line, rules }: { line: string; rules: string[] }): s
 }
 const firedOxlintRules = ({
   configPath,
-  oxlintBin,
-  tempPath
+  filePath,
+  oxlintBin
 }: {
   configPath: string
+  filePath: string
   oxlintBin: string
-  tempPath: string
 }): Set<string> => {
   const result = runCapture({
-    args: [oxlintBin, '-c', configPath, '-f', 'json', tempPath],
+    args: [oxlintBin, '-c', configPath, '-f', 'json', filePath],
     command: 'bun',
     env: buildEnv(),
     label: 'oxlint-unused'
@@ -114,18 +125,13 @@ const processOxlintFile = async ({
   const directiveLines = parseOxlintDirectiveLines(lines)
   if (directiveLines.length === 0) return { diagnostics: [], removed: 0 }
   const directiveIndexes = new Set(directiveLines.map(d => d.index))
-  const stripped = lines.filter((_, index) => !directiveIndexes.has(index))
-  const tempPath = joinPath(
-    tmpdir(),
-    `lintmax-unused-${Date.now()}-${Math.random().toString(36).slice(2)}${extOf(filePath)}`
-  )
-  await write(tempPath, stripped.join('\n'))
-  let fired: Set<string>
-  try {
-    fired = firedOxlintRules({ configPath, oxlintBin, tempPath })
-  } finally {
-    await file(tempPath).delete()
-  }
+  const stripped = lines.filter((_, index) => !directiveIndexes.has(index)).join('\n')
+  const fired = await stripAndLint({
+    filePath,
+    lint: () => firedOxlintRules({ configPath, filePath, oxlintBin }),
+    origContent: content,
+    strippedContent: stripped
+  })
   const result: string[] = []
   const diagnostics: UnusedDirective[] = []
   let removed = 0
@@ -180,14 +186,14 @@ const findBiomeIgnoreAllFiles = async (filePaths: string[]): Promise<string[]> =
 const firedBiomeCategories = ({
   biomeBin,
   configDir,
-  tempPath
+  filePath
 }: {
   biomeBin: string
   configDir: string
-  tempPath: string
+  filePath: string
 }): Set<string> => {
   const result = runCapture({
-    args: [biomeBin, 'lint', '--reporter=json', '--config-path', configDir, tempPath],
+    args: [biomeBin, 'lint', '--reporter=json', '--config-path', configDir, filePath],
     command: 'bun',
     env: buildEnv(),
     label: 'biome-unused'
@@ -228,18 +234,13 @@ const processBiomeFile = async ({
   const directiveLines = parseBiomeDirectiveLines(lines)
   if (directiveLines.length === 0) return { diagnostics: [], removed: 0 }
   const directiveIndexes = new Set(directiveLines.map(d => d.index))
-  const stripped = lines.filter((_, index) => !directiveIndexes.has(index))
-  const tempPath = joinPath(
-    tmpdir(),
-    `lintmax-unused-${Date.now()}-${Math.random().toString(36).slice(2)}${extOf(filePath)}`
-  )
-  await write(tempPath, stripped.join('\n'))
-  let fired: Set<string>
-  try {
-    fired = firedBiomeCategories({ biomeBin, configDir, tempPath })
-  } finally {
-    await file(tempPath).delete()
-  }
+  const stripped = lines.filter((_, index) => !directiveIndexes.has(index)).join('\n')
+  const fired = await stripAndLint({
+    filePath,
+    lint: () => firedBiomeCategories({ biomeBin, configDir, filePath }),
+    origContent: content,
+    strippedContent: stripped
+  })
   const result: string[] = []
   const diagnostics: UnusedDirective[] = []
   let removed = 0
