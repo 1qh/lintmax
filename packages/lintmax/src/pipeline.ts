@@ -2,6 +2,7 @@
 import { env as bunEnv, Glob, spawnSync } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
+import type { DangerousSuppression } from './ignores.js'
 import type { UnusedDirective } from './unused-suppressions.js'
 import {
   aggregate,
@@ -30,6 +31,7 @@ import {
   runCapture
 } from './core.js'
 import { formatGrouped } from './format.js'
+import { findDangerousSuppressions } from './ignores.js'
 import { sync } from './index.js'
 import { checkJsxExtension } from './jsx-extension.js'
 import { dirnamePath, joinPath } from './path.js'
@@ -375,6 +377,8 @@ const unusedToDiagnostics = ({ root, unused }: { root: string; unused: UnusedDir
     })
   return out
 }
+const dangerousToDiagnostics = (items: DangerousSuppression[]): Diagnostic[] =>
+  items.map(d => ({ file: d.file, line: d.line, linter: 'forbidden-suppression', rule: d.rule }))
 const isGitWorkTree = ({ env, root }: { env: Record<string, string | undefined>; root: string }): boolean =>
   spawnSync({
     cmd: ['git', '-C', root, 'rev-parse', '--is-inside-work-tree'],
@@ -530,7 +534,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     const humanCustomDiags = [
       ...cnDiagsHuman,
       ...jsxDiagsHuman,
-      ...unusedToDiagnostics({ root: cwd, unused: unusedHuman.diagnostics })
+      ...unusedToDiagnostics({ root: cwd, unused: unusedHuman.diagnostics }),
+      ...dangerousToDiagnostics(await findDangerousSuppressions(cwd))
     ]
     if (humanCustomDiags.length > 0) {
       const grouped = aggregate({ diagnostics: humanCustomDiags })
@@ -568,6 +573,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     })
     allDiagnostics.push(...unusedToDiagnostics({ root: cwd, unused: unusedAgent.diagnostics }))
   }
+  allDiagnostics.push(...dangerousToDiagnostics(await findDangerousSuppressions(cwd)))
   if (allDiagnostics.length > 0 || failures.length > 0) {
     const grouped = aggregate({ diagnostics: allDiagnostics })
     const output = formatGrouped({ files: grouped })
