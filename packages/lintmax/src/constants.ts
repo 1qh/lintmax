@@ -71,7 +71,6 @@ const BIOME_IGNORE_PATTERNS: readonly string[] = [
 ]
 const DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
   '_generated/**',
-  '.lintmax-unused-*',
   '.next/**',
   '.source/**',
   '*.cjs',
