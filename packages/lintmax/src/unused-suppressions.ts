@@ -3,10 +3,11 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential file io */
 /** biome-ignore-all lint/style/noProcessEnv: linter env passthrough */
 import { file, write } from 'bun'
+import { tmpdir } from 'node:os'
 import { parseBiomeDiagnostics, parseOxlintDiagnostics } from './aggregate.js'
 import { normalizeRule } from './clean-ignores.js'
 import { cacheDir, resolveBin, runCapture } from './core.js'
-import { dirnamePath, joinPath } from './path.js'
+import { joinPath } from './path.js'
 
 interface RemoveResult {
   diagnostics: UnusedDirective[]
@@ -115,8 +116,8 @@ const processOxlintFile = async ({
   const directiveIndexes = new Set(directiveLines.map(d => d.index))
   const stripped = lines.filter((_, index) => !directiveIndexes.has(index))
   const tempPath = joinPath(
-    dirnamePath(filePath),
-    `.lintmax-unused-${Date.now()}-${Math.random().toString(36).slice(2)}${extOf(filePath)}`
+    tmpdir(),
+    `lintmax-unused-${Date.now()}-${Math.random().toString(36).slice(2)}${extOf(filePath)}`
   )
   await write(tempPath, stripped.join('\n'))
   let fired: Set<string>
@@ -229,8 +230,8 @@ const processBiomeFile = async ({
   const directiveIndexes = new Set(directiveLines.map(d => d.index))
   const stripped = lines.filter((_, index) => !directiveIndexes.has(index))
   const tempPath = joinPath(
-    dirnamePath(filePath),
-    `.lintmax-unused-${Date.now()}-${Math.random().toString(36).slice(2)}${extOf(filePath)}`
+    tmpdir(),
+    `lintmax-unused-${Date.now()}-${Math.random().toString(36).slice(2)}${extOf(filePath)}`
   )
   await write(tempPath, stripped.join('\n'))
   let fired: Set<string>
