@@ -3,6 +3,7 @@
 /** biome-ignore-all lint/suspicious/noTemplateCurlyInString: test fixtures contain JSX template literal strings */
 import { describe, expect, test } from 'bun:test'
 import { findClassNameViolations } from './class-name.js'
+
 const check = (code: string) => findClassNameViolations({ sourceText: code })
 describe('cn/no-template-literal', () => {
   test('catches template literal className', () => {

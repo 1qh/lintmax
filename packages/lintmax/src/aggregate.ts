@@ -1,4 +1,5 @@
 import { getCanonicalRule } from './rule-equivalence.js'
+
 interface Diagnostic {
   file: string
   line: number

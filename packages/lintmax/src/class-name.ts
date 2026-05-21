@@ -3,6 +3,7 @@
 import { file, Glob } from 'bun'
 import ts from 'typescript'
 import type { Diagnostic } from './aggregate.js'
+
 const CN_NAMES = new Set(['cn'])
 const BANNED_CALLEE_NAMES = new Set(['classnames', 'clsx', 'cx', 'twMerge'])
 const isJsxClassName = (node: ts.Node): boolean =>

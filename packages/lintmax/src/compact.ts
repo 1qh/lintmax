@@ -3,6 +3,7 @@ import { lstatSync } from 'node:fs'
 import { join } from 'node:path'
 import { CliExitError, decodeText } from './core.js'
 import { joinPath } from './path.js'
+
 const lstatSafe = (p: string) => {
   try {
     return lstatSync(p)

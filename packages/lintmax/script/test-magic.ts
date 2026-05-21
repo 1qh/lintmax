@@ -1,6 +1,7 @@
 import { spawnSync } from 'bun'
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+
 const root = join(import.meta.dir, '..')
 const workFile = join(root, 'src/magic-work.ts')
 const cli = join(root, 'dist/cli.mjs')

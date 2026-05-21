@@ -4,6 +4,7 @@ import { file, Glob } from 'bun'
 import ts from 'typescript'
 import type { Diagnostic } from './aggregate.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
+
 const containsJsxNode = (sourceFile: ts.SourceFile): boolean => {
   let found = false
   const visit = (node: ts.Node) => {

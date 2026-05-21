@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { sync } from './index.js'
+
 const tmp = mkdtempSync(join(tmpdir(), 'config-gen-test-'))
 const cacheDir = join(tmp, 'node_modules', '.cache', 'lintmax')
 afterAll(() => rmSync(tmp, { recursive: true }))

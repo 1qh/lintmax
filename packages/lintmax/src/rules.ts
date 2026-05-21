@@ -1,6 +1,7 @@
 import { file, spawnSync, write } from 'bun'
 import { cwd, decodeText, resolveBin } from './core.js'
 import { fromFileUrl, joinPath } from './path.js'
+
 interface RuleEntry {
   fixable: boolean
   linter: string

@@ -33,6 +33,7 @@ import { formatGrouped } from './format.js'
 import { sync } from './index.js'
 import { checkJsxExtension } from './jsx-extension.js'
 import { dirnamePath, joinPath } from './path.js'
+
 const createStepExecutor = ({
   env,
   failures,

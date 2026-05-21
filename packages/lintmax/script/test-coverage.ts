@@ -1,6 +1,7 @@
 import { spawnSync } from 'bun'
 import { copyFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+
 const root = join(import.meta.dir, '..')
 const monorepoRoot = join(root, '..', '..')
 const cli = join(root, 'dist/cli.mjs')

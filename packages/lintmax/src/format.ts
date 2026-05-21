@@ -1,4 +1,5 @@
 import type { GroupedFile } from './aggregate.js'
+
 const formatGrouped = ({ files }: { files: GroupedFile[] }): string => {
   if (files.length === 0) return ''
   const parts: string[] = []

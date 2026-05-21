@@ -30,6 +30,7 @@ import {
   warnToError
 } from './normalize.js'
 import { isAbsolutePath, joinPath } from './path.js'
+
 interface SharedOverrideAppendConfig {
   files?: string[]
   rules?: Linter.RulesRecord

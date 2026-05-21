@@ -73,6 +73,7 @@ const DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
   '_generated/**',
   '.next/**',
   '.source/**',
+  '*.cjs',
   'dist/**',
   'generated/**',
   'module_bindings/**',

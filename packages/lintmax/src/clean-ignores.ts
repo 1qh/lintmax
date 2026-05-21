@@ -7,6 +7,7 @@ import { OXLINT_CLI_ALLOW } from './constants.js'
 import { cacheDir, readRequiredJson } from './core.js'
 import { joinPath } from './path.js'
 import { extractAllRules } from './rules.js'
+
 const eslintLineRe = /^(\s*(?:\/\/|\/\*)\s*(?:eslint-disable(?:-next-line)?)\s+)(.+?)(\s*\*\/)?$/u
 const oxlintLineRe = /^(\s*(?:\/\/|\/\*)\s*(?:oxlint-disable(?:-next-line)?)\s+)(.+?)(\s*\*\/)?$/u
 const biomeLineRe = /^(\s*(?:\/\/|\/\*\*)\s*biome-ignore(?:-all)?\s+)([\w/]+)(.*?)$/u

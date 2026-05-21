@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cleanFileIgnores, isRuleActive, normalizeRule, splitRules } from './clean-ignores.js'
 import { parseRules } from './ignores.js'
+
 const tmp = mkdtempSync(join(tmpdir(), 'clean-ignores-test-'))
 afterAll(() => rmSync(tmp, { recursive: true }))
 const active = new Set([

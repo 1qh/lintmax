@@ -1,6 +1,7 @@
 import { file, write } from 'bun'
 import ts from 'typescript'
 import type { Diagnostic } from './aggregate.js'
+
 const KEEP_PATTERN =
   /eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|@refresh|@flow|istanbul ignore|c8 ignore|webpackChunkName|prettier-ignore|noinspection|nolint|@jsx|@jsxImportSource|@jsxFrag|@license|@preserve|type-coverage:ignore/u
 const WHITESPACE_ONLY = /^\s*$/u

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { checkJsxExtension, hasJsx } from './jsx-extension.js'
+
 const tmp = mkdtempSync(join(tmpdir(), 'jsx-ext-test-'))
 afterAll(() => rmSync(tmp, { recursive: true }))
 const write = (name: string, code: string) => writeFileSync(join(tmp, name), code)

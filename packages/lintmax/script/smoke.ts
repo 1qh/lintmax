@@ -2,6 +2,7 @@ import { $, file, spawnSync, write } from 'bun'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
 const decoder = new TextDecoder()
 const root = join(import.meta.dir, '..')
 const pack = spawnSync({ cmd: ['bun', 'pm', 'pack'], cwd: root, stderr: 'pipe', stdout: 'pipe' })

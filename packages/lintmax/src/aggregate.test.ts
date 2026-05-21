@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Diagnostic } from './aggregate.js'
 import { parseOxlintDiagnostics } from './aggregate.js'
+
 describe('parseOxlintDiagnostics', () => {
   test('parses normal diagnostic with filename and line', () => {
     const stdout = JSON.stringify({
