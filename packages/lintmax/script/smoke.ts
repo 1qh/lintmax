@@ -247,7 +247,10 @@ try {
   await mkdir(join(dir, 'src/styles'), { recursive: true })
   await write(join(dir, 'ui/src/styles/globals.css'), "@import 'tailwindcss';\n")
   await write(join(dir, 'src/styles/globals.css'), "@import 'tailwindcss';\n")
-  await write(join(dir, 'lintmax.config.ts'), "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({})\n")
+  await write(
+    join(dir, 'lintmax.config.ts'),
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({})\n"
+  )
   run({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
     label: 'tailwind auto-detection prefers ui path on ambiguity'

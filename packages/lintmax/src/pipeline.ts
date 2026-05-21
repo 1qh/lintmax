@@ -3,6 +3,7 @@
 import { env as bunEnv, Glob, spawnSync } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
+import type { UnusedDirective } from './unused-suppressions.js'
 import {
   aggregate,
   parseBiomeDiagnostics,
@@ -33,6 +34,7 @@ import { formatGrouped } from './format.js'
 import { sync } from './index.js'
 import { checkJsxExtension } from './jsx-extension.js'
 import { dirnamePath, joinPath } from './path.js'
+import { removeUnusedSuppressions } from './unused-suppressions.js'
 
 const createStepExecutor = ({
   env,
@@ -362,6 +364,18 @@ const runAgentCheck = ({
     )
   return allDiagnostics
 }
+const unusedToDiagnostics = ({ root, unused }: { root: string; unused: UnusedDirective[] }): Diagnostic[] => {
+  const prefix = `${root}/`
+  const out: Diagnostic[] = []
+  for (const u of unused)
+    out.push({
+      file: u.file.startsWith(prefix) ? u.file.slice(prefix.length) : u.file,
+      line: u.line,
+      linter: 'unused-suppression',
+      rule: u.rule ?? 'unused-disable-directive'
+    })
+  return out
+}
 const isGitWorkTree = ({ env, root }: { env: Record<string, string | undefined>; root: string }): boolean =>
   spawnSync({
     cmd: ['git', '-C', root, 'rev-parse', '--is-inside-work-tree'],
@@ -477,6 +491,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     if (human) runSteps({ steps: fixSteps })
     else runStepsSilent({ steps: fixSteps })
     clearFailures()
+    if (sourceFiles.length > 0)
+      await removeUnusedSuppressions({ filePaths: sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
     if (human) {
       runSteps({ steps: checkSteps })
       throwIfFailures()
@@ -508,7 +524,15 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     runSteps({ steps: checkSteps })
     const cnDiagsHuman = await checkClassName({ root: cwd })
     const jsxDiagsHuman = await checkJsxExtension({ root: cwd })
-    const humanCustomDiags = [...cnDiagsHuman, ...jsxDiagsHuman]
+    const unusedHuman =
+      sourceFiles.length > 0
+        ? await removeUnusedSuppressions({ dryRun: true, filePaths: sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
+        : { diagnostics: [], files: [], removed: 0 }
+    const humanCustomDiags = [
+      ...cnDiagsHuman,
+      ...jsxDiagsHuman,
+      ...unusedToDiagnostics({ root: cwd, unused: unusedHuman.diagnostics })
+    ]
     if (humanCustomDiags.length > 0) {
       const grouped = aggregate({ diagnostics: humanCustomDiags })
       const output = formatGrouped({ files: grouped })
@@ -537,6 +561,14 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   const cnDiags = await checkClassName({ root: cwd })
   const jsxDiags = await checkJsxExtension({ root: cwd })
   allDiagnostics.push(...cnDiags, ...jsxDiags)
+  if (sourceFiles.length > 0) {
+    const unusedAgent = await removeUnusedSuppressions({
+      dryRun: true,
+      filePaths: sourceFiles.map(f => joinPath(cwd, f)),
+      root: cwd
+    })
+    allDiagnostics.push(...unusedToDiagnostics({ root: cwd, unused: unusedAgent.diagnostics }))
+  }
   if (allDiagnostics.length > 0 || failures.length > 0) {
     const grouped = aggregate({ diagnostics: allDiagnostics })
     const output = formatGrouped({ files: grouped })
