@@ -1,5 +1,4 @@
 /* eslint-disable no-template-curly-in-string */
-/* oxlint-disable eslint/no-template-curly-in-string */
 /** biome-ignore-all lint/suspicious/noTemplateCurlyInString: test fixtures contain JSX template literal strings */
 import { describe, expect, test } from 'bun:test'
 import { findClassNameViolations } from './class-name.js'

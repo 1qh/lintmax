@@ -1,5 +1,4 @@
 /* eslint-disable no-await-in-loop, prefer-named-capture-group */
-/* oxlint-disable eslint/no-await-in-loop */
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential file writes */
 /** biome-ignore-all lint/nursery/useNamedCaptureGroup: not needed */
 import { file, write } from 'bun'

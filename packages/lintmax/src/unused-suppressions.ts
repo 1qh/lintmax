@@ -3,7 +3,8 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential file io */
 /** biome-ignore-all lint/style/noProcessEnv: linter env passthrough */
 import { file, write } from 'bun'
-import { parseBiomeDiagnostics } from './aggregate.js'
+import { parseBiomeDiagnostics, parseOxlintDiagnostics } from './aggregate.js'
+import { normalizeRule } from './clean-ignores.js'
 import { cacheDir, resolveBin, runCapture } from './core.js'
 import { dirnamePath, joinPath } from './path.js'
 
@@ -18,9 +19,9 @@ interface UnusedDirective {
   line: number
   rule?: string
 }
-const oxlintDisableRe = /^(?<prefix>\s*(?:\/\/|\/\*)\s*oxlint-disable(?:-next-line)?\s+)(?<rules>.+?)(?<close>\s*\*\/)?$/u
+const oxlintDisableRe = /^(?<prefix>\s*\/\*\s*oxlint-disable\s+)(?<rules>.+?)(?<close>\s*\*\/)?$/u
+const oxlintDisablePresentRe = /\/\*\s*oxlint-disable\s/u
 const biomeIgnoreAllRe = /^\s*\/\*\*\s*biome-ignore-all\s+(?<first>[\w/]+)(?<rest>.*?)\*\/\s*$/u
-const unusedRuleRe = /no problems were reported from (?<rule>[\w@/-]+)\)/u
 const trailingCommentRe = /\s*--.*$/u
 const biomeReasonRe = /:(?<reason>.*?)\*\//u
 const leadingWhitespaceRe = /^\s*/u
@@ -55,121 +56,115 @@ const rebuildBiomeLine = ({ line, rules }: { line: string; rules: string[] }): s
   const indent = indentMatch?.[0] ?? ''
   return `${indent}/** biome-ignore-all ${rules.join(', ')}: ${reason} */`
 }
-const collectOxlintUnused = ({
+const firedOxlintRules = ({
   configPath,
-  filePaths,
   oxlintBin,
-  root
+  tempPath
 }: {
   configPath: string
-  filePaths: string[]
   oxlintBin: string
-  root: string
-}): UnusedDirective[] => {
-  if (filePaths.length === 0) return []
+  tempPath: string
+}): Set<string> => {
   const result = runCapture({
-    args: [
-      oxlintBin,
-      '-c',
-      configPath,
-      '--report-unused-disable-directives-severity=error',
-      '--quiet',
-      '-f',
-      'json',
-      ...filePaths
-    ],
+    args: [oxlintBin, '-c', configPath, '-f', 'json', tempPath],
     command: 'bun',
     env: buildEnv(),
     label: 'oxlint-unused'
   })
-  let parsed: {
-    diagnostics?: {
-      filename?: string
-      labels?: { span?: { column?: number; line?: number } }[]
-      message?: string
-    }[]
+  const diagnostics = parseOxlintDiagnostics({ stdout: extractJson(result.stdout) })
+  const fired = new Set<string>()
+  for (const d of diagnostics) {
+    fired.add(d.rule)
+    for (const v of normalizeRule(d.rule)) fired.add(v)
   }
-  try {
-    parsed = JSON.parse(result.stdout) as typeof parsed
-  } catch {
-    return []
-  }
-  if (!Array.isArray(parsed.diagnostics)) return []
-  const out: UnusedDirective[] = []
-  for (const d of parsed.diagnostics) {
-    const message = d.message ?? ''
-    if (!message.startsWith('Unused oxlint-disable directive')) continue
-    const filename = d.filename ?? ''
-    if (filename.length === 0) continue
-    const span = d.labels?.[0]?.span
-    const ruleMatch = unusedRuleRe.exec(message)
-    out.push({
-      col: span?.column ?? 1,
-      file: filename.startsWith('/') ? filename : joinPath(root, filename),
-      line: span?.line ?? 1,
-      rule: ruleMatch?.groups?.rule
-    })
-  }
-  return out
+  return fired
 }
-const resolveOxlintLine = ({
-  hits,
-  line
-}: {
-  hits: UnusedDirective[]
-  line: string
-}): null | { removed: number; text?: string } => {
-  oxlintDisableRe.lastIndex = 0
-  const match = oxlintDisableRe.exec(line)
-  if (!match) return null
-  const prefix = match.groups?.prefix ?? ''
-  const rulesStr = match.groups?.rules ?? ''
-  const suffix = match.groups?.close ?? ''
-  const rules = splitOxlintRules(rulesStr)
-  const namedUnused = new Set<string>()
-  let dropWhole = false
-  for (const hit of hits)
-    if (hit.rule) namedUnused.add(hit.rule)
-    else dropWhole = true
-  if (dropWhole || namedUnused.size >= rules.length) return { removed: rules.length }
-  const kept = rules.filter(r => !namedUnused.has(r))
-  if (kept.length === rules.length) return { removed: 0, text: line }
-  return { removed: rules.length - kept.length, text: `${prefix}${kept.join(', ')}${suffix}` }
+const isOxlintRuleFired = (rule: string, fired: Set<string>): boolean => {
+  if (fired.has(rule)) return true
+  for (const v of normalizeRule(rule)) if (fired.has(v)) return true
+  return false
 }
-const removeOxlintFromFile = async ({
-  directives,
+const parseOxlintDirectiveLines = (lines: string[]): { index: number; rules: string[] }[] => {
+  const directiveLines: { index: number; rules: string[] }[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? ''
+    oxlintDisableRe.lastIndex = 0
+    const match = oxlintDisableRe.exec(line)
+    if (!match) continue
+    directiveLines.push({ index, rules: splitOxlintRules(match.groups?.rules ?? '') })
+  }
+  return directiveLines
+}
+const processOxlintFile = async ({
+  configPath,
   dryRun,
-  filePath
+  filePath,
+  oxlintBin
 }: {
-  directives: UnusedDirective[]
+  configPath: string
   dryRun: boolean
   filePath: string
-}): Promise<number> => {
+  oxlintBin: string
+}): Promise<{ diagnostics: UnusedDirective[]; removed: number }> => {
   const f = file(filePath)
-  if (!(await f.exists())) return 0
+  if (!(await f.exists())) return { diagnostics: [], removed: 0 }
   const content = await f.text()
   const lines = content.split('\n')
-  const byLine = new Map<number, UnusedDirective[]>()
-  for (const d of directives) {
-    const list = byLine.get(d.line) ?? []
-    list.push(d)
-    byLine.set(d.line, list)
+  const directiveLines = parseOxlintDirectiveLines(lines)
+  if (directiveLines.length === 0) return { diagnostics: [], removed: 0 }
+  const directiveIndexes = new Set(directiveLines.map(d => d.index))
+  const stripped = lines.filter((_, index) => !directiveIndexes.has(index))
+  const tempPath = joinPath(
+    dirnamePath(filePath),
+    `.lintmax-unused-${Date.now()}-${Math.random().toString(36).slice(2)}${extOf(filePath)}`
+  )
+  await write(tempPath, stripped.join('\n'))
+  let fired: Set<string>
+  try {
+    fired = firedOxlintRules({ configPath, oxlintBin, tempPath })
+  } finally {
+    await file(tempPath).delete()
   }
   const result: string[] = []
+  const diagnostics: UnusedDirective[] = []
   let removed = 0
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? ''
-    const hits = byLine.get(index + 1)
-    const resolved = hits ? resolveOxlintLine({ hits, line }) : null
-    if (!resolved) {
+    const directive = directiveLines.find(d => d.index === index)
+    if (!directive) {
       result.push(line)
       continue
     }
-    removed += resolved.removed
-    if (typeof resolved.text === 'string') result.push(resolved.text)
+    oxlintDisableRe.lastIndex = 0
+    const match = oxlintDisableRe.exec(line)
+    const prefix = match?.groups?.prefix ?? '/* oxlint-disable '
+    const suffix = match?.groups?.close ?? ' */'
+    const kept: string[] = []
+    for (const rule of directive.rules)
+      if (isOxlintRuleFired(rule, fired)) kept.push(rule)
+      else {
+        removed += 1
+        diagnostics.push({ col: 1, file: filePath, line: index + 1, rule })
+      }
+    if (kept.length === 0) continue
+    if (kept.length === directive.rules.length) {
+      result.push(line)
+      continue
+    }
+    result.push(`${prefix}${kept.join(', ')}${suffix}`)
   }
   if (removed > 0 && !dryRun) await write(filePath, result.join('\n'))
-  return removed
+  return { diagnostics, removed }
+}
+const findOxlintDisableFiles = async (filePaths: string[]): Promise<string[]> => {
+  const out: string[] = []
+  for (const fp of filePaths) {
+    const f = file(fp)
+    if (!(await f.exists())) continue
+    const content = await f.text()
+    if (oxlintDisablePresentRe.test(content)) out.push(fp)
+  }
+  return out
 }
 const findBiomeIgnoreAllFiles = async (filePaths: string[]): Promise<string[]> => {
   const out: string[] = []
@@ -288,22 +283,17 @@ const removeUnusedSuppressions = async ({
     resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
     resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
   ])
-  const oxlintUnused = collectOxlintUnused({ configPath: oxlintConfigPath, filePaths: targets, oxlintBin, root })
-  const oxlintByFile = new Map<string, UnusedDirective[]>()
-  for (const d of oxlintUnused) {
-    const list = oxlintByFile.get(d.file) ?? []
-    list.push(d)
-    oxlintByFile.set(d.file, list)
-  }
   const changedFiles = new Set<string>()
-  const diagnostics: UnusedDirective[] = [...oxlintUnused]
+  const diagnostics: UnusedDirective[] = []
   let removed = 0
-  for (const [filePath, directives] of oxlintByFile) {
-    const count = await removeOxlintFromFile({ directives, dryRun, filePath })
-    if (count > 0) {
-      removed += count
+  const oxlintFiles = await findOxlintDisableFiles(targets)
+  for (const filePath of oxlintFiles) {
+    const outcome = await processOxlintFile({ configPath: oxlintConfigPath, dryRun, filePath, oxlintBin })
+    if (outcome.removed > 0) {
+      removed += outcome.removed
       changedFiles.add(filePath)
     }
+    diagnostics.push(...outcome.diagnostics)
   }
   const biomeFiles = await findBiomeIgnoreAllFiles(targets)
   for (const filePath of biomeFiles) {

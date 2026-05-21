@@ -1,5 +1,4 @@
 /* eslint-disable complexity */
-/* oxlint-disable eslint/complexity */
 import { env as bunEnv, Glob, spawnSync } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
