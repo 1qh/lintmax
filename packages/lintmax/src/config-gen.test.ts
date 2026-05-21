@@ -1,4 +1,3 @@
-/** biome-ignore-all lint/suspicious/useAwait: async test fns */
 import { Glob } from 'bun'
 import { afterAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
