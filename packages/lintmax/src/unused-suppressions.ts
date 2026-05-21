@@ -22,6 +22,7 @@ interface UnusedDirective {
 const oxlintDisableRe = /^(?<prefix>\s*\/\*\s*oxlint-disable\s+)(?<rules>.+?)(?<close>\s*\*\/)?$/u
 const oxlintDisablePresentRe = /\/\*\s*oxlint-disable\s/u
 const biomeIgnoreAllRe = /^\s*\/\*\*\s*biome-ignore-all\s+(?<first>[\w/]+)(?<rest>.*?)\*\/\s*$/u
+const biomeIgnoreAllLineRe = /^\s*\/\/\s*biome-ignore-all\s+(?<first>[\w/]+)(?<rest>.*)$/u
 const trailingCommentRe = /\s*--.*$/u
 const biomeReasonRe = /:(?<reason>.*?)\*\//u
 const leadingWhitespaceRe = /^\s*/u
@@ -222,7 +223,8 @@ const parseBiomeDirectiveLines = (lines: string[]): { index: number; rules: stri
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? ''
     biomeIgnoreAllRe.lastIndex = 0
-    const match = biomeIgnoreAllRe.exec(line)
+    biomeIgnoreAllLineRe.lastIndex = 0
+    const match = biomeIgnoreAllRe.exec(line) ?? biomeIgnoreAllLineRe.exec(line)
     if (!match) continue
     const first = match.groups?.first ?? ''
     const rest = match.groups?.rest ?? ''

@@ -68,4 +68,13 @@ describe('removeUnusedSuppressions', () => {
     await removeUnusedSuppressions({ filePaths: [path], root })
     expect(readFile(path)).toContain('biome-ignore-all lint/suspicious/noDoubleEquals')
   })
+  test('removes unused // biome-ignore-all line-comment form', async () => {
+    const path = writeFile(
+      'biome-line-unused.ts',
+      '// biome-ignore-all lint/suspicious/noDoubleEquals: x\nconst c = 1\nexport { c }\n'
+    )
+    const result = await removeUnusedSuppressions({ filePaths: [path], root })
+    expect(result.removed).toBeGreaterThan(0)
+    expect(readFile(path)).not.toContain('biome-ignore-all')
+  })
 })
