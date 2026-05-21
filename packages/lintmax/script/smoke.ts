@@ -59,7 +59,7 @@ try {
   run({ cmd: ['bun', lintmaxCli, 'fix'], label: 'lintmax fix' })
   runCheck({ label: 'lintmax check' })
   await writeConfig({
-    content: "import { defineConfig } from 'lintmax'\nexport default defineConfig({ ignores: ['generated/**'] })\n"
+    content: "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ ignores: ['generated/**'] })\n"
   })
   runCheck({ label: 'shared ignores propagation' })
   const biomeConfig = await readJson<{ files?: { includes?: string[] } }>('node_modules/.cache/lintmax/biome.json')
@@ -85,7 +85,7 @@ try {
     throw new Error('default shared ignores leaked into generated eslint sync options')
   await writeConfig({
     content:
-      "import { defineConfig } from 'lintmax'\nexport default defineConfig({ overrides: { '**/*.test.ts': { eslint: ['no-console'] } } })\n"
+      "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ overrides: { '**/*.test.ts': { eslint: ['no-console'] } } })\n"
   })
   runCheck({ label: 'override map shorthand' })
   const sharedOverrideGenerated = await file(join(dir, 'node_modules/.cache/lintmax/eslint.generated.mjs')).text()
@@ -99,7 +99,7 @@ try {
     throw new Error('internal shared override marker leaked into generated eslint config')
   await writeConfig({
     content:
-      "import { defineConfig } from 'lintmax'\nexport default defineConfig({ overrides: { '**/*.ts': { eslint: {} } } })\n"
+      "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ overrides: { '**/*.ts': { eslint: {} } } })\n"
   })
   runCheckExpectFail({
     expect: 'overrides[0].eslint must be an array of rule names',
@@ -107,7 +107,7 @@ try {
   })
   await writeConfig({
     content:
-      "import { defineConfig } from 'lintmax'\nexport default defineConfig({ overrides: { '**/*.ts': { invalid: ['no-console'] } } })\n"
+      "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ overrides: { '**/*.ts': { invalid: ['no-console'] } } })\n"
   })
   runCheckExpectFail({
     expect: 'overrides.**/*.ts.invalid is not supported',
@@ -115,7 +115,7 @@ try {
   })
   await writeConfig({
     content:
-      "import { defineConfig } from 'lintmax'\nconst bad: any = new Map()\nexport default defineConfig({ overrides: bad })\n"
+      "import { defineConfig } from 'lintmax'\n\nconst bad: any = new Map()\nexport default defineConfig({ overrides: bad })\n"
   })
   runCheckExpectFail({
     expect: 'overrides must be an object',
@@ -123,7 +123,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ biome: { overrides: [{ includes: ['src/**'] }] } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ biome: { overrides: [{ includes: ['src/**'] }] } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -132,7 +132,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ oxlint: { overrides: [{ files: ['src/**'] }] } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ oxlint: { overrides: [{ files: ['src/**'] }] } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -141,7 +141,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ overrides: { '**/*.ts': { eslint: ['lintmax/does-not-exist'] } } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ overrides: { '**/*.ts': { eslint: ['lintmax/does-not-exist'] } } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -150,7 +150,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ overrides: { '**/*.ts': { eslint: ['react-hooks/no-deriving-state-in-effects'] } } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ overrides: { '**/*.ts': { eslint: ['react-hooks/no-deriving-state-in-effects'] } } })\n"
   )
   run({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -158,7 +158,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ biome: { off: ['lintmax/does-not-exist'] } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ biome: { off: ['lintmax/does-not-exist'] } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -167,7 +167,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ oxlint: { off: ['lintmax/does-not-exist'] } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ oxlint: { off: ['lintmax/does-not-exist'] } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -185,7 +185,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ eslint: { tailwind: false } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ eslint: { tailwind: false } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -194,7 +194,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ eslint: { tsconfigRootDir: '/tmp' } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ eslint: { tsconfigRootDir: '/tmp' } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -203,7 +203,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ eslint: { append: [{ parserOptions: { ecmaVersion: Number.NaN } }] } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ eslint: { append: [{ parserOptions: { ecmaVersion: Number.NaN } }] } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -212,7 +212,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ eslint: { append: [new Date() as any] } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ eslint: { append: [new Date() as any] } })\n"
   )
   runExpectFail({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -229,7 +229,7 @@ try {
   })
   await write(
     join(dir, 'lintmax.config.ts'),
-    "import { defineConfig } from 'lintmax'\nexport default defineConfig({ eslint: { off: ['@typescript-eslint/await-thenable'] } })\n"
+    "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ eslint: { off: ['@typescript-eslint/await-thenable'] } })\n"
   )
   run({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
@@ -247,7 +247,7 @@ try {
   await mkdir(join(dir, 'src/styles'), { recursive: true })
   await write(join(dir, 'ui/src/styles/globals.css'), "@import 'tailwindcss';\n")
   await write(join(dir, 'src/styles/globals.css'), "@import 'tailwindcss';\n")
-  await write(join(dir, 'lintmax.config.ts'), "import { defineConfig } from 'lintmax'\nexport default defineConfig({})\n")
+  await write(join(dir, 'lintmax.config.ts'), "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({})\n")
   run({
     cmd: ['bun', 'node_modules/lintmax/dist/cli.mjs', 'check'],
     label: 'tailwind auto-detection prefers ui path on ambiguity'
