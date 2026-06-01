@@ -807,7 +807,8 @@ const createBiomeConfig = async ({
         quoteStyle: 'single',
         semicolons: 'asNeeded',
         trailingCommas: 'none'
-      }
+      },
+      globals: ['Bun']
     },
     json: { formatter: { trailingCommas: 'none' } },
     linter: {
