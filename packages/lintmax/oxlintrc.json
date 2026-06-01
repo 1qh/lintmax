@@ -103,6 +103,26 @@
         "case": "kebabCase"
       }
     ],
+    "unicorn/import-style": [
+      "error",
+      {
+        "styles": {
+          "node:child_process": { "default": true, "named": true, "namespace": true },
+          "node:crypto": { "default": true, "named": true, "namespace": true },
+          "node:events": { "default": true, "named": true, "namespace": true },
+          "node:fs": { "default": true, "named": true, "namespace": true },
+          "node:fs/promises": { "default": true, "named": true, "namespace": true },
+          "node:module": { "default": true, "named": true, "namespace": true },
+          "node:net": { "default": true, "named": true, "namespace": true },
+          "node:os": { "default": true, "named": true, "namespace": true },
+          "node:path": { "default": true, "named": true, "namespace": true },
+          "node:process": { "default": true, "named": true, "namespace": true },
+          "node:url": { "default": true, "named": true, "namespace": true },
+          "node:util": { "default": true, "named": true, "namespace": true },
+          "node:zlib": { "default": true, "named": true, "namespace": true }
+        }
+      }
+    ],
     "unicorn/no-array-callback-reference": "off",
     "unicorn/no-useless-undefined": "off",
     "unicorn/no-nested-ternary": "off",
