@@ -74,6 +74,7 @@
     "no-ternary": "off",
     "no-undef": "off",
     "no-undefined": "off",
+    "node/callback-return": "off",
     "node/no-process-env": "off",
     "oxc/no-async-await": "off",
     "promise/avoid-new": "off",
