@@ -478,7 +478,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   const isIgnored = (filePath: string): boolean => ignoreGlobs.some(g => g.match(filePath))
   const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
   if (command === 'fix') {
-    if (shouldComments) await fixComments({ files: allGitFiles })
+    if (shouldComments) await fixComments({ files: sourceFiles })
     if (sourceFiles.length > 0) await cleanIgnores(sourceFiles.map(f => joinPath(cwd, f)))
     const fixSteps = createFixSteps({
       biomeBin,
@@ -514,7 +514,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       sortPkgJson
     })
     if (shouldComments) {
-      const commentDiags = await checkComments({ files: allGitFiles })
+      const commentDiags = await checkComments({ files: sourceFiles })
       allDiagnostics.push(...commentDiags)
     }
     const cnDiags = await checkClassName({ root: cwd })
@@ -559,7 +559,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     sortPkgJson
   })
   if (shouldComments) {
-    const commentDiags = await checkComments({ files: allGitFiles })
+    const commentDiags = await checkComments({ files: sourceFiles })
     allDiagnostics.push(...commentDiags)
   }
   const cnDiags = await checkClassName({ root: cwd })
