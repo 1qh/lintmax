@@ -15,7 +15,7 @@ Designed for coding agents, not humans
 > Just copy & paste to your coding agent
 
 ```
-Read https://lintmax.vercel.app/llms-full.txt then set up lintmax for this project
+Read https://lintmax.noboil.dev/llms-full.txt then set up lintmax for this project
 ```
 
-> Visit [Documentation](https://lintmax.vercel.app/docs) for more details
+> Visit [Documentation](https://lintmax.noboil.dev) for more details
