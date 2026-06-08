@@ -217,11 +217,6 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
           '@typescript-eslint/prefer-readonly-parameter-types': 'off',
           '@typescript-eslint/strict-boolean-expressions': 'off',
           camelcase: 'off',
-          'capitalized-comments': [
-            'error',
-            'always',
-            { ignorePattern: 'oxlint|biome|console|let|const|return|if|for|throw' }
-          ],
           curly: ['error', 'multi'],
           'id-length': 'off',
           'max-lines': 'off',

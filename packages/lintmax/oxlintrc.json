@@ -26,13 +26,6 @@
     "vitest"
   ],
   "rules": {
-    "capitalized-comments": [
-      "error",
-      "always",
-      {
-        "ignorePattern": "oxlint|biome|console|let|const|return|if|for|throw"
-      }
-    ],
     "curly": "off",
     "id-length": "off",
     "import/group-exports": "off",
