@@ -26,6 +26,7 @@
     "vitest"
   ],
   "rules": {
+    "capitalized-comments": "off",
     "curly": "off",
     "id-length": "off",
     "import/group-exports": "off",
