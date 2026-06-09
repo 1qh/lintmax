@@ -2,6 +2,7 @@
 import { env as bunEnv, Glob, spawnSync } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
+import type { ExtraBins } from './extra-coverage.js'
 import type { DangerousSuppression } from './ignores.js'
 import type { UnusedDirective } from './unused-suppressions.js'
 import {
@@ -30,6 +31,7 @@ import {
   run,
   runCapture
 } from './core.js'
+import { runExtraCoverage } from './extra-coverage.js'
 import { formatGrouped } from './format.js'
 import { findDangerousSuppressions } from './ignores.js'
 import { sync } from './index.js'
@@ -37,6 +39,10 @@ import { checkJsxExtension } from './jsx-extension.js'
 import { dirnamePath, joinPath } from './path.js'
 import { removeUnusedSuppressions } from './unused-suppressions.js'
 
+const emitExtra = (result: { diagnostics: Diagnostic[]; notes: string[] }): Diagnostic[] => {
+  for (const note of result.notes) process.stderr.write(`lintmax: ${note}\n`)
+  return result.diagnostics
+}
 const createStepExecutor = ({
   env,
   failures,
@@ -159,7 +165,14 @@ const createCheckSteps = ({
       label: 'biome'
     },
     {
-      args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--quiet', ...oxlintCliAllow],
+      args: [
+        oxlintBin,
+        '-c',
+        joinPath(dir, '.oxlintrc.json'),
+        '--quiet',
+        '--no-error-on-unmatched-pattern',
+        ...oxlintCliAllow
+      ],
       label: 'oxlint'
     },
     {
@@ -208,7 +221,16 @@ const createFixSteps = ({
       silent: true
     },
     {
-      args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--fix', '--fix-suggestions', '--quiet', ...oxlintCliAllow],
+      args: [
+        oxlintBin,
+        '-c',
+        joinPath(dir, '.oxlintrc.json'),
+        '--fix',
+        '--fix-suggestions',
+        '--quiet',
+        '--no-error-on-unmatched-pattern',
+        ...oxlintCliAllow
+      ],
       label: 'oxlint',
       silent: true
     },
@@ -326,7 +348,16 @@ const runAgentCheck = ({
       failures,
       label: 'oxlint',
       opts: {
-        args: [oxlintBin, '-c', joinPath(dir, '.oxlintrc.json'), '--quiet', '-f', 'json', ...oxlintCliAllow],
+        args: [
+          oxlintBin,
+          '-c',
+          joinPath(dir, '.oxlintrc.json'),
+          '--quiet',
+          '--no-error-on-unmatched-pattern',
+          '-f',
+          'json',
+          ...oxlintCliAllow
+        ],
         command: 'bun'
       },
       parser: ({ stdout }) => parseOxlintDiagnostics({ stdout })
@@ -386,6 +417,8 @@ const isGitWorkTree = ({ env, root }: { env: Record<string, string | undefined>;
     stderr: 'pipe',
     stdout: 'pipe'
   }).exitCode === 0
+const PRETTIER_EXTENSIONS = ['.md', '.yml', '.yaml']
+const isPrettierTarget = (filePath: string): boolean => PRETTIER_EXTENSIONS.some(ext => filePath.endsWith(ext))
 const createPrettierMarkdownTargets = ({
   gitFiles,
   gitWorkTree
@@ -393,8 +426,8 @@ const createPrettierMarkdownTargets = ({
   gitFiles: string[]
   gitWorkTree: boolean
 }): string[] => {
-  if (!gitWorkTree) return ['**/*.md']
-  return gitFiles.filter(filePath => filePath.endsWith('.md'))
+  if (!gitWorkTree) return PRETTIER_EXTENSIONS.map(ext => `**/*${ext}`)
+  return gitFiles.filter(isPrettierTarget)
 }
 const throwAgentResults = ({ diagnostics, failures }: { diagnostics: Diagnostic[]; failures: FailureRecord[] }) => {
   if (diagnostics.length === 0 && failures.length === 0) return
@@ -446,13 +479,16 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   })
   if (command === 'fix' && runtime.compact === true) await runCompactContinue({ human, mode: 'fix' })
   const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs')]
-  const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin] = await Promise.all([
+  const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, taploBin, dprintBin] = await Promise.all([
     resolveBin({ bin: 'sort-package-json', pkg: 'sort-package-json' }),
     resolveBin({ bin: 'biome', pkg: '@biomejs/biome' }),
     resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
     resolveBin({ bin: 'eslint', pkg: 'eslint' }),
-    resolveBin({ bin: 'prettier', pkg: 'prettier' })
+    resolveBin({ bin: 'prettier', pkg: 'prettier' }),
+    resolveBin({ bin: 'taplo', pkg: '@taplo/cli' }),
+    resolveBin({ bin: 'dprint', pkg: 'dprint' })
   ])
+  const extraBins: ExtraBins = { dprint: dprintBin, taplo: taploBin }
   const hasFlowmark =
     spawnSync({
       cmd: ['which', 'flowmark'],
@@ -498,6 +534,12 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       await removeUnusedSuppressions({ filePaths: sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
     if (human) {
       runSteps({ steps: checkSteps })
+      const extraHuman = emitExtra(runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles }))
+      if (extraHuman.length > 0) {
+        const output = formatGrouped({ files: aggregate({ diagnostics: extraHuman }) })
+        if (output.length > 0) process.stdout.write(`${output}\n`)
+        failures.push({ code: 1, label: 'extra-coverage' })
+      }
       throwIfFailures()
       return
     }
@@ -520,6 +562,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     const cnDiags = await checkClassName({ root: cwd })
     const jsxDiags = await checkJsxExtension({ root: cwd })
     allDiagnostics.push(...cnDiags, ...jsxDiags)
+    allDiagnostics.push(...emitExtra(runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles })))
     throwAgentResults({ diagnostics: allDiagnostics, failures })
     return
   }
@@ -535,7 +578,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       ...cnDiagsHuman,
       ...jsxDiagsHuman,
       ...unusedToDiagnostics({ root: cwd, unused: unusedHuman.diagnostics }),
-      ...dangerousToDiagnostics(await findDangerousSuppressions(cwd))
+      ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
+      ...emitExtra(runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles }))
     ]
     if (humanCustomDiags.length > 0) {
       const grouped = aggregate({ diagnostics: humanCustomDiags })
@@ -574,6 +618,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     allDiagnostics.push(...unusedToDiagnostics({ root: cwd, unused: unusedAgent.diagnostics }))
   }
   allDiagnostics.push(...dangerousToDiagnostics(await findDangerousSuppressions(cwd)))
+  allDiagnostics.push(...emitExtra(runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles })))
   if (allDiagnostics.length > 0 || failures.length > 0) {
     const grouped = aggregate({ diagnostics: allDiagnostics })
     const output = formatGrouped({ files: grouped })

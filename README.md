@@ -19,3 +19,14 @@ Read https://lintmax.noboil.dev/llms-full.txt then set up lintmax for this proje
 ```
 
 > Visit [Documentation](https://lintmax.noboil.dev) for more details
+
+## Commands
+
+| Command           | Does                                               |
+| ----------------- | -------------------------------------------------- |
+| `lintmax fix`     | Format, auto-fix, and gate all files (the default) |
+| `lintmax check`   | Verify all files without modifying (CI)            |
+| `lintmax rules`   | List every enabled rule                            |
+| `lintmax version` | Show version                                       |
+
+Everything else is automatic: linter `@latest` refresh, self-update, project + workflow currency, the green-tree cache, and the staleness scan all run on their own — never a command.

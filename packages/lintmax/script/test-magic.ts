@@ -2,6 +2,7 @@ import { spawnSync } from 'bun'
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+const OK_LINE_RE = /^ok(?: \(cached\))?$/u
 const root = join(import.meta.dir, '..')
 const workFile = join(root, 'src/magic-work.ts')
 const cli = join(root, 'dist/cli.mjs')
@@ -85,14 +86,14 @@ assert(
   fixResult.exitCode === 0,
   `fix should exit 0, got ${fixResult.exitCode}\n${fixStdout}\n${decoder.decode(fixResult.stderr)}`
 )
-assert(fixStdout.trim() === '', 'fix should be silent')
+assert(OK_LINE_RE.test(fixStdout.trim()), `fix should emit only ok, got: ${fixStdout.trim()}`)
 const recheckResult = run(['check'])
 const recheckStdout = decoder.decode(recheckResult.stdout)
 assert(
   recheckResult.exitCode === 0,
   `recheck should exit 0, got ${recheckResult.exitCode}\n${recheckStdout}\n${decoder.decode(recheckResult.stderr)}`
 )
-assert(recheckStdout.trim() === '', 'recheck should be silent')
+assert(OK_LINE_RE.test(recheckStdout.trim()), `recheck should emit only ok, got: ${recheckStdout.trim()}`)
 const fixed = readFileSync(workFile, 'utf8')
 const lines = fixed.split('\n')
 for (const line of lines) {

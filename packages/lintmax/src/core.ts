@@ -138,6 +138,7 @@ const runCapture = ({ args, command, env }: RunOpts): { exitCode: number; stderr
     stdout: decodeText(result.stdout)
   }
 }
+const envValue = (name: string): string => bunEnv[name] ?? ''
 const readVersion = async () => {
   const pkg = await readRequiredJson<{ version: string }>({
     path: joinPath(lintmaxRoot, 'package.json')
@@ -148,11 +149,10 @@ const usage = ({ version }: { version: string }) => {
   process.stdout.write(`lintmax v${version}\n\n`)
   process.stdout.write('Usage: lintmax <command>\n\n')
   process.stdout.write('Commands:\n')
-  process.stdout.write('  init     Scaffold config files for a new project\n')
-  process.stdout.write('  fix      Auto-fix and format all files\n')
-  process.stdout.write('  check    Check all files without modifying\n')
-  process.stdout.write('  rules    List all enabled rules\n')
-  process.stdout.write('  --version  Show version\n')
+  process.stdout.write('  fix       Format, auto-fix, and gate all files (default)\n')
+  process.stdout.write('  check     Verify all files without modifying (CI)\n')
+  process.stdout.write('  rules     List all enabled rules\n')
+  process.stdout.write('  version   Show version\n')
 }
 export type { FailureRecord, Pkg, RunOpts, StepSpec }
 export {
@@ -162,6 +162,7 @@ export {
   cwd,
   decodeText,
   ensureDirectory,
+  envValue,
   ignoreEntries,
   lintmaxRoot,
   pathExists,

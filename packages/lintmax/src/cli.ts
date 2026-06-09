@@ -1,17 +1,12 @@
 #!/usr/bin/env bun
 import { CliExitError, readVersion, usage } from './core.js'
-import { runInit } from './init.js'
-import { runLint } from './pipeline.js'
+import { runGate } from './gate.js'
 import { extractAllRules, formatRulesCompact, formatRulesHuman } from './rules.js'
 
 const command = process.argv[2]
 const main = async () => {
   const version = await readVersion()
-  if (command === 'init') {
-    await runInit()
-    return
-  }
-  if (command === '--version' || command === '-v') {
+  if (command === '--version' || command === '-v' || command === 'version') {
     process.stdout.write(`${version}\n`)
     return
   }
@@ -22,19 +17,13 @@ const main = async () => {
     process.stdout.write(`${output}\n`)
     return
   }
-  if (command === 'ignores') {
-    const { runIgnores } = await import('./ignores.js')
-    await runIgnores(process.argv.includes('--verbose'))
-    return
-  }
   if (command !== 'fix' && command !== 'check') {
     usage({ version })
     if (command === '--help' || command === '-h') return
     throw new CliExitError({ code: 1 })
   }
   const human = process.argv.includes('--human')
-  await runLint({ command, human })
-  process.stdout.write('ok\n')
+  await runGate({ command, human, version })
 }
 try {
   await main()
