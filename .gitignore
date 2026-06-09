@@ -13,6 +13,8 @@
 bun.lock
 build/
 coverage/
+coverage-work.ts
+coverage-work.tsx
 dist/
 next-env.d.ts
 node_modules/
