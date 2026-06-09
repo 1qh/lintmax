@@ -33,7 +33,7 @@ sync.ts
 
 ### Rules
 
-- Zero output on success (exit 0)
+- Prints `ok` on success (exit 0)
 - Exit 1 on errors with grouped output
 - Deduplication across linters (biome > oxlint > eslint priority)
 - Prettier violations show as `unformatted` (no line numbers)
@@ -52,7 +52,7 @@ lintmax fix --human
 ## CLI Reference
 
 ```
-lintmax fix              # fix all, delete comments, silent on success
+lintmax fix              # fix all, delete comments, prints `ok` on success
 lintmax fix --human      # fix all, show verbose output
 lintmax check            # compact error output
 lintmax check --human    # verbose output from each tool

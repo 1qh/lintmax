@@ -12,7 +12,7 @@ bun add -d lintmax
 ## Quick Start
 
 ```bash
-# Auto-fix everything (agent mode - silent on success)
+# Auto-fix everything (agent mode - prints `ok` on success)
 lintmax fix
 
 # Check for issues (agent mode - grouped output)
@@ -40,7 +40,7 @@ src/utils.ts
   800,804 eslint-plugin-react-perf(jsx-no-jsx-as-prop)
 ```
 
-Zero output on success (exit code 0 is enough).
+Prints `ok` on success (exit code 0).
 
 ### Human output (`--human`)
 
