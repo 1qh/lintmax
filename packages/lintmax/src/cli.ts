@@ -34,6 +34,7 @@ const main = async () => {
   }
   const human = process.argv.includes('--human')
   await runLint({ command, human })
+  process.stdout.write('ok\n')
 }
 try {
   await main()
