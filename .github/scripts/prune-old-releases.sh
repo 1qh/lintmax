@@ -27,8 +27,9 @@ gh release list --repo "$this_repo" --limit 200 --json tagName --jq '.[].tagName
 	while read -r t; do
 		[ -z "$t" ] && continue
 		is_older "$t" "$keep" || continue
-		gh release delete "$t" --repo "$this_repo" --yes --cleanup-tag 2>/dev/null &&
-			echo "deleted release+tag $t" || true
+		if gh release delete "$t" --repo "$this_repo" --yes --cleanup-tag 2>/dev/null; then
+			echo "deleted release+tag $t"
+		fi
 		sleep 1
 	done
 
@@ -36,8 +37,9 @@ all_tags "$this_repo" |
 	while read -r t; do
 		[ -z "$t" ] && continue
 		is_older "$t" "$keep" || continue
-		gh api -X DELETE "repos/$this_repo/git/refs/tags/$t" 2>/dev/null &&
-			echo "deleted dangling tag $t" || true
+		if gh api -X DELETE "repos/$this_repo/git/refs/tags/$t" 2>/dev/null; then
+			echo "deleted dangling tag $t"
+		fi
 		sleep 1
 	done
 
