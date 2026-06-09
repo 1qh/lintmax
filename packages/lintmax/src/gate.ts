@@ -1,6 +1,5 @@
 import { spawnSync } from 'bun'
 import { bunEnv, cwd, envValue } from './core.js'
-import { ensureProjectCurrency } from './currency.js'
 import { runLint } from './pipeline.js'
 import { formatStaleness, scanStaleness } from './staleness.js'
 import { hashTree, loadState, saveState } from './state.js'
@@ -57,7 +56,6 @@ const emitStaleness = async (): Promise<void> => {
 const runGate = async ({ command, human, version }: { command: 'check' | 'fix'; human: boolean; version: string }) => {
   const startKey = computeGreenKey(version)
   if (await tryCached(startKey)) return
-  if (command === 'fix') await ensureProjectCurrency()
   const stalePromise = emitStaleness()
   await runLint({ command, human })
   await persistGreen(computeGreenKey(version))

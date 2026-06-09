@@ -1,4 +1,4 @@
-import { env as bunEnv, file, spawnSync, write } from 'bun'
+import { env as bunEnv, file, spawnSync } from 'bun'
 import { isRecord } from './normalize.js'
 import { dirnamePath, fromFileUrl, joinPath } from './path.js'
 
@@ -35,7 +35,6 @@ class CliExitError extends Error {
 const decoder = new TextDecoder()
 const cacheDir = 'node_modules/.cache/lintmax'
 const cwd = process.cwd()
-const ignoreEntries = ['.cache/', '.eslintcache']
 const lintmaxRoot = dirnamePath(dirnamePath(fromFileUrl(import.meta.url)))
 const PRETTIER_MD_ARGS = [
   '--single-quote',
@@ -70,8 +69,6 @@ const readRequiredJson = async <T>({ path }: { path: string }): Promise<T> => {
   const text = await file(path).text()
   return JSON.parse(text) as T
 }
-const writeJson = async ({ data, path }: { data: Record<string, unknown>; path: string }) =>
-  write(path, `${JSON.stringify(data, null, 2)}\n`)
 const ensureDirectory = ({ directory }: { directory: string }) => {
   const result = spawnSync({
     cmd: ['mkdir', '-p', directory],
@@ -163,7 +160,6 @@ export {
   decodeText,
   ensureDirectory,
   envValue,
-  ignoreEntries,
   lintmaxRoot,
   pathExists,
   PRETTIER_MD_ARGS,
@@ -173,6 +169,5 @@ export {
   resolveBin,
   run,
   runCapture,
-  usage,
-  writeJson
+  usage
 }
