@@ -3,6 +3,9 @@ on:
   push:
   schedule:
     - cron: '0 0 * * 1'
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -11,20 +14,3 @@ jobs:
       - run: sudo apt-get install -y zsh
       - uses: oven-sh/setup-bun@v2
       - run: bun action
-  prune-history:
-    needs: [ci]
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          sparse-checkout: .github/scripts
-          sparse-checkout-cone-mode: false
-      - name: prune all prior CI runs (single-present-run discipline)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          KEEP_RUN_ID: ${{ github.run_id }}
-        run: .github/scripts/prune-ci-runs.sh
