@@ -1,5 +1,4 @@
-/* eslint-disable max-depth, no-continue */
-/** biome-ignore-all lint/nursery/noContinue: AST traversal requires continue */
+/* eslint-disable max-depth */
 import { file, Glob } from 'bun'
 import ts from 'typescript'
 import type { Diagnostic } from './aggregate.js'
@@ -78,12 +77,11 @@ const checkClassNameFile = async (filePath: string): Promise<Diagnostic[]> => {
 const checkClassName = async ({ root }: { root: string }): Promise<Diagnostic[]> => {
   const glob = new Glob('**/*.tsx')
   const allDiagnostics: Diagnostic[] = []
-  for await (const path of glob.scan({ absolute: true, cwd: root, dot: false })) {
-    if (path.includes('node_modules') || path.includes('readonly') || path.includes('.next') || path.includes('dist'))
-      continue
-    const diagnostics = await checkClassNameFile(path)
-    allDiagnostics.push(...diagnostics)
-  }
+  for await (const path of glob.scan({ absolute: true, cwd: root, dot: false }))
+    if (!(path.includes('node_modules') || path.includes('readonly') || path.includes('.next') || path.includes('dist'))) {
+      const diagnostics = await checkClassNameFile(path)
+      allDiagnostics.push(...diagnostics)
+    }
   return allDiagnostics
 }
 export { BANNED_CALLEE_NAMES, checkClassName, checkClassNameFile, CN_NAMES, findClassNameViolations }

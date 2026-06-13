@@ -9,6 +9,7 @@ const metadata: Metadata = {
 const fonts = [sans.variable, mono.variable, 'font-sans', 'tracking-[-0.02em]'].join(' ')
 const Layout = ({ children }: LayoutProps<'/'>) => (
   <html className={fonts} lang='en' suppressHydrationWarning>
+    {/* biome-ignore lint/nursery/noUndeclaredClasses: standard tailwind v4 utilities biome cannot resolve */}
     <body className='flex flex-col min-h-screen antialiased'>
       <Providers>{children}</Providers>
     </body>

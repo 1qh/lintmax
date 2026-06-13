@@ -127,7 +127,10 @@ const resolveBiomeSchema = async ({
     $defs: Record<string, { properties?: Record<string, unknown> }>
   }>({ path: schemaPath })
   const rulesProps = schema.$defs.Rules?.properties ?? {}
-  const categories = Object.keys(rulesProps).filter(k => k !== 'recommended')
+  const categories = Object.keys(rulesProps).filter(k => {
+    const groupDef = schema.$defs[k.charAt(0).toUpperCase() + k.slice(1)]
+    return groupDef?.properties !== undefined
+  })
   const ruleMap = new Map<string, string>()
   for (const cat of categories) {
     const key = cat.charAt(0).toUpperCase() + cat.slice(1)
@@ -754,6 +757,16 @@ const createBiomeConfig = async ({
           categoryMap: ruleMap,
           ruleNames: allRulesOff
         })
+      }
+    },
+    {
+      includes: ['**'],
+      linter: {
+        rules: {
+          nursery: {
+            useReactFunctionComponentDefinition: { level: 'error', options: { namedComponents: 'arrowFunction' } }
+          }
+        }
       }
     }
   ]

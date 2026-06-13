@@ -1,5 +1,3 @@
-/* eslint-disable no-continue */
-/** biome-ignore-all lint/nursery/noContinue: scan loop */
 import { file, Glob } from 'bun'
 import ts from 'typescript'
 import type { Diagnostic } from './aggregate.js'
@@ -32,17 +30,17 @@ const checkJsxExtension = async ({ root }: { root: string }): Promise<Diagnostic
   const isIgnored = (p: string): boolean =>
     p.includes('node_modules') || p.endsWith('.d.ts') || ignoreGlobs.some(g => g.match(p))
   const diagnostics: Diagnostic[] = []
-  for await (const path of glob.scan({ absolute: false, cwd: root, dot: false })) {
-    if (isIgnored(path)) continue
-    const content = await file(`${root}/${path}`).text()
-    if (hasJsx(content))
-      diagnostics.push({
-        file: `${root}/${path}`,
-        line: 1,
-        linter: 'lintmax',
-        rule: 'jsx-requires-tsx-extension'
-      })
-  }
+  for await (const path of glob.scan({ absolute: false, cwd: root, dot: false }))
+    if (!isIgnored(path)) {
+      const content = await file(`${root}/${path}`).text()
+      if (hasJsx(content))
+        diagnostics.push({
+          file: `${root}/${path}`,
+          line: 1,
+          linter: 'lintmax',
+          rule: 'jsx-requires-tsx-extension'
+        })
+    }
   return diagnostics
 }
 export { checkJsxExtension, hasJsx }

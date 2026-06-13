@@ -1,5 +1,4 @@
-/* eslint-disable no-await-in-loop, no-continue */
-/** biome-ignore-all lint/nursery/noContinue: control-flow filtering */
+/* eslint-disable no-await-in-loop */
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential file io */
 /** biome-ignore-all lint/style/noProcessEnv: linter env passthrough */
 import { file, write } from 'bun'
@@ -47,14 +46,16 @@ const collectFileData = async (
   const out: FileData[] = []
   for (const filePath of files) {
     const f = file(filePath)
-    if (!(await f.exists())) continue
-    const orig = await f.text()
-    const lines = orig.split('\n')
-    const directiveLines = parseDirectives(lines)
-    if (directiveLines.length === 0) continue
-    const directiveIndexes = new Set(directiveLines.map(d => d.index))
-    const stripped = lines.filter((_, index) => !directiveIndexes.has(index)).join('\n')
-    out.push({ directiveLines, filePath, lines, orig, stripped })
+    if (await f.exists()) {
+      const orig = await f.text()
+      const lines = orig.split('\n')
+      const directiveLines = parseDirectives(lines)
+      if (directiveLines.length > 0) {
+        const directiveIndexes = new Set(directiveLines.map(d => d.index))
+        const stripped = lines.filter((_, index) => !directiveIndexes.has(index)).join('\n')
+        out.push({ directiveLines, filePath, lines, orig, stripped })
+      }
+    }
   }
   return out
 }
@@ -128,8 +129,7 @@ const parseOxlintDirectiveLines = (lines: string[]): { index: number; rules: str
     const line = lines[index] ?? ''
     oxlintDisableRe.lastIndex = 0
     const match = oxlintDisableRe.exec(line)
-    if (!match) continue
-    directiveLines.push({ index, rules: splitOxlintRules(match.groups?.rules ?? '') })
+    if (match) directiveLines.push({ index, rules: splitOxlintRules(match.groups?.rules ?? '') })
   }
   return directiveLines
 }
@@ -148,27 +148,21 @@ const rebuildOxlintFile = async ({
   for (let index = 0; index < data.lines.length; index += 1) {
     const line = data.lines[index] ?? ''
     const directive = data.directiveLines.find(d => d.index === index)
-    if (!directive) {
-      result.push(line)
-      continue
-    }
-    oxlintDisableRe.lastIndex = 0
-    const match = oxlintDisableRe.exec(line)
-    const prefix = match?.groups?.prefix ?? '/* oxlint-disable '
-    const suffix = match?.groups?.close ?? ' */'
-    const kept: string[] = []
-    for (const rule of directive.rules)
-      if (isOxlintRuleFired(rule, fired)) kept.push(rule)
-      else {
-        removed += 1
-        diagnostics.push({ col: 1, file: data.filePath, line: index + 1, rule })
-      }
-    if (kept.length === 0) continue
-    if (kept.length === directive.rules.length) {
-      result.push(line)
-      continue
-    }
-    result.push(`${prefix}${kept.join(', ')}${suffix}`)
+    if (directive) {
+      oxlintDisableRe.lastIndex = 0
+      const match = oxlintDisableRe.exec(line)
+      const prefix = match?.groups?.prefix ?? '/* oxlint-disable '
+      const suffix = match?.groups?.close ?? ' */'
+      const kept: string[] = []
+      for (const rule of directive.rules)
+        if (isOxlintRuleFired(rule, fired)) kept.push(rule)
+        else {
+          removed += 1
+          diagnostics.push({ col: 1, file: data.filePath, line: index + 1, rule })
+        }
+      if (kept.length === directive.rules.length) result.push(line)
+      else if (kept.length > 0) result.push(`${prefix}${kept.join(', ')}${suffix}`)
+    } else result.push(line)
   }
   if (removed > 0 && !dryRun) await write(data.filePath, result.join('\n'))
   return { diagnostics, removed }
@@ -177,9 +171,10 @@ const findOxlintDisableFiles = async (filePaths: string[]): Promise<string[]> =>
   const out: string[] = []
   for (const fp of filePaths) {
     const f = file(fp)
-    if (!(await f.exists())) continue
-    const content = await f.text()
-    if (oxlintDisablePresentRe.test(content)) out.push(fp)
+    if (await f.exists()) {
+      const content = await f.text()
+      if (oxlintDisablePresentRe.test(content)) out.push(fp)
+    }
   }
   return out
 }
@@ -187,9 +182,10 @@ const findBiomeIgnoreAllFiles = async (filePaths: string[]): Promise<string[]> =
   const out: string[] = []
   for (const fp of filePaths) {
     const f = file(fp)
-    if (!(await f.exists())) continue
-    const content = await f.text()
-    if (content.includes('biome-ignore-all')) out.push(fp)
+    if (await f.exists()) {
+      const content = await f.text()
+      if (content.includes('biome-ignore-all')) out.push(fp)
+    }
   }
   return out
 }
@@ -225,10 +221,11 @@ const parseBiomeDirectiveLines = (lines: string[]): { index: number; rules: stri
     biomeIgnoreAllRe.lastIndex = 0
     biomeIgnoreAllLineRe.lastIndex = 0
     const match = biomeIgnoreAllRe.exec(line) ?? biomeIgnoreAllLineRe.exec(line)
-    if (!match) continue
-    const first = match.groups?.first ?? ''
-    const rest = match.groups?.rest ?? ''
-    directiveLines.push({ index, rules: [first, ...splitBiomeRest(rest)] })
+    if (match) {
+      const first = match.groups?.first ?? ''
+      const rest = match.groups?.rest ?? ''
+      directiveLines.push({ index, rules: [first, ...splitBiomeRest(rest)] })
+    }
   }
   return directiveLines
 }
@@ -247,23 +244,17 @@ const rebuildBiomeFile = async ({
   for (let index = 0; index < data.lines.length; index += 1) {
     const line = data.lines[index] ?? ''
     const directive = data.directiveLines.find(d => d.index === index)
-    if (!directive) {
-      result.push(line)
-      continue
-    }
-    const kept: string[] = []
-    for (const rule of directive.rules)
-      if (fired.has(rule)) kept.push(rule)
-      else {
-        removed += 1
-        diagnostics.push({ col: 1, file: data.filePath, line: index + 1, rule })
-      }
-    if (kept.length === 0) continue
-    if (kept.length === directive.rules.length) {
-      result.push(line)
-      continue
-    }
-    result.push(rebuildBiomeLine({ line, rules: kept }))
+    if (directive) {
+      const kept: string[] = []
+      for (const rule of directive.rules)
+        if (fired.has(rule)) kept.push(rule)
+        else {
+          removed += 1
+          diagnostics.push({ col: 1, file: data.filePath, line: index + 1, rule })
+        }
+      if (kept.length === directive.rules.length) result.push(line)
+      else if (kept.length > 0) result.push(rebuildBiomeLine({ line, rules: kept }))
+    } else result.push(line)
   }
   if (removed > 0 && !dryRun) await write(data.filePath, result.join('\n'))
   return { diagnostics, removed }
