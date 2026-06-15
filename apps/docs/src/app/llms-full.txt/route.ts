@@ -9,12 +9,8 @@ export const GET = async () => {
     ''
   ]
   const contents = await Promise.all(pages.map(async page => page.data.getText('processed')))
-  for (const [i, page] of pages.entries()) {
-    sections.push(`## ${page.data.title}`)
-    sections.push('')
-    sections.push(contents[i] ?? '')
-    sections.push('')
-  }
+  for (const [i, page] of pages.entries()) sections.push(`## ${page.data.title}`, '', contents[i] ?? '', '')
+
   return new Response(sections.join('\n'), {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' }
   })
