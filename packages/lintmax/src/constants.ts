@@ -170,7 +170,8 @@ const SHARED_OVERRIDE_SYMBOL_KEY = 'lintmax.sharedOverride'
 const OXLINT_CLI_ALLOW: readonly string[] = [
   'eslint/no-underscore-dangle',
   'react/jsx-no-literals',
-  'unicorn/prefer-export-from'
+  'unicorn/prefer-export-from',
+  'react/react-compiler'
 ]
 export {
   BIOME_IGNORE_PATTERNS,
