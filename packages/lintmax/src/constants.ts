@@ -167,7 +167,11 @@ const TAILWIND_ENTRY_CANDIDATES: readonly string[] = [
   'global.css'
 ]
 const SHARED_OVERRIDE_SYMBOL_KEY = 'lintmax.sharedOverride'
-const OXLINT_CLI_ALLOW: readonly string[] = ['eslint/no-underscore-dangle']
+const OXLINT_CLI_ALLOW: readonly string[] = [
+  'eslint/no-underscore-dangle',
+  'react/jsx-no-literals',
+  'unicorn/prefer-export-from'
+]
 export {
   BIOME_IGNORE_PATTERNS,
   BIOME_PATTERN_RULE_OVERRIDES,

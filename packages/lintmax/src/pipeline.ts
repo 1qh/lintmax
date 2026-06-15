@@ -561,8 +561,11 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     }
     const cnDiags = await checkClassName({ root: cwd })
     const jsxDiags = await checkJsxExtension({ root: cwd })
-    allDiagnostics.push(...cnDiags, ...jsxDiags)
-    allDiagnostics.push(...emitExtra(runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles })))
+    allDiagnostics.push(
+      ...cnDiags,
+      ...jsxDiags,
+      ...emitExtra(runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles }))
+    )
     throwAgentResults({ diagnostics: allDiagnostics, failures })
     return
   }
@@ -617,8 +620,10 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     })
     allDiagnostics.push(...unusedToDiagnostics({ root: cwd, unused: unusedAgent.diagnostics }))
   }
-  allDiagnostics.push(...dangerousToDiagnostics(await findDangerousSuppressions(cwd)))
-  allDiagnostics.push(...emitExtra(runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles })))
+  allDiagnostics.push(
+    ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
+    ...emitExtra(runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles }))
+  )
   if (allDiagnostics.length > 0 || failures.length > 0) {
     const grouped = aggregate({ diagnostics: allDiagnostics })
     const output = formatGrouped({ files: grouped })

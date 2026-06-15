@@ -118,8 +118,7 @@ const formatRulesHuman = (rules: RuleEntry[]): string => {
   const separator = '─'.repeat(60)
   const lines = [header, separator]
   for (const r of rules) lines.push(`${r.linter.padEnd(16)}${r.rule}`)
-  lines.push(separator)
-  lines.push(`Total: ${rules.length} rules`)
+  lines.push(separator, `Total: ${rules.length} rules`)
   return lines.join('\n')
 }
 export { extractAllRules, formatRulesCompact, formatRulesHuman }

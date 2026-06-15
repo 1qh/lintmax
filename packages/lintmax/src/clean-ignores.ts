@@ -24,14 +24,12 @@ const normalizeRule = (rule: string): string[] => {
     const bare = rule.slice(oxMatch[0].length).replace(trailingParenRe, '')
     variants.push(bare)
     const prefix = oxMatch[0].replace(trailingSepRe, '')
-    variants.push(`${prefix}/${bare}`)
-    variants.push(`${prefix}(${bare})`)
+    variants.push(`${prefix}/${bare}`, `${prefix}(${bare})`)
     if (prefix === 'eslint') variants.push(bare)
     if (prefix === 'typescript-eslint') variants.push(`@typescript-eslint/${bare}`)
     if (prefix.startsWith('eslint-plugin-')) {
       const short = prefix.replace(eslintPluginPrefixRe, '')
-      variants.push(`${short}/${bare}`)
-      variants.push(`${short}(${bare})`)
+      variants.push(`${short}/${bare}`, `${short}(${bare})`)
     }
   }
   if (rule.startsWith('@typescript-eslint/')) variants.push(`typescript-eslint(${rule.slice(19)})`)
