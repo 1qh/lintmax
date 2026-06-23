@@ -264,6 +264,37 @@ Fixes, not suppressions:
 
 ---
 
+# Minimal DOM
+
+Same UI, fewest DOM nodes — every element earns its place. If deleting it breaks nothing (semantics, layout, behavior, required styling), it must not exist.
+
+## MUST
+
+- Keep a node ONLY if it provides one of: semantics/a11y (`ul/li`, `button`, `label`, `form`, `nav`, `section`, ARIA, focus); a layout constraint (own containing block / positioning / clip / scroll / stacking — `relative`, `overflow-*`, `sticky`, `z-*`, `min-w-0`); behavior (measurement ref, observer, portal, event boundary, virtualization); or component API (can’t pass props/classes to the real root after trying `as`/`asChild`/forwarding). Why: every node is render + memory cost.
+- Spacing via parent `gap-*` (flex/grid) or `space-x/y-*`. Why: no wrapper for gaps.
+- Separators via parent `divide-y`/`divide-x`. Why: no separator elements.
+- Alignment via `flex`/`grid` on the existing parent. Why: no alignment wrapper.
+- Visual (padding/bg/border/shadow/radius) on the element that owns the box. Why: no decoration wrapper.
+- Group JSX with `<>...</>` fragment, not `<div>`. Why: zero DOM cost.
+- Style mapped components by passing `className` to the item; uniform direct children via `*:` or `[&>tag]:`. Why: props first, selectors second — no repeat-class wrapper.
+
+## NEVER
+
+- Add a wrapper a `gap`/`space`/`divide`/`className`/`[&>...]:` could replace. Cost: dead node, render + read budget.
+
+## Examples
+
+| Good (selector pushdown)                           | Bad (repeated classes)                                      |
+| -------------------------------------------------- | ----------------------------------------------------------- |
+| `<div className='divide-y [&>p]:px-3 [&>p]:py-2'>` | `<div className='divide-y'>` with `px-3 py-2` on each `<p>` |
+
+## Pitfall
+
+- Selector tools: `*:` direct children · `[&>li]:py-2` targeted · `[&_a]:underline` descendant (sparingly) · `group`/`peer` on existing nodes → `group-hover:*`/`peer-focus:*` · `data-[state=open]:*`/`aria-expanded:*`/`disabled:*` · `first:`/`last:`/`odd:`/`even:`/`only:` structural.
+- Review each node: can I delete it → delete; can `gap/space/divide` replace it → do it; can I pass `className` → do it; can `[&>...]:` remove repetition → do it.
+
+---
+
 # React & Next.js
 
 React 19 + Next.js component conventions.
@@ -321,6 +352,38 @@ Credential handling, env scoping, server/client boundary, mechanism-asserted inv
 ## Caught by
 
 - PR env-var audit: no `NEXT_PUBLIC_*` name with key/secret/token/password/private; new client fetch goes through a server boundary; credential server actions short-circuit in test-mode; `.env.example` marks server-only vars without the prefix.
+
+---
+
+# shadcn
+
+shadcn components used as-is, native look, semantic classes only.
+
+## MUST
+
+- Use shadcn components as-is. Why: no override drift.
+- Semantic Tailwind colors only — `text-foreground`/`text-muted-foreground`/`text-destructive`, `bg-primary`/`bg-muted`/`bg-destructive`, `text-primary` for links. Why: theme-driven, dark-mode safe.
+- `cn()` for conditional classes. Why: merge precedence + the only composition path.
+
+## NEVER
+
+- Hardcode hex / palette colors in `className` or `style` — `text-red-500`, `bg-blue-500`, `text-green-500`. Cost: bypasses theme.
+- `fd-*` aliases (`bg-fd-muted`, `text-fd-muted-foreground`, `bg-fd-primary`). Cost: fumadocs internals; use the shadcn name.
+- Template literal for conditional className. Cost: no merge precedence; use `cn()`.
+- `cva` / bare `clsx` / bare `twMerge`. Cost: fragments the single `cn()` composition path.
+
+## Examples
+
+| Good                                | Bad                              |
+| ----------------------------------- | -------------------------------- |
+| `cn('base', cond && 'on')`          | `` `base ${cond ? 'on' : ''}` `` |
+| `cn('base', v === 'a' ? 'x' : 'y')` | `clsx('base', ...)` / `cva(...)` |
+| `bg-muted` `text-primary`           | `bg-fd-muted` `text-blue-500`    |
+
+## Pitfall
+
+- `global.css` aliases `--color-*` → `--color-fd-*` via `@theme inline`, so `bg-muted`/`text-primary`/`border-border` resolve to the same theme as `fd-*` — always use the shadcn name.
+- fumadocs’ own UI (sidebar/search/TOC) keeps `fd-*` internally — that is library code, not yours.
 
 ---
 
