@@ -5,11 +5,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { sync } from './index.js'
-
+// oxlint-disable-next-line node/no-sync
 const tmp = mkdtempSync(join(tmpdir(), 'config-gen-test-'))
 const cacheDir = join(tmp, 'node_modules', '.cache', 'lintmax')
+// oxlint-disable-next-line node/no-sync
 afterAll(() => rmSync(tmp, { recursive: true }))
-const setupAndSync = async () => {
+const setupProject = async () => {
+  // oxlint-disable-next-line node/no-sync
   writeFileSync(join(tmp, 'package.json'), JSON.stringify({ name: 'test', private: true }))
   const origCwd = process.cwd()
   process.chdir(tmp)
@@ -21,9 +23,11 @@ const setupAndSync = async () => {
 }
 describe('biome config generation', () => {
   test('generates biome.json with experimentalScannerIgnores', async () => {
-    await setupAndSync()
+    await setupProject()
     const biomePath = join(cacheDir, 'biome.json')
+    // oxlint-disable-next-line node/no-sync
     expect(existsSync(biomePath)).toBe(true)
+    // oxlint-disable-next-line node/no-sync
     const config = JSON.parse(readFileSync(biomePath, 'utf8')) as {
       files?: { experimentalScannerIgnores?: string[]; includes?: string[] }
     }
@@ -31,6 +35,7 @@ describe('biome config generation', () => {
     expect(Array.isArray(config.files?.experimentalScannerIgnores)).toBe(true)
   })
   test('experimentalScannerIgnores contains node_modules', async () => {
+    // oxlint-disable-next-line node/no-sync
     const config = JSON.parse(readFileSync(join(cacheDir, 'biome.json'), 'utf8')) as {
       files?: { experimentalScannerIgnores?: string[] }
     }
@@ -38,6 +43,7 @@ describe('biome config generation', () => {
     expect(scannerIgnores.some(p => p.includes('node_modules'))).toBe(true)
   })
   test('experimentalScannerIgnores contains .next', async () => {
+    // oxlint-disable-next-line node/no-sync
     const config = JSON.parse(readFileSync(join(cacheDir, 'biome.json'), 'utf8')) as {
       files?: { experimentalScannerIgnores?: string[] }
     }
@@ -45,6 +51,7 @@ describe('biome config generation', () => {
     expect(scannerIgnores.some(p => p.includes('.next'))).toBe(true)
   })
   test('includes has !! negation patterns', async () => {
+    // oxlint-disable-next-line node/no-sync
     const config = JSON.parse(readFileSync(join(cacheDir, 'biome.json'), 'utf8')) as {
       files?: { includes?: string[] }
     }
@@ -52,6 +59,7 @@ describe('biome config generation', () => {
     expect(includes.some(p => p.startsWith('!!'))).toBe(true)
   })
   test('no ignore field in files (biome 2.x)', async () => {
+    // oxlint-disable-next-line node/no-sync
     const config = JSON.parse(readFileSync(join(cacheDir, 'biome.json'), 'utf8')) as {
       files?: Record<string, unknown>
     }

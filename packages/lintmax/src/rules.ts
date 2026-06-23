@@ -30,6 +30,7 @@ const extractBiomeRules = async (): Promise<RuleEntry[]> => {
 const OXLINT_FIX_MARKERS = new Set(['⚠️🛠️️', '💡', '🛠️', '🛠️💡'])
 const extractOxlintRules = (): RuleEntry[] => {
   const configPath = joinPath(cwd, 'node_modules/.cache/lintmax/.oxlintrc.json')
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({
     cmd: ['bun', 'node_modules/.bin/oxlint', '-c', configPath, '--rules'],
     cwd,
@@ -60,12 +61,14 @@ const extractEslintRules = async (): Promise<RuleEntry[]> => {
   const configPath = joinPath(cwd, 'node_modules/.cache/lintmax/eslint.generated.mjs')
   const dummyFile = joinPath(cwd, '_lintmax_dummy.ts')
   await write(dummyFile, 'export {}\n')
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({
     cmd: ['bun', eslintBin, '--config', configPath, '--print-config', dummyFile],
     cwd,
     stderr: 'pipe',
     stdout: 'pipe'
   })
+  // oxlint-disable-next-line node/no-sync
   spawnSync({ cmd: ['rm', '-f', dummyFile], stderr: 'pipe', stdout: 'pipe' })
   if (result.exitCode !== 0) return []
   let parsed: { rules?: Record<string, unknown> }

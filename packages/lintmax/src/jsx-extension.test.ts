@@ -3,9 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { checkJsxExtension, hasJsx } from './jsx-extension.js'
-
+// oxlint-disable-next-line node/no-sync
 const tmp = mkdtempSync(join(tmpdir(), 'jsx-ext-test-'))
+// oxlint-disable-next-line node/no-sync
 afterAll(() => rmSync(tmp, { recursive: true }))
+// oxlint-disable-next-line node/no-sync
 const write = (name: string, code: string) => writeFileSync(join(tmp, name), code)
 const check = async () => {
   const d = await checkJsxExtension({ root: tmp })

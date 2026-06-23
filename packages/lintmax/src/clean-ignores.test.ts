@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cleanFileIgnores, isRuleActive, normalizeRule, splitRules } from './clean-ignores.js'
 import { parseRules } from './ignores.js'
-
+// oxlint-disable-next-line node/no-sync
 const tmp = mkdtempSync(join(tmpdir(), 'clean-ignores-test-'))
+// oxlint-disable-next-line node/no-sync
 afterAll(() => rmSync(tmp, { recursive: true }))
 const active = new Set([
   '@typescript-eslint/no-unsafe-call',
@@ -20,8 +21,10 @@ const active = new Set([
 ])
 const writeAndClean = async (name: string, content: string) => {
   const path = join(tmp, name)
+  // oxlint-disable-next-line node/no-sync
   writeFileSync(path, content)
   const removed = await cleanFileIgnores(path, active)
+  // oxlint-disable-next-line node/no-sync
   return { content: readFileSync(path, 'utf8'), removed }
 }
 describe('cleanFileIgnores — eslint', () => {

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 
 const decoder = new TextDecoder()
 const root = join(import.meta.dir, '..')
+// oxlint-disable-next-line node/no-sync
 const pack = spawnSync({ cmd: ['bun', 'pm', 'pack'], cwd: root, stderr: 'pipe', stdout: 'pipe' })
 const output = decoder.decode(pack.stdout).trim()
 const tarball = output
@@ -27,6 +28,7 @@ const required = [
   'node_modules/lintmax/tsconfig.json'
 ]
 const run = ({ cmd, label }: { cmd: string[]; label: string }) => {
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({ cmd, cwd: dir, stderr: 'pipe', stdout: 'pipe' })
   if (result.exitCode !== 0) {
     process.stderr.write(`${label} failed:\n${decoder.decode(result.stdout)}\n${decoder.decode(result.stderr)}\n`)
@@ -34,6 +36,7 @@ const run = ({ cmd, label }: { cmd: string[]; label: string }) => {
   }
 }
 const runExpectFail = ({ cmd, expect, label }: { cmd: string[]; expect: string; label: string }) => {
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({ cmd, cwd: dir, stderr: 'pipe', stdout: 'pipe' })
   if (result.exitCode === 0) throw new Error(`${label} unexpectedly succeeded`)
   const stderr = decoder.decode(result.stderr)

@@ -25,6 +25,7 @@ const resolveDprintPluginPath = (): null | string => {
   }
 }
 const whichTool = (env: Record<string, string | undefined>, tool: string): null | string => {
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({ cmd: ['which', tool], env, stderr: 'pipe', stdout: 'pipe' })
   if (result.exitCode !== 0) return null
   const path = new TextDecoder().decode(result.stdout).trim()

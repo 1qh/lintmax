@@ -7,12 +7,17 @@ import { findDangerousSuppressions } from './ignores.js'
 describe('findDangerousSuppressions', () => {
   let dir: string
   beforeEach(() => {
+    // oxlint-disable-next-line node/no-sync
     dir = mkdtempSync(join(tmpdir(), 'ni-'))
+    // oxlint-disable-next-line node/no-sync
     mkdirSync(join(dir, 'src'), { recursive: true })
   })
+  // oxlint-disable-next-line node/no-sync
   afterEach(() => rmSync(dir, { force: true, recursive: true }))
   const write = (rel: string, content: string) => {
+    // oxlint-disable-next-line node/no-sync
     mkdirSync(join(dir, rel, '..'), { recursive: true })
+    // oxlint-disable-next-line node/no-sync
     writeFileSync(join(dir, rel), content)
   }
   test('flags eslint no-unsafe suppression', async () => {

@@ -13,12 +13,17 @@ const cacheDir = join(root, 'node_modules/.cache/lintmax')
 const binDir = join(monorepoRoot, 'node_modules/.bin')
 const decoder = new TextDecoder()
 const cleanup = () => {
+  // oxlint-disable-next-line node/no-sync
   rmSync(workTs, { force: true })
+  // oxlint-disable-next-line node/no-sync
   rmSync(workTsx, { force: true })
 }
 try {
+  // oxlint-disable-next-line node/no-sync
   copyFileSync(fixtureTs, workTs)
+  // oxlint-disable-next-line node/no-sync
   copyFileSync(fixtureTsx, workTsx)
+  // oxlint-disable-next-line node/no-sync
   const agentResult = spawnSync({
     cmd: ['bun', cli, 'check'],
     cwd: root,
@@ -26,18 +31,21 @@ try {
     stdout: 'pipe'
   })
   const agentOutput = decoder.decode(agentResult.stdout)
+  // oxlint-disable-next-line node/no-sync
   const biomeResult = spawnSync({
     cmd: [join(binDir, 'biome'), 'check', '--config-path', cacheDir, workTs, workTsx],
     cwd: root,
     stderr: 'pipe',
     stdout: 'pipe'
   })
+  // oxlint-disable-next-line node/no-sync
   const oxlintResult = spawnSync({
     cmd: [join(binDir, 'oxlint'), '-c', join(cacheDir, '.oxlintrc.json'), workTs, workTsx],
     cwd: root,
     stderr: 'pipe',
     stdout: 'pipe'
   })
+  // oxlint-disable-next-line node/no-sync
   const eslintResult = spawnSync({
     cmd: [join(binDir, 'eslint'), '--config', join(cacheDir, 'eslint.generated.mjs'), workTs, workTsx],
     cwd: root,

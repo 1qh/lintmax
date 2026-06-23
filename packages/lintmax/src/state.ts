@@ -62,6 +62,7 @@ const hashTree = ({ files, root, version }: { files: readonly string[]; root: st
   for (const relativePath of sorted)
     try {
       const digest = createHash('sha256')
+      // oxlint-disable-next-line node/no-sync
       digest.update(readFileSync(joinPath(root, relativePath)))
       hash.update(`${relativePath}:${digest.digest('hex')}\n`)
     } catch {

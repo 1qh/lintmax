@@ -411,6 +411,7 @@ const unusedToDiagnostics = ({ root, unused }: { root: string; unused: UnusedDir
 const dangerousToDiagnostics = (items: DangerousSuppression[]): Diagnostic[] =>
   items.map(d => ({ file: d.file, line: d.line, linter: 'forbidden-suppression', rule: d.rule }))
 const isGitWorkTree = ({ env, root }: { env: Record<string, string | undefined>; root: string }): boolean =>
+  // oxlint-disable-next-line node/no-sync
   spawnSync({
     cmd: ['git', '-C', root, 'rev-parse', '--is-inside-work-tree'],
     env,
@@ -490,6 +491,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   ])
   const extraBins: ExtraBins = { dprint: dprintBin, taplo: taploBin }
   const hasFlowmark =
+    // oxlint-disable-next-line node/no-sync
     spawnSync({
       cmd: ['which', 'flowmark'],
       env,

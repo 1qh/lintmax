@@ -7,7 +7,6 @@ const root = join(import.meta.dir, '..')
 const workFile = join(root, 'src/magic-work.ts')
 const cli = join(root, 'dist/cli.mjs')
 const DIRTY_FIXTURE = `// Helper function to add two numbers
-import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 /* This formats a greeting */
 const greet = function(name: string) {
@@ -18,14 +17,14 @@ const greet = function(name: string) {
 }
 // Process data from file
 const processData = function(filePath: string) {
-  // Read the file
-  const data = readFileSync(filePath, "utf-8")
+  // Normalize the path
+  const data = filePath.trim()
   return data
 }
-// Check if path exists
+// Check if path is non-empty
 const checkExists = function(p: string) {
-  // Use existsSync
-  const result = existsSync(p)
+  // Inspect the length
+  const result = p.length > 0
   return result
 }
 // Build a full path
@@ -63,6 +62,7 @@ export { greet, processData, checkExists, buildPath, MAX_RETRIES, DEFAULT_TIMEOU
 export type { StringOrNumber }
 `
 const run = (args: string[]) =>
+  // oxlint-disable-next-line node/no-sync
   spawnSync({
     cmd: ['bun', cli, ...args],
     cwd: root,
@@ -73,6 +73,7 @@ const decoder = new TextDecoder()
 const assert = (condition: boolean, msg: string) => {
   if (!condition) throw new Error(`FAIL: ${msg}`)
 }
+// oxlint-disable-next-line node/no-sync
 writeFileSync(workFile, DIRTY_FIXTURE)
 const checkResult = run(['check'])
 assert(checkResult.exitCode !== 0, 'check should fail on dirty fixture')
@@ -94,6 +95,7 @@ assert(
   `recheck should exit 0, got ${recheckResult.exitCode}\n${recheckStdout}\n${decoder.decode(recheckResult.stderr)}`
 )
 assert(OK_LINE_RE.test(recheckStdout.trim()), `recheck should emit only ok, got: ${recheckStdout.trim()}`)
+// oxlint-disable-next-line node/no-sync
 const fixed = readFileSync(workFile, 'utf8')
 const lines = fixed.split('\n')
 for (const line of lines) {
@@ -104,5 +106,6 @@ for (const line of lines) {
       `unexpected comment in fixed file: ${trimmed}`
     )
 }
+// oxlint-disable-next-line node/no-sync
 unlinkSync(workFile)
 process.stdout.write('magic test passed\n')

@@ -916,6 +916,7 @@ const resolveSyncImportSource = ({ cwd, dir, source }: { cwd: string; dir: strin
   return relativeSource.startsWith('.') ? relativeSource : `./${relativeSource}`
 }
 const discoverSymlinkPatterns = ({ root }: { root: string }): readonly string[] => {
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({
     cmd: ['git', '-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     stderr: 'pipe',
@@ -930,6 +931,7 @@ const discoverSymlinkPatterns = ({ root }: { root: string }): readonly string[] 
   for (const entry of entries) {
     let isSymlink: boolean
     try {
+      // oxlint-disable-next-line node/no-sync
       isSymlink = lstatSync(joinFs(root, entry)).isSymbolicLink()
     } catch {
       isSymlink = false

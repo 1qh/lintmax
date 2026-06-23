@@ -6,6 +6,7 @@ import { joinPath } from './path.js'
 
 const lstatSafe = (p: string) => {
   try {
+    // oxlint-disable-next-line node/no-sync
     return lstatSync(p)
   } catch {
     return null
@@ -54,6 +55,7 @@ const isBinary = ({ bytes }: { bytes: Uint8Array }): boolean => {
   return false
 }
 const listCompactFiles = ({ env, root }: { env: Record<string, string | undefined>; root: string }): string[] => {
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({
     cmd: ['git', '-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     env,

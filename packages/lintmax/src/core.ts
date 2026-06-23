@@ -70,6 +70,7 @@ const readRequiredJson = async <T>({ path }: { path: string }): Promise<T> => {
   return JSON.parse(text) as T
 }
 const ensureDirectory = ({ directory }: { directory: string }) => {
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({
     cmd: ['mkdir', '-p', directory],
     stderr: 'pipe',
@@ -104,6 +105,7 @@ const resolveBin = async ({ bin, pkg }: { bin: string; pkg: string }): Promise<s
   return joinPath(pkgDir, binPath)
 }
 const run = ({ args, command, env, label, silent = false }: RunOpts): void => {
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({
     cmd: [command, ...args],
     cwd,
@@ -122,6 +124,7 @@ const run = ({ args, command, env, label, silent = false }: RunOpts): void => {
   throw new CliExitError({ code: result.exitCode })
 }
 const runCapture = ({ args, command, env }: RunOpts): { exitCode: number; stderr: string; stdout: string } => {
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({
     cmd: [command, ...args],
     cwd,

@@ -6,6 +6,7 @@ import { hashTree, loadState, saveState } from './state.js'
 
 const envNoCache = 'LINTMAX_NO_CACHE'
 const listTrackedFiles = (): null | string[] => {
+  // oxlint-disable-next-line node/no-sync
   const isWorkTree = spawnSync({
     cmd: ['git', '-C', cwd, 'rev-parse', '--is-inside-work-tree'],
     env: bunEnv,
@@ -13,6 +14,7 @@ const listTrackedFiles = (): null | string[] => {
     stdout: 'pipe'
   })
   if (isWorkTree.exitCode !== 0) return null
+  // oxlint-disable-next-line node/no-sync
   const result = spawnSync({
     cmd: ['git', '-C', cwd, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     env: bunEnv,

@@ -64,7 +64,9 @@ const validateEslintOptions = ({ options }: { options?: EslintOptions }) => {
   if (typeof tailwindEntrySetting === 'string') {
     const root = options.tsconfigRootDir ?? process.cwd()
     const resolved = isAbsolutePath(tailwindEntrySetting) ? tailwindEntrySetting : joinPath(root, tailwindEntrySetting)
-    if (!existsSync(resolved))
+    // oxlint-disable-next-line node/no-sync
+    const resolvedExists = existsSync(resolved)
+    if (!resolvedExists)
       throw new Error(
         `eslint.tailwind file not found: ${resolved}. Use an existing path, set eslint.tailwind to false, or remove eslint.tailwind to use auto-detection.`
       )
@@ -123,7 +125,9 @@ const resolveTailwindEntry = ({
   const matches: string[] = []
   for (const candidate of TAILWIND_ENTRY_CANDIDATES) {
     const resolved = joinPath(root, candidate)
-    if (existsSync(resolved)) matches.push(resolved)
+    // oxlint-disable-next-line node/no-sync
+    const resolvedExists = existsSync(resolved)
+    if (resolvedExists) matches.push(resolved)
   }
   if (matches.length <= 1) return matches[0]
   const preferredOnAmbiguous = [joinPath(root, 'ui/src/styles/globals.css')]

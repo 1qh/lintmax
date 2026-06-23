@@ -3,21 +3,26 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { removeUnusedSuppressions } from './unused-suppressions.js'
-
+// oxlint-disable-next-line node/no-sync
 const root = mkdtempSync(join(tmpdir(), 'unused-suppressions-test-'))
 const cacheConfigDir = join(root, 'node_modules/.cache/lintmax')
 const writeFile = (name: string, content: string): string => {
   const path = join(root, name)
+  // oxlint-disable-next-line node/no-sync
   writeFileSync(path, content)
   return path
 }
+// oxlint-disable-next-line node/no-sync
 const readFile = (path: string): string => readFileSync(path, 'utf8')
 beforeAll(() => {
+  // oxlint-disable-next-line node/no-sync
   mkdirSync(cacheConfigDir, { recursive: true })
+  // oxlint-disable-next-line node/no-sync
   writeFileSync(
     join(cacheConfigDir, '.oxlintrc.json'),
     JSON.stringify({ categories: { correctness: 'error' }, rules: { 'no-console': 'error', 'no-debugger': 'error' } })
   )
+  // oxlint-disable-next-line node/no-sync
   writeFileSync(
     join(cacheConfigDir, 'biome.json'),
     JSON.stringify({
@@ -27,6 +32,7 @@ beforeAll(() => {
   )
 })
 afterAll(() => {
+  // oxlint-disable-next-line node/no-sync
   rmSync(root, { force: true, recursive: true })
 })
 describe('removeUnusedSuppressions', () => {
