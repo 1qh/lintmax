@@ -4,6 +4,7 @@ import eslintReact from '@eslint-react/eslint-plugin'
 import { includeIgnoreFile } from '@eslint/compat'
 import eslint from '@eslint/js'
 import nextPlugin from '@next/eslint-plugin-next'
+import { file } from 'bun'
 import eslintPluginBetterTailwindcss from 'eslint-plugin-better-tailwindcss'
 import { configs as perfectionist } from 'eslint-plugin-perfectionist'
 import preferArrow from 'eslint-plugin-prefer-arrow-functions'
@@ -11,7 +12,6 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import turbo from 'eslint-plugin-turbo'
 import { defineConfig, globalIgnores } from 'eslint/config'
-import { existsSync } from 'node:fs'
 import tseslint from 'typescript-eslint'
 import type { EslintOptions } from './lintmax-types.js'
 import {
@@ -42,7 +42,7 @@ const normalizeAppendInput = ({ append }: { append: EslintOptions['append'] }): 
     out.push(value)
   return out
 }
-const validateEslintOptions = ({ options }: { options?: EslintOptions }) => {
+const validateEslintOptions = async ({ options }: { options?: EslintOptions }): Promise<void> => {
   if (!options) return
   if (options.ignores !== undefined)
     normalizePathListInput({
@@ -64,8 +64,7 @@ const validateEslintOptions = ({ options }: { options?: EslintOptions }) => {
   if (typeof tailwindEntrySetting === 'string') {
     const root = options.tsconfigRootDir ?? process.cwd()
     const resolved = isAbsolutePath(tailwindEntrySetting) ? tailwindEntrySetting : joinPath(root, tailwindEntrySetting)
-    // oxlint-disable-next-line node/no-sync
-    const resolvedExists = existsSync(resolved)
+    const resolvedExists = await file(resolved).exists()
     if (!resolvedExists)
       throw new Error(
         `eslint.tailwind file not found: ${resolved}. Use an existing path, set eslint.tailwind to false, or remove eslint.tailwind to use auto-detection.`
@@ -111,24 +110,25 @@ const getSharedAppendConfig = ({ config }: { config: Linter.Config }): null | Sh
   const raw = config as Record<PropertyKey, unknown>
   return raw[sharedOverrideMarker] === true ? (config as SharedOverrideAppendConfig) : null
 }
-const resolveTailwindEntry = ({
+const resolveTailwindEntry = async ({
   root,
   tailwind
 }: {
   root: string
   tailwind: boolean | string | undefined
-}): string | undefined => {
+}): Promise<string | undefined> => {
   const tailwindSetting = tailwind ?? true
   if (tailwindSetting === false) return
   if (typeof tailwindSetting === 'string')
     return isAbsolutePath(tailwindSetting) ? tailwindSetting : joinPath(root, tailwindSetting)
-  const matches: string[] = []
-  for (const candidate of TAILWIND_ENTRY_CANDIDATES) {
-    const resolved = joinPath(root, candidate)
-    // oxlint-disable-next-line node/no-sync
-    const resolvedExists = existsSync(resolved)
-    if (resolvedExists) matches.push(resolved)
-  }
+  const matches = (
+    await Promise.all(
+      TAILWIND_ENTRY_CANDIDATES.map(async candidate => {
+        const resolved = joinPath(root, candidate)
+        return (await file(resolved).exists()) ? [resolved] : []
+      })
+    )
+  ).flat()
   if (matches.length <= 1) return matches[0]
   const preferredOnAmbiguous = [joinPath(root, 'ui/src/styles/globals.css')]
   for (const preferred of preferredOnAmbiguous) if (matches.includes(preferred)) return preferred
@@ -139,8 +139,8 @@ const resolveTailwindEntry = ({
 }
 const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
   entryPoint ? eslintPluginBetterTailwindcss.configs['recommended-error'].rules : {}
-const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig> => {
-  validateEslintOptions({ options })
+const eslintFactory = async (options?: EslintOptions): Promise<ReturnType<typeof defineConfig>> => {
+  await validateEslintOptions({ options })
   const opts = options ?? {}
   const root = opts.tsconfigRootDir ?? process.cwd()
   const configs: Parameters<typeof defineConfig> = []
@@ -150,7 +150,7 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
     label: 'eslint.ignores',
     value: opts.ignores
   })
-  const tailwindEntry = resolveTailwindEntry({
+  const tailwindEntry = await resolveTailwindEntry({
     root,
     tailwind: opts.tailwind
   })
@@ -406,7 +406,7 @@ const eslintFactory = (options?: EslintOptions): ReturnType<typeof defineConfig>
   })
   return defineConfig(...configs)
 }
-const defaultConfig = eslintFactory()
+const defaultConfig = await eslintFactory()
 export type { EslintOptions }
 export default defaultConfig
 export { eslintFactory as eslint }

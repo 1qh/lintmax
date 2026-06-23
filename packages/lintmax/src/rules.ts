@@ -1,5 +1,6 @@
-import { file, spawnSync, write } from 'bun'
-import { cwd, decodeText, resolveBin } from './core.js'
+import { $, file, write } from 'bun'
+import { unlink } from 'node:fs/promises'
+import { cwd, resolveBin } from './core.js'
 import { fromFileUrl, joinPath } from './path.js'
 
 interface RuleEntry {
@@ -28,16 +29,10 @@ const extractBiomeRules = async (): Promise<RuleEntry[]> => {
   return results
 }
 const OXLINT_FIX_MARKERS = new Set(['⚠️🛠️️', '💡', '🛠️', '🛠️💡'])
-const extractOxlintRules = (): RuleEntry[] => {
+const extractOxlintRules = async (): Promise<RuleEntry[]> => {
   const configPath = joinPath(cwd, 'node_modules/.cache/lintmax/.oxlintrc.json')
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({
-    cmd: ['bun', 'node_modules/.bin/oxlint', '-c', configPath, '--rules'],
-    cwd,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
-  const output = decodeText(result.stdout)
+  const result = await $`bun node_modules/.bin/oxlint -c ${configPath} --rules`.cwd(cwd).quiet().nothrow()
+  const output = result.stdout.toString()
   const results: RuleEntry[] = []
   const lines = output.split('\n')
   for (const line of lines)
@@ -61,19 +56,16 @@ const extractEslintRules = async (): Promise<RuleEntry[]> => {
   const configPath = joinPath(cwd, 'node_modules/.cache/lintmax/eslint.generated.mjs')
   const dummyFile = joinPath(cwd, '_lintmax_dummy.ts')
   await write(dummyFile, 'export {}\n')
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({
-    cmd: ['bun', eslintBin, '--config', configPath, '--print-config', dummyFile],
-    cwd,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
-  // oxlint-disable-next-line node/no-sync
-  spawnSync({ cmd: ['rm', '-f', dummyFile], stderr: 'pipe', stdout: 'pipe' })
+  const result = await $`bun ${eslintBin} --config ${configPath} --print-config ${dummyFile}`.cwd(cwd).quiet().nothrow()
+  try {
+    await unlink(dummyFile)
+  } catch {
+    /* already absent */
+  }
   if (result.exitCode !== 0) return []
   let parsed: { rules?: Record<string, unknown> }
   try {
-    parsed = JSON.parse(decodeText(result.stdout)) as typeof parsed
+    parsed = JSON.parse(result.stdout.toString()) as typeof parsed
   } catch {
     return []
   }
@@ -91,8 +83,7 @@ const extractEslintRules = async (): Promise<RuleEntry[]> => {
   return results
 }
 const extractAllRules = async (): Promise<RuleEntry[]> => {
-  const oxlint = extractOxlintRules()
-  const [biome, eslint] = await Promise.all([extractBiomeRules(), extractEslintRules()])
+  const [oxlint, biome, eslint] = await Promise.all([extractOxlintRules(), extractBiomeRules(), extractEslintRules()])
   return [...biome, ...oxlint, ...eslint].toSorted((a, b) => {
     const linterCmp = a.linter.localeCompare(b.linter)
     if (linterCmp !== 0) return linterCmp

@@ -1,5 +1,6 @@
+/** biome-ignore-all lint/performance/noAwaitInLoops: sequential pipeline fix steps mutate files in order */
 /* eslint-disable complexity */
-import { env as bunEnv, Glob, spawnSync } from 'bun'
+import { $, env as bunEnv, Glob } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
 import type { ExtraBins } from './extra-coverage.js'
@@ -52,9 +53,9 @@ const createStepExecutor = ({
   failures: FailureRecord[]
   root: string
 }) => {
-  const runContinue = (opts: RunOpts): void => {
+  const runContinue = async (opts: RunOpts): Promise<void> => {
     try {
-      run(opts)
+      await run(opts)
     } catch (error) {
       if (error instanceof CliExitError) {
         failures.push({
@@ -87,19 +88,23 @@ const createStepExecutor = ({
       throw error
     }
   }
-  const runSteps = ({ steps }: { steps: StepSpec[] }) => {
-    for (const step of steps)
-      runContinue({
+  const runSteps = async ({ steps }: { steps: StepSpec[] }) => {
+    for (const step of steps) {
+      const opts = {
         args: step.args,
         command: step.command ?? 'bun',
         env,
         label: step.label,
         silent: step.silent
-      })
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await runContinue(opts)
+    }
   }
-  const runStepsSilent = ({ steps }: { steps: StepSpec[] }) => {
+  const runStepsSilent = async ({ steps }: { steps: StepSpec[] }) => {
     for (const step of steps) {
-      const result = runCapture({
+      // eslint-disable-next-line no-await-in-loop
+      const result = await runCapture({
         args: step.args,
         command: step.command ?? 'bun',
         env,
@@ -260,7 +265,7 @@ const createFixSteps = ({
     })
   return steps
 }
-const captureAndParse = ({
+const captureAndParse = async ({
   env,
   failures,
   label,
@@ -272,8 +277,8 @@ const captureAndParse = ({
   label: string
   opts: { args: string[]; command: string }
   parser: (result: { exitCode: number; stdout: string }) => Diagnostic[]
-}): Diagnostic[] => {
-  const result = runCapture({
+}): Promise<Diagnostic[]> => {
+  const result = await runCapture({
     args: opts.args,
     command: opts.command,
     env,
@@ -290,7 +295,7 @@ const captureAndParse = ({
   failures.push({ code: result.exitCode, label, message })
   return []
 }
-const runAgentCheck = ({
+const runAgentCheck = async ({
   biomeBin,
   dir,
   env,
@@ -312,14 +317,14 @@ const runAgentCheck = ({
   prettierBin: string
   prettierMarkdownTargets: string[]
   sortPkgJson: string
-}): Diagnostic[] => {
+}): Promise<Diagnostic[]> => {
   const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
   const allDiagnostics: Diagnostic[] = []
   const push = (d: Diagnostic[]) => {
     if (d.length > 0) allDiagnostics.push(...d)
   }
   push(
-    captureAndParse({
+    await captureAndParse({
       env,
       failures,
       label: 'sort-package-json',
@@ -331,7 +336,7 @@ const runAgentCheck = ({
     })
   )
   push(
-    captureAndParse({
+    await captureAndParse({
       env,
       failures,
       label: 'biome',
@@ -343,7 +348,7 @@ const runAgentCheck = ({
     })
   )
   push(
-    captureAndParse({
+    await captureAndParse({
       env,
       failures,
       label: 'oxlint',
@@ -364,7 +369,7 @@ const runAgentCheck = ({
     })
   )
   push(
-    captureAndParse({
+    await captureAndParse({
       env,
       failures,
       label: 'eslint',
@@ -377,7 +382,7 @@ const runAgentCheck = ({
   )
   if (prettierMarkdownTargets.length > 0)
     push(
-      captureAndParse({
+      await captureAndParse({
         env,
         failures,
         label: 'prettier',
@@ -410,14 +415,8 @@ const unusedToDiagnostics = ({ root, unused }: { root: string; unused: UnusedDir
 }
 const dangerousToDiagnostics = (items: DangerousSuppression[]): Diagnostic[] =>
   items.map(d => ({ file: d.file, line: d.line, linter: 'forbidden-suppression', rule: d.rule }))
-const isGitWorkTree = ({ env, root }: { env: Record<string, string | undefined>; root: string }): boolean =>
-  // oxlint-disable-next-line node/no-sync
-  spawnSync({
-    cmd: ['git', '-C', root, 'rev-parse', '--is-inside-work-tree'],
-    env,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  }).exitCode === 0
+const isGitWorkTree = async ({ env, root }: { env: Record<string, string | undefined>; root: string }): Promise<boolean> =>
+  (await $`git -C ${root} rev-parse --is-inside-work-tree`.env(env).quiet().nothrow()).exitCode === 0
 const PRETTIER_EXTENSIONS = ['.md', '.yml', '.yaml']
 const isPrettierTarget = (filePath: string): boolean => PRETTIER_EXTENSIONS.some(ext => filePath.endsWith(ext))
 const createPrettierMarkdownTargets = ({
@@ -445,7 +444,7 @@ const throwAgentResults = ({ diagnostics, failures }: { diagnostics: Diagnostic[
 }
 const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; human?: boolean }) => {
   const dir = joinPath(cwd, cacheDir)
-  ensureDirectory({ directory: dir })
+  await ensureDirectory({ directory: dir })
   const configPath = joinPath(cwd, 'lintmax.config.ts')
   const hasConfig = await pathExists({ path: configPath })
   const bundledBinA = joinPath(lintmaxRoot, 'node_modules', '.bin')
@@ -456,18 +455,18 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     ...bunEnv,
     PATH: `${bundledBinA}:${bundledBinB}:${cwdBinDir}:${bunEnv.PATH ?? ''}`
   }
-  if (hasConfig)
-    run({
-      args: [
-        '-e',
-        `const m = await import('${configPath}'); const { sync: s } = await import('lintmax'); await s(m.default);`
-      ],
-      command: 'bun',
-      env,
-      label: 'config',
-      silent: true
-    })
-  else await sync()
+  await (hasConfig
+    ? run({
+        args: [
+          '-e',
+          `const m = await import('${configPath}'); const { sync: s } = await import('lintmax'); await s(m.default);`
+        ],
+        command: 'bun',
+        env,
+        label: 'config',
+        silent: true
+      })
+    : sync())
   const runtime = (await readJson({ path: runtimePath })) as {
     comments?: boolean
     compact?: boolean
@@ -490,16 +489,9 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     resolveBin({ bin: 'dprint', pkg: 'dprint' })
   ])
   const extraBins: ExtraBins = { dprint: dprintBin, taplo: taploBin }
-  const hasFlowmark =
-    // oxlint-disable-next-line node/no-sync
-    spawnSync({
-      cmd: ['which', 'flowmark'],
-      env,
-      stderr: 'pipe',
-      stdout: 'pipe'
-    }).exitCode === 0
-  const gitWorkTree = isGitWorkTree({ env, root: cwd })
-  const allGitFiles = gitWorkTree ? listCompactFiles({ env, root: cwd }) : []
+  const hasFlowmark = (await $`which flowmark`.env(env).quiet().nothrow()).exitCode === 0
+  const gitWorkTree = await isGitWorkTree({ env, root: cwd })
+  const allGitFiles = gitWorkTree ? await listCompactFiles({ env, root: cwd }) : []
   const prettierMarkdownTargets = createPrettierMarkdownTargets({ gitFiles: allGitFiles, gitWorkTree })
   const checkSteps = createCheckSteps({
     biomeBin,
@@ -529,14 +521,13 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       prettierMarkdownTargets,
       sortPkgJson
     })
-    if (human) runSteps({ steps: fixSteps })
-    else runStepsSilent({ steps: fixSteps })
+    await (human ? runSteps({ steps: fixSteps }) : runStepsSilent({ steps: fixSteps }))
     clearFailures()
     if (sourceFiles.length > 0)
       await removeUnusedSuppressions({ filePaths: sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
     if (human) {
-      runSteps({ steps: checkSteps })
-      const extraHuman = emitExtra(runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles }))
+      await runSteps({ steps: checkSteps })
+      const extraHuman = emitExtra(await runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles }))
       if (extraHuman.length > 0) {
         const output = formatGrouped({ files: aggregate({ diagnostics: extraHuman }) })
         if (output.length > 0) process.stdout.write(`${output}\n`)
@@ -545,7 +536,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       throwIfFailures()
       return
     }
-    const allDiagnostics = runAgentCheck({
+    const allDiagnostics = await runAgentCheck({
       biomeBin,
       dir,
       env,
@@ -566,13 +557,13 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     allDiagnostics.push(
       ...cnDiags,
       ...jsxDiags,
-      ...emitExtra(runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles }))
+      ...emitExtra(await runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles }))
     )
     throwAgentResults({ diagnostics: allDiagnostics, failures })
     return
   }
   if (human) {
-    runSteps({ steps: checkSteps })
+    await runSteps({ steps: checkSteps })
     const cnDiagsHuman = await checkClassName({ root: cwd })
     const jsxDiagsHuman = await checkJsxExtension({ root: cwd })
     const unusedHuman =
@@ -584,7 +575,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       ...jsxDiagsHuman,
       ...unusedToDiagnostics({ root: cwd, unused: unusedHuman.diagnostics }),
       ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
-      ...emitExtra(runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles }))
+      ...emitExtra(await runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles }))
     ]
     if (humanCustomDiags.length > 0) {
       const grouped = aggregate({ diagnostics: humanCustomDiags })
@@ -595,7 +586,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     throwIfFailures()
     return
   }
-  const allDiagnostics = runAgentCheck({
+  const allDiagnostics = await runAgentCheck({
     biomeBin,
     dir,
     env,
@@ -624,7 +615,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   }
   allDiagnostics.push(
     ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
-    ...emitExtra(runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles }))
+    ...emitExtra(await runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles }))
   )
   if (allDiagnostics.length > 0 || failures.length > 0) {
     const grouped = aggregate({ diagnostics: allDiagnostics })

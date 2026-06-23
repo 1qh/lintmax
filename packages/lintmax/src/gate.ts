@@ -1,35 +1,23 @@
-import { spawnSync } from 'bun'
+import { $ } from 'bun'
 import { bunEnv, cwd, envValue } from './core.js'
 import { runLint } from './pipeline.js'
 import { formatStaleness, scanStaleness } from './staleness.js'
 import { hashTree, loadState, saveState } from './state.js'
 
 const envNoCache = 'LINTMAX_NO_CACHE'
-const listTrackedFiles = (): null | string[] => {
-  // oxlint-disable-next-line node/no-sync
-  const isWorkTree = spawnSync({
-    cmd: ['git', '-C', cwd, 'rev-parse', '--is-inside-work-tree'],
-    env: bunEnv,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+const listTrackedFiles = async (): Promise<null | string[]> => {
+  const isWorkTree = await $`git -C ${cwd} rev-parse --is-inside-work-tree`.env(bunEnv).quiet().nothrow()
   if (isWorkTree.exitCode !== 0) return null
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({
-    cmd: ['git', '-C', cwd, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-    env: bunEnv,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+  const result = await $`git -C ${cwd} ls-files -z --cached --others --exclude-standard`.env(bunEnv).quiet().nothrow()
   if (result.exitCode !== 0) return null
-  return new TextDecoder()
-    .decode(result.stdout)
+  return result.stdout
+    .toString()
     .split('\0')
     .filter(entry => entry.length > 0)
 }
-const computeGreenKey = (version: string): null | string => {
+const computeGreenKey = async (version: string): Promise<null | string> => {
   if (envValue(envNoCache) === '1') return null
-  const files = listTrackedFiles()
+  const files = await listTrackedFiles()
   if (files === null) return null
   return hashTree({ files, root: cwd, version })
 }
@@ -56,11 +44,11 @@ const emitStaleness = async (): Promise<void> => {
   }
 }
 const runGate = async ({ command, human, version }: { command: 'check' | 'fix'; human: boolean; version: string }) => {
-  const startKey = computeGreenKey(version)
+  const startKey = await computeGreenKey(version)
   if (await tryCached(startKey)) return
   const stalePromise = emitStaleness()
   await runLint({ command, human })
-  await persistGreen(computeGreenKey(version))
+  await persistGreen(await computeGreenKey(version))
   await stalePromise
   process.stdout.write('ok\n')
 }

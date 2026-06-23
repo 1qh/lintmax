@@ -1,5 +1,5 @@
-import { spawnSync } from 'bun'
-import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { $, file, write } from 'bun'
+import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const OK_LINE_RE = /^ok(?: \(cached\))?$/u
@@ -61,42 +61,33 @@ type StringOrNumber = string | number
 export { greet, processData, checkExists, buildPath, MAX_RETRIES, DEFAULT_TIMEOUT, API_BASE, double, isPositive, abs }
 export type { StringOrNumber }
 `
-const run = (args: string[]) =>
-  // oxlint-disable-next-line node/no-sync
-  spawnSync({
-    cmd: ['bun', cli, ...args],
-    cwd: root,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+const run = async (args: string[]) => $`bun ${cli} ${args}`.cwd(root).quiet().nothrow()
 const decoder = new TextDecoder()
 const assert = (condition: boolean, msg: string) => {
   if (!condition) throw new Error(`FAIL: ${msg}`)
 }
-// oxlint-disable-next-line node/no-sync
-writeFileSync(workFile, DIRTY_FIXTURE)
-const checkResult = run(['check'])
+await write(workFile, DIRTY_FIXTURE)
+const checkResult = await run(['check'])
 assert(checkResult.exitCode !== 0, 'check should fail on dirty fixture')
 const checkStdout = decoder.decode(checkResult.stdout)
 assert(checkStdout.includes('comments'), 'check output should mention comments linter')
 assert(checkStdout.includes('deletable'), 'check output should mention deletable rule')
 process.stdout.write(`check output:\n${checkStdout}\n`)
-const fixResult = run(['fix'])
+const fixResult = await run(['fix'])
 const fixStdout = decoder.decode(fixResult.stdout)
 assert(
   fixResult.exitCode === 0,
   `fix should exit 0, got ${fixResult.exitCode}\n${fixStdout}\n${decoder.decode(fixResult.stderr)}`
 )
 assert(OK_LINE_RE.test(fixStdout.trim()), `fix should emit only ok, got: ${fixStdout.trim()}`)
-const recheckResult = run(['check'])
+const recheckResult = await run(['check'])
 const recheckStdout = decoder.decode(recheckResult.stdout)
 assert(
   recheckResult.exitCode === 0,
   `recheck should exit 0, got ${recheckResult.exitCode}\n${recheckStdout}\n${decoder.decode(recheckResult.stderr)}`
 )
 assert(OK_LINE_RE.test(recheckStdout.trim()), `recheck should emit only ok, got: ${recheckStdout.trim()}`)
-// oxlint-disable-next-line node/no-sync
-const fixed = readFileSync(workFile, 'utf8')
+const fixed = await file(workFile).text()
 const lines = fixed.split('\n')
 for (const line of lines) {
   const trimmed = line.trim()
@@ -106,6 +97,5 @@ for (const line of lines) {
       `unexpected comment in fixed file: ${trimmed}`
     )
 }
-// oxlint-disable-next-line node/no-sync
-unlinkSync(workFile)
+await unlink(workFile)
 process.stdout.write('magic test passed\n')

@@ -1,6 +1,6 @@
 import type { Linter } from 'eslint'
-import { file, spawnSync, write } from 'bun'
-import { lstatSync } from 'node:fs'
+import { $, file, write } from 'bun'
+import { lstat } from 'node:fs/promises'
 import { join as joinFs, relative as relativePath } from 'node:path'
 import type {
   BiomeOptions,
@@ -915,29 +915,24 @@ const resolveSyncImportSource = ({ cwd, dir, source }: { cwd: string; dir: strin
   const relativeSource = relativePath(dir, absoluteSource).replaceAll('\\', '/')
   return relativeSource.startsWith('.') ? relativeSource : `./${relativeSource}`
 }
-const discoverSymlinkPatterns = ({ root }: { root: string }): readonly string[] => {
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({
-    cmd: ['git', '-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+const discoverSymlinkPatterns = async ({ root }: { root: string }): Promise<readonly string[]> => {
+  const result = await $`git -C ${root} ls-files -z --cached --others --exclude-standard`.quiet().nothrow()
   if (result.exitCode !== 0) return []
-  const entries = new TextDecoder()
-    .decode(result.stdout)
+  const entries = result.stdout
+    .toString()
     .split('\0')
     .filter(e => e.length > 0)
+  const symlinkFlags = await Promise.all(
+    entries.map(async entry => {
+      try {
+        return (await lstat(joinFs(root, entry))).isSymbolicLink()
+      } catch {
+        return false
+      }
+    })
+  )
   const out: string[] = []
-  for (const entry of entries) {
-    let isSymlink: boolean
-    try {
-      // oxlint-disable-next-line node/no-sync
-      isSymlink = lstatSync(joinFs(root, entry)).isSymbolicLink()
-    } catch {
-      isSymlink = false
-    }
-    if (isSymlink) out.push(entry)
-  }
+  for (const [index, entry] of entries.entries()) if (symlinkFlags[index]) out.push(entry)
   return out
 }
 const sync = async (options?: SyncOptions): Promise<void> => {
@@ -947,7 +942,7 @@ const sync = async (options?: SyncOptions): Promise<void> => {
   const cwd = process.cwd()
   const dir = joinPath(cwd, cacheDir)
   const userIgnorePatterns = buildUserIgnorePatterns({ topLevelIgnores })
-  const symlinkIgnorePatterns = discoverSymlinkPatterns({ root: cwd })
+  const symlinkIgnorePatterns = await discoverSymlinkPatterns({ root: cwd })
   const sharedIgnorePatterns = mergeIgnorePatternGroups({
     groups: [DEFAULT_SHARED_IGNORE_PATTERNS, symlinkIgnorePatterns, userIgnorePatterns]
   })
@@ -966,7 +961,7 @@ const sync = async (options?: SyncOptions): Promise<void> => {
     tsconfigRootDir,
     userIgnorePatterns
   })
-  ensureDirectory({ directory: dir })
+  await ensureDirectory({ directory: dir })
   const biomeConfig = await createBiomeConfig({
     cwd,
     options: biomeOptions,
@@ -1000,7 +995,7 @@ const sync = async (options?: SyncOptions): Promise<void> => {
       ? ''
       : `\nconst appendImports = [\n${importEntries}\n]\nconst normalizedAppend = []\nfor (const entry of options.append ?? []) {\n  if (entry && typeof entry === 'object' && !Array.isArray(entry) && ${JSON.stringify(ESLINT_IMPORT_MARKER_KEY)} in entry) {\n    const importIndex = entry[${JSON.stringify(ESLINT_IMPORT_MARKER_KEY)}]\n    if (typeof importIndex !== 'number' || !Number.isInteger(importIndex))\n      throw new Error('Invalid eslint import marker index in generated config')\n    const importRef = appendImports[importIndex]\n    if (!importRef) throw new Error(\`Missing eslint import ref for index \${importIndex}\`)\n    const imported = importRef.module[importRef.exportName]\n    const importedEntries = Array.isArray(imported) ? imported : [imported]\n    for (const importedEntry of importedEntries) {\n      if (!importedEntry || typeof importedEntry !== 'object' || Array.isArray(importedEntry))\n        throw new Error(\`Imported eslint append from \${importRef.exportName} must resolve to config object(s)\`)\n      normalizedAppend.push({\n        ...importedEntry,\n        ...(Array.isArray(importRef.files) ? { files: [...importRef.files] } : {}),\n        ...(Array.isArray(importRef.ignores) ? { ignores: [...importRef.ignores] } : {})\n      })\n    }\n    continue\n  }\n  normalizedAppend.push(entry)\n}\noptions.append = normalizedAppend\n`
   const eslintConfig = eslintOptions
-    ? `${importStatements.length > 0 ? `${importStatements}\n` : ''}import { eslint } from 'lintmax/eslint'\nconst options = ${JSON.stringify(eslintOptions)}\nfor (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {\n  const entry = options.append?.[index]\n  if (entry && typeof entry === 'object') entry[Symbol.for(${JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)})] = true\n}${importExpansion}export default eslint(options)\n`
+    ? `${importStatements.length > 0 ? `${importStatements}\n` : ''}import { eslint } from 'lintmax/eslint'\nconst options = ${JSON.stringify(eslintOptions)}\nfor (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {\n  const entry = options.append?.[index]\n  if (entry && typeof entry === 'object') entry[Symbol.for(${JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)})] = true\n}${importExpansion}export default await eslint(options)\n`
     : "export { default } from 'lintmax/eslint'\n"
   const runtimeConfig = { comments: options?.comments !== false, compact: options?.compact !== false }
   await write(joinPath(dir, 'biome.json'), `${JSON.stringify(biomeConfig, null, 2)}\n`)

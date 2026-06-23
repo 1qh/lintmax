@@ -1,5 +1,5 @@
-import { spawnSync } from 'bun'
-import { copyFileSync, rmSync } from 'node:fs'
+import { $ } from 'bun'
+import { copyFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const root = join(import.meta.dir, '..')
@@ -12,46 +12,28 @@ const workTsx = join(root, 'src/coverage-work.tsx')
 const cacheDir = join(root, 'node_modules/.cache/lintmax')
 const binDir = join(monorepoRoot, 'node_modules/.bin')
 const decoder = new TextDecoder()
-const cleanup = () => {
-  // oxlint-disable-next-line node/no-sync
-  rmSync(workTs, { force: true })
-  // oxlint-disable-next-line node/no-sync
-  rmSync(workTsx, { force: true })
+const cleanup = async () => {
+  await rm(workTs, { force: true })
+  await rm(workTsx, { force: true })
 }
 try {
-  // oxlint-disable-next-line node/no-sync
-  copyFileSync(fixtureTs, workTs)
-  // oxlint-disable-next-line node/no-sync
-  copyFileSync(fixtureTsx, workTsx)
-  // oxlint-disable-next-line node/no-sync
-  const agentResult = spawnSync({
-    cmd: ['bun', cli, 'check'],
-    cwd: root,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+  await copyFile(fixtureTs, workTs)
+  await copyFile(fixtureTsx, workTsx)
+  const agentResult = await $`bun ${cli} check`.cwd(root).quiet().nothrow()
   const agentOutput = decoder.decode(agentResult.stdout)
-  // oxlint-disable-next-line node/no-sync
-  const biomeResult = spawnSync({
-    cmd: [join(binDir, 'biome'), 'check', '--config-path', cacheDir, workTs, workTsx],
-    cwd: root,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
-  // oxlint-disable-next-line node/no-sync
-  const oxlintResult = spawnSync({
-    cmd: [join(binDir, 'oxlint'), '-c', join(cacheDir, '.oxlintrc.json'), workTs, workTsx],
-    cwd: root,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
-  // oxlint-disable-next-line node/no-sync
-  const eslintResult = spawnSync({
-    cmd: [join(binDir, 'eslint'), '--config', join(cacheDir, 'eslint.generated.mjs'), workTs, workTsx],
-    cwd: root,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+  const biomeResult = await $`${join(binDir, 'biome')} check --config-path ${cacheDir} ${workTs} ${workTsx}`
+    .cwd(root)
+    .quiet()
+    .nothrow()
+  const oxlintResult = await $`${join(binDir, 'oxlint')} -c ${join(cacheDir, '.oxlintrc.json')} ${workTs} ${workTsx}`
+    .cwd(root)
+    .quiet()
+    .nothrow()
+  const eslintResult =
+    await $`${join(binDir, 'eslint')} --config ${join(cacheDir, 'eslint.generated.mjs')} ${workTs} ${workTsx}`
+      .cwd(root)
+      .quiet()
+      .nothrow()
   const ESC = String.fromCodePoint(27)
   const ANSI_RE = new RegExp(`${ESC}\\[[0-9;]*m`, 'gu')
   const PATH_RE = /\/[^\s:]+\//gu
@@ -79,5 +61,5 @@ try {
   if (verboseSize > 0 && agentSize > 0 && reduction <= 0.85) throw new Error(`expected >85% reduction, got ${pct}%`)
   process.stdout.write('coverage test passed\n')
 } finally {
-  cleanup()
+  await cleanup()
 }

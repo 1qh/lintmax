@@ -1,15 +1,14 @@
-import { file, spawnSync, write } from 'bun'
-import { lstatSync } from 'node:fs'
+import { $, file, write } from 'bun'
+import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CliExitError, decodeText } from './core.js'
 import { joinPath } from './path.js'
 
-const lstatSafe = (p: string) => {
+const isSymlinkSafe = async (p: string): Promise<boolean> => {
   try {
-    // oxlint-disable-next-line node/no-sync
-    return lstatSync(p)
+    return (await lstat(p)).isSymbolicLink()
   } catch {
-    return null
+    return false
   }
 }
 const COMPACT_REGEX = /(?:\r?\n){2,}/gu
@@ -54,26 +53,28 @@ const isBinary = ({ bytes }: { bytes: Uint8Array }): boolean => {
   for (const byte of bytes) if (byte === 0) return true
   return false
 }
-const listCompactFiles = ({ env, root }: { env: Record<string, string | undefined>; root: string }): string[] => {
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({
-    cmd: ['git', '-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-    env,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+const listCompactFiles = async ({
+  env,
+  root
+}: {
+  env: Record<string, string | undefined>
+  root: string
+}): Promise<string[]> => {
+  const result = await $`git -C ${root} ls-files -z --cached --others --exclude-standard`.env(env).quiet().nothrow()
   if (result.exitCode !== 0) {
-    const stderr = decodeText(result.stderr).trim()
+    const stderr = result.stderr.toString().trim()
     if (stderr.toLowerCase().includes('not a git repository')) return []
     throw new CliExitError({
       code: result.exitCode,
       message: stderr.length > 0 ? stderr : 'Failed to list files for compact step'
     })
   }
-  const entries = decodeText(result.stdout)
+  const entries = result.stdout
+    .toString()
     .split('\0')
     .filter(e => e.length > 0 && e !== 'bun.lock')
-  return entries.filter(e => !lstatSafe(join(root, e))?.isSymbolicLink())
+  const symlinkFlags = await Promise.all(entries.map(async e => isSymlinkSafe(join(root, e))))
+  return entries.filter((_e, index) => !symlinkFlags[index])
 }
 const runCompact = async ({
   env,
@@ -86,7 +87,7 @@ const runCompact = async ({
   mode: 'check' | 'fix'
   root: string
 }) => {
-  const files = listCompactFiles({ env, root })
+  const files = await listCompactFiles({ env, root })
   const results = await Promise.all(
     files.map(async relativePath => {
       if (!isCompactCandidate({ relativePath })) return { changed: false, relativePath, scanned: false }

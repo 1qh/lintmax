@@ -1,4 +1,4 @@
-import { env as bunEnv, file, spawnSync } from 'bun'
+import { $, env as bunEnv, file } from 'bun'
 import { isRecord } from './normalize.js'
 import { dirnamePath, fromFileUrl, joinPath } from './path.js'
 
@@ -69,15 +69,10 @@ const readRequiredJson = async <T>({ path }: { path: string }): Promise<T> => {
   const text = await file(path).text()
   return JSON.parse(text) as T
 }
-const ensureDirectory = ({ directory }: { directory: string }) => {
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({
-    cmd: ['mkdir', '-p', directory],
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+const ensureDirectory = async ({ directory }: { directory: string }): Promise<void> => {
+  const result = await $`mkdir -p ${directory}`.quiet().nothrow()
   if (result.exitCode === 0) return
-  const stderr = decodeText(result.stderr).trim()
+  const stderr = result.stderr.toString().trim()
   throw new CliExitError({
     code: result.exitCode,
     message: stderr.length > 0 ? stderr : `Failed to create directory: ${directory}`
@@ -104,38 +99,29 @@ const resolveBin = async ({ bin, pkg }: { bin: string; pkg: string }): Promise<s
   const binPath = typeof pkgJson.bin === 'string' ? pkgJson.bin : (pkgJson.bin?.[bin] ?? '')
   return joinPath(pkgDir, binPath)
 }
-const run = ({ args, command, env, label, silent = false }: RunOpts): void => {
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({
-    cmd: [command, ...args],
-    cwd,
-    env,
-    stderr: silent ? 'pipe' : 'inherit',
-    stdout: silent ? 'pipe' : 'inherit'
-  })
+const run = async ({ args, command, env, label, silent = false }: RunOpts): Promise<void> => {
+  const base = $`${command} ${args}`.cwd(cwd).env(env).nothrow()
+  const result = await (silent ? base.quiet() : base)
   if (result.exitCode === 0) return
   if (silent) {
     process.stderr.write(`[${label}]\n`)
-    const stdout = decodeText(result.stdout)
+    const stdout = result.stdout.toString()
     if (stdout.length > 0) process.stderr.write(stdout)
-    const stderr = decodeText(result.stderr)
+    const stderr = result.stderr.toString()
     if (stderr.length > 0) process.stderr.write(stderr)
   }
   throw new CliExitError({ code: result.exitCode })
 }
-const runCapture = ({ args, command, env }: RunOpts): { exitCode: number; stderr: string; stdout: string } => {
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({
-    cmd: [command, ...args],
-    cwd,
-    env,
-    stderr: 'pipe',
-    stdout: 'pipe'
-  })
+const runCapture = async ({
+  args,
+  command,
+  env
+}: RunOpts): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
+  const result = await $`${command} ${args}`.cwd(cwd).env(env).quiet().nothrow()
   return {
     exitCode: result.exitCode,
-    stderr: decodeText(result.stderr),
-    stdout: decodeText(result.stdout)
+    stderr: result.stderr.toString(),
+    stdout: result.stdout.toString()
   }
 }
 const envValue = (name: string): string => bunEnv[name] ?? ''

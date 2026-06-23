@@ -1,6 +1,5 @@
 import { env as bunEnv, file, write } from 'bun'
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { isRecord } from './normalize.js'
 import { joinPath } from './path.js'
@@ -55,19 +54,30 @@ const saveState = async (state: StateShape): Promise<void> => {
     process.exitCode ??= 0
   }
 }
-const hashTree = ({ files, root, version }: { files: readonly string[]; root: string; version: string }): string => {
+const hashTree = async ({
+  files,
+  root,
+  version
+}: {
+  files: readonly string[]
+  root: string
+  version: string
+}): Promise<string> => {
   const hash = createHash('sha256')
   hash.update(`lintmax:${version}\n`)
   const sorted = [...files].toSorted((left, right) => (left < right ? -1 : left > right ? 1 : 0))
-  for (const relativePath of sorted)
-    try {
-      const digest = createHash('sha256')
-      // oxlint-disable-next-line node/no-sync
-      digest.update(readFileSync(joinPath(root, relativePath)))
-      hash.update(`${relativePath}:${digest.digest('hex')}\n`)
-    } catch {
-      hash.update(`${relativePath}:unreadable\n`)
-    }
+  const digests = await Promise.all(
+    sorted.map(async relativePath => {
+      try {
+        const digest = createHash('sha256')
+        digest.update(await file(joinPath(root, relativePath)).bytes())
+        return `${relativePath}:${digest.digest('hex')}\n`
+      } catch {
+        return `${relativePath}:unreadable\n`
+      }
+    })
+  )
+  for (const line of digests) hash.update(line)
   return hash.digest('hex')
 }
 export type { StateShape }

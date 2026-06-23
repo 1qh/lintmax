@@ -64,11 +64,11 @@ const batchStripRestore = async ({
   lint
 }: {
   data: FileData[]
-  lint: () => Map<string, Set<string>>
+  lint: () => Promise<Map<string, Set<string>>>
 }): Promise<Map<string, Set<string>>> => {
   await Promise.all(data.map(async d => write(d.filePath, d.stripped)))
   try {
-    return lint()
+    return await lint()
   } finally {
     await Promise.all(data.map(async d => write(d.filePath, d.orig)))
   }
@@ -92,7 +92,7 @@ const rebuildBiomeLine = ({ line, rules }: { line: string; rules: string[] }): s
   const indent = indentMatch?.[0] ?? ''
   return `${indent}/** biome-ignore-all ${rules.join(', ')}: ${reason} */`
 }
-const firedOxlintByFile = ({
+const firedOxlintByFile = async ({
   configPath,
   files,
   oxlintBin
@@ -100,8 +100,8 @@ const firedOxlintByFile = ({
   configPath: string
   files: string[]
   oxlintBin: string
-}): Map<string, Set<string>> => {
-  const result = runCapture({
+}): Promise<Map<string, Set<string>>> => {
+  const result = await runCapture({
     args: [oxlintBin, '-c', configPath, '-f', 'json', ...files],
     command: 'bun',
     env: buildEnv(),
@@ -189,7 +189,7 @@ const findBiomeIgnoreAllFiles = async (filePaths: string[]): Promise<string[]> =
   }
   return out
 }
-const firedBiomeByFile = ({
+const firedBiomeByFile = async ({
   biomeBin,
   configDir,
   files
@@ -197,8 +197,8 @@ const firedBiomeByFile = ({
   biomeBin: string
   configDir: string
   files: string[]
-}): Map<string, Set<string>> => {
-  const result = runCapture({
+}): Promise<Map<string, Set<string>>> => {
+  const result = await runCapture({
     args: [biomeBin, 'lint', '--reporter=json', '--config-path', configDir, ...files],
     command: 'bun',
     env: buildEnv(),
@@ -283,7 +283,8 @@ const removeUnusedSuppressions = async ({
   if (oxlintData.length > 0) {
     const firedByFile = await batchStripRestore({
       data: oxlintData,
-      lint: () => firedOxlintByFile({ configPath: oxlintConfigPath, files: oxlintData.map(d => d.filePath), oxlintBin })
+      lint: async () =>
+        firedOxlintByFile({ configPath: oxlintConfigPath, files: oxlintData.map(d => d.filePath), oxlintBin })
     })
     for (const data of oxlintData) {
       const outcome = await rebuildOxlintFile({
@@ -302,7 +303,7 @@ const removeUnusedSuppressions = async ({
   if (biomeData.length > 0) {
     const firedByFile = await batchStripRestore({
       data: biomeData,
-      lint: () => firedBiomeByFile({ biomeBin, configDir, files: biomeData.map(d => d.filePath) })
+      lint: async () => firedBiomeByFile({ biomeBin, configDir, files: biomeData.map(d => d.filePath) })
     })
     for (const data of biomeData) {
       const outcome = await rebuildBiomeFile({ data, dryRun, fired: firedByFile.get(absFile(data.filePath)) ?? new Set() })

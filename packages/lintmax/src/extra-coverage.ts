@@ -1,4 +1,4 @@
-import { spawnSync } from 'bun'
+import { $ } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import { runCapture } from './core.js'
 
@@ -24,11 +24,10 @@ const resolveDprintPluginPath = (): null | string => {
     return null
   }
 }
-const whichTool = (env: Record<string, string | undefined>, tool: string): null | string => {
-  // oxlint-disable-next-line node/no-sync
-  const result = spawnSync({ cmd: ['which', tool], env, stderr: 'pipe', stdout: 'pipe' })
+const whichTool = async (env: Record<string, string | undefined>, tool: string): Promise<null | string> => {
+  const result = await $`which ${tool}`.env(env).quiet().nothrow()
   if (result.exitCode !== 0) return null
-  const path = new TextDecoder().decode(result.stdout).trim()
+  const path = result.stdout.toString().trim()
   return path.length > 0 ? path : null
 }
 interface StepResult {
@@ -45,7 +44,7 @@ interface ExtraBins {
   dprint: string
   taplo: string
 }
-const runShell = ({
+const runShell = async ({
   command,
   env,
   files
@@ -53,21 +52,21 @@ const runShell = ({
   command: 'check' | 'fix'
   env: Record<string, string | undefined>
   files: readonly string[]
-}): StepResult => {
+}): Promise<StepResult> => {
   if (files.length === 0) return { diagnostics: [], notes: [] }
-  const shellcheck = whichTool(env, 'shellcheck')
-  const shfmt = whichTool(env, 'shfmt')
+  const shellcheck = await whichTool(env, 'shellcheck')
+  const shfmt = await whichTool(env, 'shfmt')
   const notes: string[] = []
   if (shellcheck === null || shfmt === null)
     notes.push('shellcheck/shfmt not on PATH — shell files unchecked (install: brew install shellcheck shfmt)')
   const diagnostics: Diagnostic[] = []
   if (shfmt !== null) {
-    if (command === 'fix') runCapture({ args: ['-w', ...files], command: shfmt, env, label: 'shfmt' })
-    const fmtCheck = runCapture({ args: ['-d', ...files], command: shfmt, env, label: 'shfmt' })
+    if (command === 'fix') await runCapture({ args: ['-w', ...files], command: shfmt, env, label: 'shfmt' })
+    const fmtCheck = await runCapture({ args: ['-d', ...files], command: shfmt, env, label: 'shfmt' })
     if (fmtCheck.exitCode !== 0 || fmtCheck.stdout.trim().length > 0) diagnostics.push(failureDiagnostic('shfmt', files))
   }
   if (shellcheck !== null) {
-    const result = runCapture({ args: ['-f', 'gcc', ...files], command: shellcheck, env, label: 'shellcheck' })
+    const result = await runCapture({ args: ['-f', 'gcc', ...files], command: shellcheck, env, label: 'shellcheck' })
     let parsed = false
     for (const line of result.stdout.split('\n')) {
       const groups = SHELLCHECK_LINE_RE.exec(line)?.groups
@@ -80,7 +79,7 @@ const runShell = ({
   }
   return { diagnostics, notes }
 }
-const runTaplo = ({
+const runTaplo = async ({
   bin,
   command,
   env,
@@ -90,15 +89,15 @@ const runTaplo = ({
   command: 'check' | 'fix'
   env: Record<string, string | undefined>
   files: readonly string[]
-}): Diagnostic[] => {
+}): Promise<Diagnostic[]> => {
   if (files.length === 0) return []
-  if (command === 'fix') runCapture({ args: [bin, 'fmt', ...files], command: 'bun', env, label: 'taplo' })
-  const lint = runCapture({ args: [bin, 'lint', ...files], command: 'bun', env, label: 'taplo' })
-  const fmtCheck = runCapture({ args: [bin, 'fmt', '--check', ...files], command: 'bun', env, label: 'taplo' })
+  if (command === 'fix') await runCapture({ args: [bin, 'fmt', ...files], command: 'bun', env, label: 'taplo' })
+  const lint = await runCapture({ args: [bin, 'lint', ...files], command: 'bun', env, label: 'taplo' })
+  const fmtCheck = await runCapture({ args: [bin, 'fmt', '--check', ...files], command: 'bun', env, label: 'taplo' })
   if (lint.exitCode === 0 && fmtCheck.exitCode === 0) return []
   return [failureDiagnostic('taplo', files)]
 }
-const runDprintDockerfile = ({
+const runDprintDockerfile = async ({
   bin,
   command,
   env,
@@ -110,15 +109,15 @@ const runDprintDockerfile = ({
   env: Record<string, string | undefined>
   files: readonly string[]
   pluginPath: null | string
-}): Diagnostic[] => {
+}): Promise<Diagnostic[]> => {
   if (files.length === 0 || pluginPath === null) return []
   const configArgs = ['--plugins', pluginPath, '--config', '/dev/null']
-  if (command === 'fix') runCapture({ args: ['fmt', ...configArgs, ...files], command: bin, env, label: 'dprint' })
-  const check = runCapture({ args: ['check', ...configArgs, ...files], command: bin, env, label: 'dprint' })
+  if (command === 'fix') await runCapture({ args: ['fmt', ...configArgs, ...files], command: bin, env, label: 'dprint' })
+  const check = await runCapture({ args: ['check', ...configArgs, ...files], command: bin, env, label: 'dprint' })
   if (check.exitCode === 0) return []
   return [failureDiagnostic('dprint', files)]
 }
-const runExtraCoverage = ({
+const runExtraCoverage = async ({
   bins,
   command,
   env,
@@ -128,15 +127,15 @@ const runExtraCoverage = ({
   command: 'check' | 'fix'
   env: Record<string, string | undefined>
   gitFiles: readonly string[]
-}): StepResult => {
+}): Promise<StepResult> => {
   const targets = collectExtraTargets(gitFiles)
   const pluginPath = resolveDprintPluginPath()
-  const shell = runShell({ command, env, files: targets.shell })
-  const diagnostics: Diagnostic[] = [
-    ...runTaplo({ bin: bins.taplo, command, env, files: targets.toml }),
-    ...runDprintDockerfile({ bin: bins.dprint, command, env, files: targets.dockerfiles, pluginPath }),
-    ...shell.diagnostics
-  ]
+  const [shell, taplo, dprint] = await Promise.all([
+    runShell({ command, env, files: targets.shell }),
+    runTaplo({ bin: bins.taplo, command, env, files: targets.toml }),
+    runDprintDockerfile({ bin: bins.dprint, command, env, files: targets.dockerfiles, pluginPath })
+  ])
+  const diagnostics: Diagnostic[] = [...taplo, ...dprint, ...shell.diagnostics]
   return { diagnostics, notes: shell.notes }
 }
 export type { ExtraBins }
