@@ -10,20 +10,38 @@ const lineAt = (sourceText: string, offset: number): number => {
 const KEEP_PATTERN =
   /eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|@refresh|@flow|istanbul ignore|c8 ignore|webpackChunkName|prettier-ignore|noinspection|nolint|@jsx|@jsxImportSource|@jsxFrag|@license|@preserve|type-coverage:ignore/u
 const WHITESPACE_ONLY = /^\s*$/u
+const WS_CHAR = /\s/u
 const COMMENT_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
 const extOf = (path: string): string => {
   const dot = path.lastIndexOf('.')
   return dot > path.lastIndexOf('/') ? path.slice(dot) : ''
 }
 const isCommentCandidate = (path: string): boolean => COMMENT_EXTENSIONS.has(extOf(path))
+const isBlockOnlyComment = (
+  sourceText: string,
+  comments: { end: number; start: number }[],
+  c: { end: number; start: number }
+): boolean => {
+  const inComment = (idx: number): boolean => comments.some(o => idx >= o.start && idx < o.end)
+  let before = c.start - 1
+  while (before >= 0 && (WS_CHAR.test(sourceText[before] ?? '') || inComment(before))) before -= 1
+  let after = c.end
+  while (after < sourceText.length && (WS_CHAR.test(sourceText[after] ?? '') || inComment(after))) after += 1
+  return sourceText[before] === '{' && sourceText[after] === '}'
+}
 const findDeletableComments = ({ sourceText }: { sourceText: string }): { end: number; line: number; start: number }[] => {
   // oxlint-disable-next-line node/no-sync
   const { comments } = parseSync('file.tsx', sourceText)
   const deletable: { end: number; line: number; start: number }[] = []
   for (const c of comments) {
     const text = sourceText.slice(c.start, c.end)
-    if (!(text.startsWith('#!') || text.startsWith('/**') || text.startsWith('/// <') || KEEP_PATTERN.test(text)))
-      deletable.push({ end: c.end, line: lineAt(sourceText, c.start), start: c.start })
+    const keep =
+      text.startsWith('#!') ||
+      text.startsWith('/**') ||
+      text.startsWith('/// <') ||
+      KEEP_PATTERN.test(text) ||
+      isBlockOnlyComment(sourceText, comments, c)
+    if (!keep) deletable.push({ end: c.end, line: lineAt(sourceText, c.start), start: c.start })
   }
   deletable.sort((a, b) => a.start - b.start)
   return deletable
