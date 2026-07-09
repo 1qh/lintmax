@@ -1,6 +1,6 @@
 {
   "name": "lintmax",
-  "version": "0.1.71",
+  "version": "0.1.72",
   "description": "The #1 anti AI slop typescript tooling. Designed for coding agents, not humans.",
   "keywords": [
     "agent",
@@ -75,6 +75,7 @@
     "eslint-plugin-react": "latest",
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-turbo": "latest",
+    "oxc-parser": "^0.139.0",
     "oxlint": "latest",
     "prettier": "latest",
     "sort-package-json": "latest",

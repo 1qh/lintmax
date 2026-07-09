@@ -1,7 +1,12 @@
 import { file, write } from 'bun'
-import ts from 'typescript'
+import { parseSync } from 'oxc-parser'
 import type { Diagnostic } from './aggregate.js'
 
+const lineAt = (sourceText: string, offset: number): number => {
+  let line = 1
+  for (let i = 0; i < offset && i < sourceText.length; i += 1) if (sourceText[i] === '\n') line += 1
+  return line
+}
 const KEEP_PATTERN =
   /eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|@refresh|@flow|istanbul ignore|c8 ignore|webpackChunkName|prettier-ignore|noinspection|nolint|@jsx|@jsxImportSource|@jsxFrag|@license|@preserve|type-coverage:ignore/u
 const WHITESPACE_ONLY = /^\s*$/u
@@ -12,25 +17,14 @@ const extOf = (path: string): string => {
 }
 const isCommentCandidate = (path: string): boolean => COMMENT_EXTENSIONS.has(extOf(path))
 const findDeletableComments = ({ sourceText }: { sourceText: string }): { end: number; line: number; start: number }[] => {
-  const sourceFile = ts.createSourceFile('file.ts', sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
-  const seen = new Set<number>()
+  // oxlint-disable-next-line node/no-sync
+  const { comments } = parseSync('file.tsx', sourceText)
   const deletable: { end: number; line: number; start: number }[] = []
-  const visit = (node: ts.Node) => {
-    const leading = ts.getLeadingCommentRanges(sourceText, node.getFullStart())
-    const trailing = ts.getTrailingCommentRanges(sourceText, node.getEnd())
-    const ranges = [...(leading ?? []), ...(trailing ?? [])]
-    for (const range of ranges)
-      if (!seen.has(range.pos)) {
-        seen.add(range.pos)
-        const text = sourceText.slice(range.pos, range.end)
-        if (!(text.startsWith('#!') || text.startsWith('/**') || text.startsWith('/// <') || KEEP_PATTERN.test(text))) {
-          const line = sourceFile.getLineAndCharacterOfPosition(range.pos).line + 1
-          deletable.push({ end: range.end, line, start: range.pos })
-        }
-      }
-    ts.forEachChild(node, visit)
+  for (const c of comments) {
+    const text = sourceText.slice(c.start, c.end)
+    if (!(text.startsWith('#!') || text.startsWith('/**') || text.startsWith('/// <') || KEEP_PATTERN.test(text)))
+      deletable.push({ end: c.end, line: lineAt(sourceText, c.start), start: c.start })
   }
-  visit(sourceFile)
   deletable.sort((a, b) => a.start - b.start)
   return deletable
 }

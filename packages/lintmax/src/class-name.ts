@@ -1,59 +1,85 @@
-/* eslint-disable max-depth */
 import { file, Glob } from 'bun'
-import ts from 'typescript'
+import { parseSync } from 'oxc-parser'
 import type { Diagnostic } from './aggregate.js'
 
 const CN_NAMES = new Set(['cn'])
 const BANNED_CALLEE_NAMES = new Set(['classnames', 'clsx', 'cx', 'twMerge'])
-const isJsxClassName = (node: ts.Node): boolean =>
-  ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === 'className'
-const isCallToCn = (node: ts.Node): boolean =>
-  ts.isCallExpression(node) && ts.isIdentifier(node.expression) && CN_NAMES.has(node.expression.text)
-const isJoinCall = (node: ts.Node): boolean =>
-  ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'join'
-const isBannedCallee = (node: ts.Node): boolean =>
-  ts.isCallExpression(node) && ts.isIdentifier(node.expression) && BANNED_CALLEE_NAMES.has(node.expression.text)
-const isStringLiteral = (node: ts.Node): boolean => ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
+interface Node {
+  [key: string]: unknown
+  callee?: Node
+  expression?: Node
+  name?: unknown
+  operator?: unknown
+  start: number
+  type: string
+  value?: Node
+}
+const asNode = (v: unknown): Node | null =>
+  v && typeof v === 'object' && typeof (v as Node).type === 'string' ? (v as Node) : null
+const strName = (n: Node | undefined): string => (typeof n?.name === 'string' ? n.name : '')
+const lineAt = (sourceText: string, offset: number): number => {
+  let line = 1
+  for (let i = 0; i < offset && i < sourceText.length; i += 1) if (sourceText[i] === '\n') line += 1
+  return line
+}
+const isClassNameAttr = (n: Node | null): boolean => {
+  const name = asNode(n?.name)
+  return n?.type === 'JSXAttribute' && name?.type === 'JSXIdentifier' && strName(name) === 'className'
+}
+const isCallToCn = (n: Node): boolean =>
+  n.type === 'CallExpression' && n.callee?.type === 'Identifier' && CN_NAMES.has(strName(n.callee))
+const isJoinCall = (n: Node): boolean => {
+  const property = asNode(n.callee?.property)
+  return (
+    n.type === 'CallExpression' &&
+    n.callee?.type === 'MemberExpression' &&
+    property?.type === 'Identifier' &&
+    strName(property) === 'join'
+  )
+}
+const isBannedCallee = (n: Node): boolean =>
+  n.type === 'CallExpression' && n.callee?.type === 'Identifier' && BANNED_CALLEE_NAMES.has(strName(n.callee))
+const isStringLiteral = (n: Node): boolean =>
+  (n.type === 'Literal' && typeof n.value === 'string') ||
+  (n.type === 'TemplateLiteral' && Array.isArray(n.expressions) && n.expressions.length === 0)
 interface Violation {
   line: number
   rule: string
 }
+const classNameExprRule = (expr: Node): null | string => {
+  if (isStringLiteral(expr) || isCallToCn(expr)) return null
+  if (expr.type === 'TemplateLiteral') return 'cn/no-template-literal'
+  if (expr.type === 'ConditionalExpression') return 'cn/no-ternary'
+  if (expr.type === 'BinaryExpression' && expr.operator === '+') return 'cn/no-concatenation'
+  if (isBannedCallee(expr)) return 'cn/no-banned-callee'
+  if (isJoinCall(expr)) return 'cn/no-join'
+  return null
+}
 const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violation[] => {
-  const sourceFile = ts.createSourceFile('file.tsx', sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  // oxlint-disable-next-line node/no-sync
+  const { program } = parseSync('file.tsx', sourceText)
   const violations: Violation[] = []
-  const visit = (node: ts.Node) => {
-    if (isJsxClassName(node)) {
-      const attr = node as ts.JsxAttribute
-      const init = attr.initializer
-      if (init && ts.isJsxExpression(init) && init.expression) {
-        const expr = init.expression
-        if (!(isStringLiteral(expr) || isCallToCn(expr))) {
-          const line = sourceFile.getLineAndCharacterOfPosition(expr.getStart()).line + 1
-          if (ts.isTemplateLiteral(expr)) violations.push({ line, rule: 'cn/no-template-literal' })
-          else if (ts.isConditionalExpression(expr)) violations.push({ line, rule: 'cn/no-ternary' })
-          else if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.PlusToken)
-            violations.push({ line, rule: 'cn/no-concatenation' })
-          else if (isBannedCallee(expr)) violations.push({ line, rule: 'cn/no-banned-callee' })
-          else if (isJoinCall(expr)) violations.push({ line, rule: 'cn/no-join' })
-          else if (ts.isCallExpression(expr) && !isCallToCn(expr)) {
-            const callee = expr.expression
-            if (ts.isIdentifier(callee) && BANNED_CALLEE_NAMES.has(callee.text))
-              violations.push({ line, rule: 'cn/no-banned-callee' })
-          }
-        }
-      }
+  const visit = (raw: unknown, parent: Node | null, grand: Node | null) => {
+    if (Array.isArray(raw)) {
+      for (const child of raw) visit(child, parent, grand)
+      return
     }
-    if (isBannedCallee(node)) {
-      const call = node as ts.CallExpression
-      const { parent } = call
-      if (!(ts.isJsxExpression(parent) && isJsxClassName(parent.parent))) {
-        const line = sourceFile.getLineAndCharacterOfPosition(call.getStart()).line + 1
-        violations.push({ line, rule: 'cn/no-banned-callee' })
-      }
+    const node = asNode(raw)
+    if (!node) {
+      if (raw && typeof raw === 'object')
+        for (const key of Object.keys(raw)) visit((raw as Record<string, unknown>)[key], parent, grand)
+      return
     }
-    ts.forEachChild(node, visit)
+    const container = node.value
+    if (isClassNameAttr(node) && container?.type === 'JSXExpressionContainer' && container.expression) {
+      const rule = classNameExprRule(container.expression)
+      if (rule) violations.push({ line: lineAt(sourceText, container.expression.start), rule })
+    }
+    if (isBannedCallee(node) && !(parent?.type === 'JSXExpressionContainer' && isClassNameAttr(grand)))
+      violations.push({ line: lineAt(sourceText, node.start), rule: 'cn/no-banned-callee' })
+    for (const key of Object.keys(node)) if (key !== 'type') visit(node[key], node, parent)
   }
-  visit(sourceFile)
+  visit(program, null, null)
   return violations
 }
 const TSX_EXTENSIONS = new Set(['.tsx'])

@@ -1,28 +1,33 @@
 import { file, Glob } from 'bun'
-import ts from 'typescript'
+import { parseSync } from 'oxc-parser'
 import type { Diagnostic } from './aggregate.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 
-const containsJsxNode = (sourceFile: ts.SourceFile): boolean => {
+const containsJsxNode = (program: unknown): boolean => {
   let found = false
-  const visit = (node: ts.Node) => {
-    if (found) return
-    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) {
+  const visit = (node: unknown) => {
+    if (found || !node || typeof node !== 'object') return
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child)
+      return
+    }
+    const typed = node as { type?: string }
+    if (typed.type === 'JSXElement' || typed.type === 'JSXFragment') {
       found = true
       return
     }
-    ts.forEachChild(node, visit)
+    for (const key of Object.keys(node)) if (key !== 'type') visit((node as Record<string, unknown>)[key])
   }
-  ts.forEachChild(sourceFile, visit)
+  visit(program)
   return found
 }
 const hasJsx = (sourceText: string): boolean => {
-  const tsFile = ts.createSourceFile('file.ts', sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
-  const diags = (tsFile as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics
-  const hasTsErrors = Array.isArray(diags) && diags.length > 0
-  if (!hasTsErrors) return false
-  const tsxFile = ts.createSourceFile('file.tsx', sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
-  return containsJsxNode(tsxFile)
+  // oxlint-disable-next-line node/no-sync
+  const asTs = parseSync('file.ts', sourceText)
+  if (asTs.errors.length === 0) return false
+  // oxlint-disable-next-line node/no-sync
+  const asTsx = parseSync('file.tsx', sourceText)
+  return containsJsxNode(asTsx.program)
 }
 const checkJsxExtension = async ({ root }: { root: string }): Promise<Diagnostic[]> => {
   const glob = new Glob('**/*.ts')

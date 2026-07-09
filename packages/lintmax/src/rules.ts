@@ -57,11 +57,7 @@ const extractEslintRules = async (): Promise<RuleEntry[]> => {
   const dummyFile = joinPath(cwd, '_lintmax_dummy.ts')
   await write(dummyFile, 'export {}\n')
   const result = await $`bun ${eslintBin} --config ${configPath} --print-config ${dummyFile}`.cwd(cwd).quiet().nothrow()
-  try {
-    await unlink(dummyFile)
-  } catch {
-    /* already absent */
-  }
+  await unlink(dummyFile).catch(() => undefined)
   if (result.exitCode !== 0) return []
   let parsed: { rules?: Record<string, unknown> }
   try {
