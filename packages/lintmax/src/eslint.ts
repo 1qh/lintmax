@@ -139,7 +139,7 @@ const resolveTailwindEntry = async ({
 }
 const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
   entryPoint ? eslintPluginBetterTailwindcss.configs['recommended-error'].rules : {}
-const eslintFactory = async (options?: EslintOptions): Promise<ReturnType<typeof defineConfig>> => {
+const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> => {
   await validateEslintOptions({ options })
   const opts = options ?? {}
   const root = opts.tsconfigRootDir ?? process.cwd()
@@ -406,7 +406,7 @@ const eslintFactory = async (options?: EslintOptions): Promise<ReturnType<typeof
   })
   return defineConfig(...configs)
 }
-const defaultConfig = await eslintFactory()
+const defaultConfig: Linter.Config[] = await eslintFactory()
 export type { EslintOptions }
 export default defaultConfig
 export { eslintFactory as eslint }
