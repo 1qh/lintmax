@@ -80,11 +80,20 @@ const isRuleActive = (rule: string, active: Set<string>, oxlintOff?: Set<string>
   if (!oxlintOff) return false
   return true
 }
-const splitRules = (str: string): string[] =>
-  str
-    .split(',')
-    .map(r => r.trim().replace(trailingCommentRe, '').replace(trailingCloseRe, ''))
-    .filter(Boolean)
+const splitDirective = (str: string): { reason: string; rules: string[] } => {
+  const body = str.replace(trailingCloseRe, '')
+  const reasonAt = body.search(trailingCommentRe)
+  const ruleList = reasonAt === -1 ? body : body.slice(0, reasonAt)
+  const reason = reasonAt === -1 ? '' : body.slice(reasonAt)
+  return {
+    reason,
+    rules: ruleList
+      .split(',')
+      .map(r => r.trim())
+      .filter(Boolean)
+  }
+}
+const splitRules = (str: string): string[] => splitDirective(str).rules
 const processMultiRuleLine = ({
   active,
   isOxlint,
@@ -103,11 +112,11 @@ const processMultiRuleLine = ({
   const prefix = match[1] ?? ''
   const rulesStr = match[2] ?? ''
   const suffix = match[3] ?? ''
-  const rules = splitRules(rulesStr)
+  const { reason, rules } = splitDirective(rulesStr)
   const kept = rules.filter(r => isRuleActive(r, active, isOxlint ? oxlintOff : undefined))
   if (kept.length === 0) return rules.length
   if (kept.length < rules.length) {
-    result.push(`${prefix}${kept.join(', ')}${suffix}`)
+    result.push(`${prefix}${kept.join(', ')}${reason}${suffix}`)
     return rules.length - kept.length
   }
   result.push(line)
@@ -158,4 +167,4 @@ const cleanIgnores = async (filePaths: string[]): Promise<CleanResult> => {
   }
   return { cleaned, files }
 }
-export { buildActiveRuleSet, cleanFileIgnores, cleanIgnores, isRuleActive, normalizeRule, splitRules }
+export { buildActiveRuleSet, cleanFileIgnores, cleanIgnores, isRuleActive, normalizeRule, splitDirective, splitRules }

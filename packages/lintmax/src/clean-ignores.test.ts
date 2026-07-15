@@ -5,7 +5,7 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { cleanFileIgnores, isRuleActive, normalizeRule, splitRules } from './clean-ignores.js'
+import { cleanFileIgnores, isRuleActive, normalizeRule, splitDirective, splitRules } from './clean-ignores.js'
 import { parseRules } from './ignores.js'
 
 const tmp = await mkdtemp(join(tmpdir(), 'clean-ignores-test-'))
@@ -47,6 +47,16 @@ describe('cleanFileIgnores — eslint', () => {
     expect(removed).toBe(1)
     expect(content).toContain('no-console')
     expect(content).not.toContain('some-fake-rule')
+  })
+  test('keeps the reason when trimming a rule, even though the reason holds a comma', async () => {
+    const { content, removed } = await writeAndClean(
+      'trim-keeps-reason.ts',
+      '/* eslint-disable no-console, some-fake-rule -- the index is the identity, so a key adds nothing */\nconst x = 1\n'
+    )
+    expect(removed).toBe(1)
+    expect(content).toContain('no-console')
+    expect(content).not.toContain('some-fake-rule')
+    expect(content).toContain('-- the index is the identity, so a key adds nothing')
   })
   test('removes entire line when all rules inactive', async () => {
     const { content, removed } = await writeAndClean('remove-all.ts', '/* eslint-disable fake-a, fake-b */\nconst x = 1\n')
@@ -267,6 +277,15 @@ describe('splitRules', () => {
   })
   test('strips trailing --comment', () => {
     expect(splitRules('no-console -- reason here')).toEqual(['no-console'])
+  })
+  test('a comma inside the reason does not read as another rule', () => {
+    expect(splitRules('no-console -- the index is the identity, so a key adds nothing')).toEqual(['no-console'])
+  })
+  test('keeps the reason so a rewrite can re-attach it', () => {
+    expect(splitDirective('no-console, complexity -- both are intentional, see below')).toEqual({
+      reason: ' -- both are intentional, see below',
+      rules: ['no-console', 'complexity']
+    })
   })
   test('empty string', () => {
     expect(splitRules('')).toEqual([])
