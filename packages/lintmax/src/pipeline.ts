@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential pipeline fix steps mutate files in order */
 /* eslint-disable complexity */
-import { $, env as bunEnv, Glob } from 'bun'
+import { $, env as bunEnv, file, Glob } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
 import type { ExtraBins } from './extra-coverage.js'
@@ -146,6 +146,7 @@ const createCheckSteps = ({
   eslintArgs,
   eslintBin,
   oxlintBin,
+  oxlintIgnorePatterns,
   prettierBin,
   prettierMarkdownTargets,
   sortPkgJson
@@ -155,11 +156,15 @@ const createCheckSteps = ({
   eslintArgs: string[]
   eslintBin: string
   oxlintBin: string
+  oxlintIgnorePatterns: readonly string[]
   prettierBin: string
   prettierMarkdownTargets: string[]
   sortPkgJson: string
 }): StepSpec[] => {
-  const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
+  const oxlintCliAllow = [
+    ...OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r]),
+    ...oxlintIgnorePatterns.flatMap(p => ['--ignore-pattern', p])
+  ]
   const steps: StepSpec[] = [
     {
       args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
@@ -199,6 +204,7 @@ const createFixSteps = ({
   eslintBin,
   hasFlowmark,
   oxlintBin,
+  oxlintIgnorePatterns,
   prettierBin,
   prettierMarkdownTargets,
   sortPkgJson
@@ -209,11 +215,15 @@ const createFixSteps = ({
   eslintBin: string
   hasFlowmark: boolean
   oxlintBin: string
+  oxlintIgnorePatterns: readonly string[]
   prettierBin: string
   prettierMarkdownTargets: string[]
   sortPkgJson: string
 }): StepSpec[] => {
-  const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
+  const oxlintCliAllow = [
+    ...OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r]),
+    ...oxlintIgnorePatterns.flatMap(p => ['--ignore-pattern', p])
+  ]
   const steps: StepSpec[] = [
     {
       args: [sortPkgJson, '**/package.json', '--ignore', '**/node_modules/**'],
@@ -303,6 +313,7 @@ const runAgentCheck = async ({
   eslintBin,
   failures,
   oxlintBin,
+  oxlintIgnorePatterns,
   prettierBin,
   prettierMarkdownTargets,
   sortPkgJson
@@ -314,11 +325,15 @@ const runAgentCheck = async ({
   eslintBin: string
   failures: FailureRecord[]
   oxlintBin: string
+  oxlintIgnorePatterns: readonly string[]
   prettierBin: string
   prettierMarkdownTargets: string[]
   sortPkgJson: string
 }): Promise<Diagnostic[]> => {
-  const oxlintCliAllow = OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r])
+  const oxlintCliAllow = [
+    ...OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r]),
+    ...oxlintIgnorePatterns.flatMap(p => ['--ignore-pattern', p])
+  ]
   const allDiagnostics: Diagnostic[] = []
   const push = (d: Diagnostic[]) => {
     if (d.length > 0) allDiagnostics.push(...d)
@@ -442,6 +457,15 @@ const throwAgentResults = ({ diagnostics, failures }: { diagnostics: Diagnostic[
   }
   throw new CliExitError({ code: 1 })
 }
+const readOxlintIgnorePatterns = async ({ dir }: { dir: string }): Promise<string[]> => {
+  const generated = file(joinPath(dir, '.oxlintrc.json'))
+  const exists = await generated.exists()
+  if (!exists) return [...DEFAULT_SHARED_IGNORE_PATTERNS]
+  const parsed = (await generated.json()) as { ignorePatterns?: unknown }
+  const patterns = parsed.ignorePatterns
+  if (!Array.isArray(patterns)) return [...DEFAULT_SHARED_IGNORE_PATTERNS]
+  return patterns.filter((x): x is string => typeof x === 'string')
+}
 const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; human?: boolean }) => {
   const dir = joinPath(cwd, cacheDir)
   await ensureDirectory({ directory: dir })
@@ -493,18 +517,20 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   const gitWorkTree = await isGitWorkTree({ env, root: cwd })
   const allGitFiles = gitWorkTree ? await listCompactFiles({ env, root: cwd }) : []
   const prettierMarkdownTargets = createPrettierMarkdownTargets({ gitFiles: allGitFiles, gitWorkTree })
+  const oxlintIgnorePatterns = await readOxlintIgnorePatterns({ dir })
   const checkSteps = createCheckSteps({
     biomeBin,
     dir,
     eslintArgs,
     eslintBin,
     oxlintBin,
+    oxlintIgnorePatterns,
     prettierBin,
     prettierMarkdownTargets,
     sortPkgJson
   })
   const shouldComments = runtime.comments !== false
-  const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
+  const ignoreGlobs = oxlintIgnorePatterns.map(p => new Glob(p))
   const isIgnored = (filePath: string): boolean => ignoreGlobs.some(g => g.match(filePath))
   const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
   if (command === 'fix') {
@@ -517,6 +543,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       eslintBin,
       hasFlowmark,
       oxlintBin,
+      oxlintIgnorePatterns,
       prettierBin,
       prettierMarkdownTargets,
       sortPkgJson
@@ -544,6 +571,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       eslintBin,
       failures,
       oxlintBin,
+      oxlintIgnorePatterns,
       prettierBin,
       prettierMarkdownTargets,
       sortPkgJson
@@ -594,6 +622,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     eslintBin,
     failures,
     oxlintBin,
+    oxlintIgnorePatterns,
     prettierBin,
     prettierMarkdownTargets,
     sortPkgJson

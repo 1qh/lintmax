@@ -68,6 +68,14 @@ try {
     throw new Error('shared ignores not propagated to biome config')
   if (!oxlintConfig.ignorePatterns?.includes('generated/**'))
     throw new Error('shared ignores not propagated to oxlint config')
+  await mkdir(join(dir, 'readonly', 'ui'), { recursive: true })
+  await write(join(dir, 'readonly', 'ui', 'vendored.ts'), 'export function vendored() {\n  return 1\n}\n')
+  await mkdir(join(dir, 'generated'), { recursive: true })
+  await write(join(dir, 'generated', 'codegen.ts'), 'export function codegen() {\n  return 2\n}\n')
+  await runCheck({ label: 'a shared-ignored path is not linted (the pattern must reach the linter, not just the config)' })
+  const vendoredAfter = await file(join(dir, 'readonly', 'ui', 'vendored.ts')).text()
+  if (!vendoredAfter.includes('export function vendored'))
+    throw new Error('fix rewrote a shared-ignored file: the ignore reached the config but not the formatter')
   await writeConfig({
     content:
       "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({\n  biome: { ignores: ['biome-only/**'] },\n  eslint: { ignores: ['eslint-only/**'] },\n  oxlint: { ignores: ['oxlint-only/**'] }\n})\n"
