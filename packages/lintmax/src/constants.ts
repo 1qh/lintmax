@@ -70,6 +70,7 @@ const BIOME_IGNORE_PATTERNS: readonly string[] = [
   '!!**/test-results',
   '!!**/*.xcassets'
 ]
+const PARSE_DIALECTS: readonly string[] = ['file.tsx', 'file.ts', 'file.d.ts']
 const DEFAULT_SHARED_IGNORE_PATTERNS: readonly string[] = [
   '_generated/**',
   '.next/**',
@@ -184,6 +185,7 @@ export {
   ESLINT_TEST_FILE_PATTERNS,
   OXLINT_CLI_ALLOW,
   OXLINT_PATTERN_RULE_OVERRIDES,
+  PARSE_DIALECTS,
   SHARED_OVERRIDE_SYMBOL_KEY,
   TAILWIND_ENTRY_CANDIDATES
 }

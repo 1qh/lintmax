@@ -1,6 +1,6 @@
 import { file, Glob } from 'bun'
-import { parseSync } from 'oxc-parser'
 import type { Diagnostic } from './aggregate.js'
+import { parseAnyDialect } from './parse-source.js'
 
 const CN_NAMES = new Set(['cn'])
 const BANNED_CALLEE_NAMES = new Set(['classnames', 'clsx', 'cx', 'twMerge'])
@@ -56,13 +56,7 @@ const classNameExprRule = (expr: Node): null | string => {
   return null
 }
 const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violation[] => {
-  // oxlint-disable-next-line node/no-sync
-  const asTsx = parseSync('file.tsx', sourceText)
-  // oxlint-disable-next-line node/no-sync
-  const parsed = asTsx.errors.length === 0 ? asTsx : parseSync('file.ts', sourceText)
-  const [parseError] = parsed.errors
-  if (parseError) throw new Error(`className check cannot parse the source: ${parseError.message}`)
-  const { program } = parsed
+  const { program } = parseAnyDialect({ label: 'className check', sourceText })
   const violations: Violation[] = []
   const visit = (raw: unknown, parent: Node | null, grand: Node | null) => {
     if (Array.isArray(raw)) {

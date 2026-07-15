@@ -1,6 +1,6 @@
 import { file, write } from 'bun'
-import { parseSync } from 'oxc-parser'
 import type { Diagnostic } from './aggregate.js'
+import { parseAnyDialect } from './parse-source.js'
 
 const lineAt = (sourceText: string, offset: number): number => {
   let line = 1
@@ -30,12 +30,7 @@ const isBlockOnlyComment = (
   return sourceText[before] === '{' && sourceText[after] === '}'
 }
 const findDeletableComments = ({ sourceText }: { sourceText: string }): { end: number; line: number; start: number }[] => {
-  // oxlint-disable-next-line node/no-sync
-  const asTsx = parseSync('file.tsx', sourceText)
-  // oxlint-disable-next-line node/no-sync
-  const parsed = asTsx.errors.length === 0 ? asTsx : parseSync('file.ts', sourceText)
-  const [parseError] = parsed.errors
-  if (parseError) throw new Error(`comment strip cannot parse the source: ${parseError.message}`)
+  const parsed = parseAnyDialect({ label: 'comment strip', sourceText })
   const { comments } = parsed
   const deletable: { end: number; line: number; start: number }[] = []
   for (const c of comments) {
