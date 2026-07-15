@@ -57,7 +57,12 @@ const classNameExprRule = (expr: Node): null | string => {
 }
 const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violation[] => {
   // oxlint-disable-next-line node/no-sync
-  const { program } = parseSync('file.tsx', sourceText)
+  const asTsx = parseSync('file.tsx', sourceText)
+  // oxlint-disable-next-line node/no-sync
+  const parsed = asTsx.errors.length === 0 ? asTsx : parseSync('file.ts', sourceText)
+  const [parseError] = parsed.errors
+  if (parseError) throw new Error(`className check cannot parse the source: ${parseError.message}`)
+  const { program } = parsed
   const violations: Violation[] = []
   const visit = (raw: unknown, parent: Node | null, grand: Node | null) => {
     if (Array.isArray(raw)) {

@@ -31,7 +31,12 @@ const isBlockOnlyComment = (
 }
 const findDeletableComments = ({ sourceText }: { sourceText: string }): { end: number; line: number; start: number }[] => {
   // oxlint-disable-next-line node/no-sync
-  const { comments } = parseSync('file.tsx', sourceText)
+  const asTsx = parseSync('file.tsx', sourceText)
+  // oxlint-disable-next-line node/no-sync
+  const parsed = asTsx.errors.length === 0 ? asTsx : parseSync('file.ts', sourceText)
+  const [parseError] = parsed.errors
+  if (parseError) throw new Error(`comment strip cannot parse the source: ${parseError.message}`)
+  const { comments } = parsed
   const deletable: { end: number; line: number; start: number }[] = []
   for (const c of comments) {
     const text = sourceText.slice(c.start, c.end)

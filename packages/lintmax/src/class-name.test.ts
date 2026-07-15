@@ -4,6 +4,11 @@ import { describe, expect, test } from 'bun:test'
 import { findClassNameViolations } from './class-name.js'
 
 const check = (code: string) => findClassNameViolations({ sourceText: code })
+describe('unparseable source', () => {
+  test('throws rather than silently reporting zero violations, so a check can never false-green on a file it could not read', () => {
+    expect(() => check('<div className={`a-${x}`} />\n<span className={`b-${y}`} />')).toThrow(/cannot parse/u)
+  })
+})
 describe('cn/no-template-literal', () => {
   test('catches template literal className', () => {
     const violations = check('<div className={`text-red-500 ${active && "font-bold"}`} />')
@@ -139,12 +144,12 @@ describe('edge cases', () => {
     expect(violations[0]?.rule).toBe('cn/no-template-literal')
   })
   test('multiple violations in one file', () => {
-    const violations = check(`
+    const violations = check(`<>
       <div className={\`a-\${x}\`} />
       <span className={active ? "x" : "y"} />
       <p className={"a " + b} />
       <section className={clsx("a", "b")} />
-    `)
+    </>`)
     expect(violations).toHaveLength(4)
     expect(violations.map(v => v.rule).toSorted()).toEqual([
       'cn/no-banned-callee',
@@ -197,9 +202,9 @@ const z = <div className={\`test-\${x}\`} />`)
     expect(violations[0]?.line).toBe(3)
   })
   test('reports correct lines for multiple violations', () => {
-    const violations = check(`<div className={clsx("a")} />
+    const violations = check(`<><div className={clsx("a")} />
 <span className="ok" />
-<p className={\`b-\${x}\`} />`)
+<p className={\`b-\${x}\`} /></>`)
     expect(violations).toHaveLength(2)
     expect(violations[0]?.line).toBe(1)
     expect(violations[1]?.line).toBe(3)
