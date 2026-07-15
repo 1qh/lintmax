@@ -285,6 +285,14 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
         ...reactPlugin.configs.all.rules,
         ...tailwindRules(tailwindEntry),
         'better-tailwindcss/enforce-consistent-line-wrapping': 'off',
+        'no-restricted-syntax': [
+          'error',
+          {
+            message:
+              'Extract the immediately-invoked function in JSX to a named component; it is rebuilt on every render.',
+            selector: 'JSXExpressionContainer CallExpression[callee.type=/^(Arrow)?FunctionExpression$/]'
+          }
+        ],
         'react-hooks/capitalized-calls': 'error',
         'react-hooks/component-hook-factories': 'error',
         'react-hooks/exhaustive-deps': 'error',
