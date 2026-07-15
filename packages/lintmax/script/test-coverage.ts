@@ -51,7 +51,7 @@ try {
   const ruleLines = agentOutput.split('\n').filter(l => l.startsWith('  '))
   process.stdout.write(`unique rule violations: ${ruleLines.length}\n`)
   if (ruleLines.length < 50) throw new Error(`expected at least 50 rule violations, got ${ruleLines.length}`)
-  const agentSize = agentOutput.length
+  const agentSize = stripAnsiAndPaths(agentOutput).length
   const verboseSize = verboseOutput.length
   const reduction = verboseSize > 0 ? 1 - agentSize / verboseSize : 0
   const pct = Math.round(reduction * 100)
