@@ -297,7 +297,7 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
         'react-hooks/exhaustive-deps': 'error',
         'react-hooks/exhaustive-effect-dependencies': 'error',
         'react-hooks/incompatible-library': 'error',
-        'react-hooks/memo-dependencies': 'error',
+        'react-hooks/memo-dependencies': 'off',
         'react-hooks/memoized-effect-dependencies': 'error',
         'react-hooks/no-deriving-state-in-effects': 'error',
         'react-hooks/preserve-manual-memoization': 'off',
