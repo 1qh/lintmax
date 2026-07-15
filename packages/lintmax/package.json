@@ -59,7 +59,7 @@
   "dependencies": {
     "@biomejs/biome": "latest",
     "@dprint/dockerfile": "latest",
-    "@eslint-react/eslint-plugin": "^2",
+    "@eslint-react/eslint-plugin": "latest",
     "@eslint/compat": "latest",
     "@eslint/js": "latest",
     "@next/eslint-plugin-next": "latest",

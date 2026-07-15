@@ -177,8 +177,14 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
           ...tseslint.configs.recommended,
           ...tseslint.configs.recommendedTypeChecked,
           ...tseslint.configs.stylisticTypeChecked,
+          eslintReact.configs.all,
           eslintReact.configs['strict-type-checked'],
-          eslintReact.configs.recommended
+          eslintReact.configs.recommended,
+          eslintReact.configs.dom,
+          eslintReact.configs['web-api'],
+          eslintReact.configs.jsx,
+          eslintReact.configs['naming-convention'],
+          eslintReact.configs.rsc
         ],
         files: ['**/*.js', '**/*.ts', '**/*.tsx'],
         plugins: {
@@ -186,17 +192,12 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
           turbo
         },
         rules: {
-          '@eslint-react/avoid-shorthand-boolean': 'off',
-          '@eslint-react/avoid-shorthand-fragment': 'off',
-          '@eslint-react/jsx-dollar': 'error',
-          '@eslint-react/jsx-shorthand-boolean': 'error',
-          '@eslint-react/jsx-shorthand-fragment': 'error',
-          '@eslint-react/naming-convention/component-name': 'error',
-          '@eslint-react/naming-convention/ref-name': 'error',
+          '@eslint-react/jsx-no-leaked-dollar': 'error',
+          '@eslint-react/naming-convention-ref-name': 'error',
           '@eslint-react/no-duplicate-key': 'error',
+          '@eslint-react/no-implicit-key': 'error',
           '@eslint-react/no-missing-component-display-name': 'error',
           '@eslint-react/no-missing-context-display-name': 'off',
-          '@eslint-react/no-unnecessary-key': 'error',
           '@typescript-eslint/consistent-return': 'off',
           '@typescript-eslint/consistent-type-imports': [
             'error',
@@ -246,15 +247,21 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
         }
       },
       {
-        plugins: (eslintReact.configs['strict-type-checked'] as Linter.Config).plugins,
+        plugins: eslintReact.configs['strict-type-checked'].plugins,
         rules: {
           ...warnToError({
+            ...eslintReact.configs.all.rules,
             ...eslintReact.configs['strict-type-checked'].rules,
-            ...eslintReact.configs.recommended.rules
+            ...eslintReact.configs.recommended.rules,
+            ...eslintReact.configs.dom.rules,
+            ...eslintReact.configs['web-api'].rules,
+            ...eslintReact.configs.jsx.rules,
+            ...eslintReact.configs['naming-convention'].rules,
+            ...eslintReact.configs.rsc.rules
           }),
-          '@eslint-react/dom/no-string-style-prop': 'error',
-          '@eslint-react/dom/no-unknown-property': 'error',
-          '@eslint-react/jsx-no-undef': 'error'
+          '@eslint-react/dom-no-string-style-prop': 'error',
+          '@eslint-react/dom-no-unknown-property': 'error',
+          '@eslint-react/no-missing-context-display-name': 'off'
         }
       }
     ),
@@ -278,8 +285,14 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
         ...reactPlugin.configs.all.rules,
         ...tailwindRules(tailwindEntry),
         'better-tailwindcss/enforce-consistent-line-wrapping': 'off',
+        'react-hooks/capitalized-calls': 'error',
+        'react-hooks/component-hook-factories': 'error',
         'react-hooks/exhaustive-deps': 'error',
+        'react-hooks/exhaustive-effect-dependencies': 'error',
         'react-hooks/incompatible-library': 'error',
+        'react-hooks/memo-dependencies': 'error',
+        'react-hooks/memoized-effect-dependencies': 'error',
+        'react-hooks/no-deriving-state-in-effects': 'error',
         'react-hooks/preserve-manual-memoization': 'off',
         'react-hooks/set-state-in-effect': 'off',
         'react-hooks/unsupported-syntax': 'error',
