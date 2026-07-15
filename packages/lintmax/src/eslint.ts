@@ -197,7 +197,7 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
           '@eslint-react/no-duplicate-key': 'error',
           '@eslint-react/no-implicit-key': 'error',
           '@eslint-react/no-missing-component-display-name': 'error',
-          '@eslint-react/no-missing-context-display-name': 'off',
+          '@eslint-react/no-missing-context-display-name': 'error',
           '@typescript-eslint/consistent-return': 'off',
           '@typescript-eslint/consistent-type-imports': [
             'error',
@@ -260,8 +260,7 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
             ...eslintReact.configs.rsc.rules
           }),
           '@eslint-react/dom-no-string-style-prop': 'error',
-          '@eslint-react/dom-no-unknown-property': 'error',
-          '@eslint-react/no-missing-context-display-name': 'off'
+          '@eslint-react/dom-no-unknown-property': 'error'
         }
       }
     ),
