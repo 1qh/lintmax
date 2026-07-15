@@ -434,15 +434,33 @@ const isGitWorkTree = async ({ env, root }: { env: Record<string, string | undef
   (await $`git -C ${root} rev-parse --is-inside-work-tree`.env(env).quiet().nothrow()).exitCode === 0
 const PRETTIER_EXTENSIONS = ['.md', '.yml', '.yaml']
 const isPrettierTarget = (filePath: string): boolean => PRETTIER_EXTENSIONS.some(ext => filePath.endsWith(ext))
-const createPrettierMarkdownTargets = ({
+const scanPrettierTargets = async ({
+  isIgnored,
+  root
+}: {
+  isIgnored: (filePath: string) => boolean
+  root: string
+}): Promise<string[]> => {
+  const found: string[] = []
+  const glob = new Glob(`**/*{${PRETTIER_EXTENSIONS.join(',')}}`)
+  for await (const path of glob.scan({ absolute: false, cwd: root, dot: false }))
+    if (!(path.includes('node_modules') || isIgnored(path))) found.push(path)
+  return found
+}
+const createPrettierMarkdownTargets = async ({
   gitFiles,
-  gitWorkTree
+  gitWorkTree,
+  isIgnored,
+  root
 }: {
   gitFiles: string[]
   gitWorkTree: boolean
-}): string[] => {
-  if (!gitWorkTree) return PRETTIER_EXTENSIONS.map(ext => `**/*${ext}`)
-  return gitFiles.filter(isPrettierTarget)
+  isIgnored: (filePath: string) => boolean
+  root: string
+}): Promise<string[]> => {
+  if (gitWorkTree) return gitFiles.filter(f => isPrettierTarget(f) && !isIgnored(f))
+  const scanned = await scanPrettierTargets({ isIgnored, root })
+  return scanned
 }
 const throwAgentResults = ({ diagnostics, failures }: { diagnostics: Diagnostic[]; failures: FailureRecord[] }) => {
   if (diagnostics.length === 0 && failures.length === 0) return
@@ -516,8 +534,15 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   const hasFlowmark = (await $`which flowmark`.env(env).quiet().nothrow()).exitCode === 0
   const gitWorkTree = await isGitWorkTree({ env, root: cwd })
   const allGitFiles = gitWorkTree ? await listCompactFiles({ env, root: cwd }) : []
-  const prettierMarkdownTargets = createPrettierMarkdownTargets({ gitFiles: allGitFiles, gitWorkTree })
   const oxlintIgnorePatterns = await readOxlintIgnorePatterns({ dir })
+  const ignoreGlobs = oxlintIgnorePatterns.map(p => new Glob(p))
+  const isIgnored = (filePath: string): boolean => ignoreGlobs.some(g => g.match(filePath))
+  const prettierMarkdownTargets = await createPrettierMarkdownTargets({
+    gitFiles: allGitFiles,
+    gitWorkTree,
+    isIgnored,
+    root: cwd
+  })
   const checkSteps = createCheckSteps({
     biomeBin,
     dir,
@@ -530,8 +555,6 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     sortPkgJson
   })
   const shouldComments = runtime.comments !== false
-  const ignoreGlobs = oxlintIgnorePatterns.map(p => new Glob(p))
-  const isIgnored = (filePath: string): boolean => ignoreGlobs.some(g => g.match(filePath))
   const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
   if (command === 'fix') {
     if (shouldComments) await fixComments({ files: sourceFiles })
