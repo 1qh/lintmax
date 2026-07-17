@@ -44,6 +44,12 @@ const staleExceptions: Readonly<Record<string, { reason: string; revisitWhen: st
     reason:
       'DefinitelyTyped publishes actively (@types/react ships within weeks) and react-dom bundles no types of its own, so this is the only type source and its age means the surface is settled, not abandoned',
     revisitWhen: 'react-dom ships bundled types, or @types/react-dom publishes again'
+  },
+  'eslint-plugin-react': {
+    reason:
+      'it is the sole dep still pinning eslint to ^9, and replacing it COSTS coverage: of its 83 active rules oxlint re-owns 49 and @eslint-react/perfectionist re-own 5, 20 are obsolete under the new JSX transform or the propTypes era, 7 belong to the formatter, and 6 have no home anywhere — destructuring-assignment, no-invalid-html-attribute, no-adjacent-inline-elements, plus the class-only no-arrow-function-lifecycle, static-property-placement and require-optimization. Strictness is monotonic-up, so the gate carries a stale dep rather than drop six enforced rules',
+    revisitWhen:
+      'a maintained plugin covers those 6 ids, or every class component is gone (retiring the 3 class-only ones) and the other 3 are re-homed — then drop this dep and take eslint 10'
   }
 }
 const toIssue = (name: string, publishedAt: number): null | StaleIssue => {

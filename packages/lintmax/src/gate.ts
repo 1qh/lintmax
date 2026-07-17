@@ -34,12 +34,15 @@ const persistGreen = async (greenKey: null | string): Promise<void> => {
   state.lastGreenByCwd[cwd] = greenKey
   await saveState(state)
 }
-/** A scan that cannot reach the registry says so. An offline developer never has their lint gate failed by it, but the silence is what let this check report clean while answering nothing for every package on every run — an unanswerable scan is reported, never folded into the same output as a clean one. */
+/** A stale dep FAILS the gate: the baseline is clean, so every finding here is a new one, and a warning nobody has to act on is how the check sat broken for its whole life while printing nothing. A dep leaves the gate through `staleExceptions` with its reason and trigger, never by being tolerated in the output. A scan that cannot reach the registry is reported and does NOT fail — an offline developer is never blocked by it, but the silence that once read as clean is gone. */
 const emitStaleness = async (): Promise<void> => {
   try {
     const issues = await scanStaleness()
     const formatted = formatStaleness(issues)
-    if (formatted.length > 0) process.stderr.write(`${formatted}\n`)
+    if (formatted.length > 0) {
+      process.stderr.write(`${formatted}\n`)
+      process.exitCode = 1
+    }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     process.stderr.write(`lintmax: staleness scan could not complete, so dep freshness is UNKNOWN: ${reason}\n`)
