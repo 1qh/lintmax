@@ -84,11 +84,37 @@ const parseOxlintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] =>
   }
   return results
 }
+interface EslintFileEntry {
+  filePath?: string
+  messages?: EslintMessage[]
+}
+interface EslintMessage {
+  fatal?: boolean
+  line?: number
+  message?: string
+  ruleId?: null | string
+  severity?: number
+}
+const eslintRuleOf = (msg: EslintMessage): null | string =>
+  msg.ruleId ?? (msg.severity === 2 || msg.fatal ? `parse-error: ${msg.message?.slice(0, 80) ?? 'unknown'}` : null)
+const eslintDiagnosticsForFile = (fileEntry: EslintFileEntry): Diagnostic[] => {
+  const { filePath } = fileEntry
+  if (!(filePath && Array.isArray(fileEntry.messages))) return []
+  const results: Diagnostic[] = []
+  for (const msg of fileEntry.messages) {
+    const rule = eslintRuleOf(msg)
+    if (rule)
+      results.push({
+        file: normalizePath(filePath),
+        line: msg.line ?? 0,
+        linter: 'eslint',
+        rule
+      })
+  }
+  return results
+}
 const parseEslintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] => {
-  let parsed: {
-    filePath?: string
-    messages?: { fatal?: boolean; line?: number; message?: string; ruleId?: null | string; severity?: number }[]
-  }[]
+  let parsed: EslintFileEntry[]
   try {
     parsed = JSON.parse(stdout) as typeof parsed
   } catch {
@@ -96,21 +122,7 @@ const parseEslintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] =>
   }
   if (!Array.isArray(parsed)) return []
   const results: Diagnostic[] = []
-  for (const fileEntry of parsed) {
-    const { filePath } = fileEntry
-    if (filePath && Array.isArray(fileEntry.messages))
-      for (const msg of fileEntry.messages) {
-        const rule =
-          msg.ruleId ?? (msg.severity === 2 || msg.fatal ? `parse-error: ${msg.message?.slice(0, 80) ?? 'unknown'}` : null)
-        if (rule)
-          results.push({
-            file: normalizePath(filePath),
-            line: msg.line ?? 0,
-            linter: 'eslint',
-            rule
-          })
-      }
-  }
+  for (const fileEntry of parsed) results.push(...eslintDiagnosticsForFile(fileEntry))
   return results
 }
 const parsePrettierOutput = ({ stdout }: { stdout: string }): Diagnostic[] => {
@@ -181,7 +193,7 @@ const aggregate = ({ diagnostics }: { diagnostics: Diagnostic[] }): GroupedFile[
     if (d.line > 0) lines.push(d.line)
   }
   const files: GroupedFile[] = []
-  const sortedFiles = [...fileMap.keys()].toSorted()
+  const sortedFiles = [...fileMap.keys()].toSorted((a, b) => a.localeCompare(b))
   for (const filePath of sortedFiles) {
     const linterMap = fileMap.get(filePath) ?? new Map<string, Map<string, number[]>>()
     const linters: GroupedLinter[] = []
@@ -189,7 +201,7 @@ const aggregate = ({ diagnostics }: { diagnostics: Diagnostic[] }): GroupedFile[
     for (const linterName of sortedLinters) {
       const ruleMap = linterMap.get(linterName) ?? new Map<string, number[]>()
       const rules: GroupedRule[] = []
-      const sortedRules = [...ruleMap.keys()].toSorted()
+      const sortedRules = [...ruleMap.keys()].toSorted((a, b) => a.localeCompare(b))
       for (const ruleName of sortedRules) {
         const lines = ruleMap.get(ruleName) ?? []
         const uniqueLines = [...new Set(lines)].toSorted((a, b) => a - b)

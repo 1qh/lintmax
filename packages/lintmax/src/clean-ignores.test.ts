@@ -298,8 +298,8 @@ describe('splitRules', () => {
   })
 })
 describe('parseRules (ignores.ts)', () => {
-  const eslintRe = /eslint-disable(?:-next-line)?\s+(.+?)(?:\s*\*\/|\s*$)/gu
-  const oxlintRe = /oxlint-disable(?:-next-line)?\s+(.+?)(?:\s*\*\/|\s*$)/gu
+  const eslintRe = /eslint-disable(?:-next-line)?\s+([^\n]*)/gv
+  const oxlintRe = /oxlint-disable(?:-next-line)?\s+([^\n]*)/gv
   const biomeRe = /biome-ignore(?:-all)?\s+([\w/]+)/gu
   test('parses eslint-disable single rule', () => {
     expect(parseRules('/* eslint-disable no-console */', eslintRe)).toEqual(['no-console'])

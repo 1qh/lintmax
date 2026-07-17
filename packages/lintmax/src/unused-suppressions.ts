@@ -18,13 +18,22 @@ interface UnusedDirective {
   line: number
   rule?: string
 }
-const oxlintDisableRe = /^(?<prefix>\s*\/\*\s*oxlint-disable\s+)(?<rules>.+?)(?<close>\s*\*\/)?$/u
-const oxlintDisablePresentRe = /\/\*\s*oxlint-disable\s/u
-const biomeIgnoreAllRe = /^\s*\/\*\*\s*biome-ignore-all\s+(?<first>[\w/]+)(?<rest>.*?)\*\/\s*$/u
-const biomeIgnoreAllLineRe = /^\s*\/\/\s*biome-ignore-all\s+(?<first>[\w/]+)(?<rest>.*)$/u
-const trailingCommentRe = /\s*--.*$/u
-const biomeReasonRe = /:(?<reason>.*?)\*\//u
-const leadingWhitespaceRe = /^\s*/u
+const oxlintDisableRe = /^(?<prefix>\s*\/\*\s*oxlint-disable\s+)(?<rules>\S(?:[^*]*[^\s*])?)(?<close>\s*\*\/)?$/v
+const oxlintDisablePresentRe = /\/\*\s*oxlint-disable\s/v
+const biomeIgnoreAllRe = /^\s*\/\*\*\s*biome-ignore-all\s+(?<first>[\w\/]+)(?<rest>(?:[^\w\/*][^*]*)?)\*\/\s*$/v
+const biomeIgnoreAllLineRe = /^\s*\/\/\s*biome-ignore-all\s+(?<first>[\w\/]+)(?<rest>(?:[^\w\/].*)?)$/v
+/** Both scan for a fixed delimiter, which a regex does by retrying at every start position — super-linear on a long line for a job `indexOf` does in one pass. */
+const stripTrailingComment = (str: string): string => {
+  const at = str.indexOf('--')
+  return at === -1 ? str : str.slice(0, at).trimEnd()
+}
+const biomeReasonOf = (line: string): string | undefined => {
+  const colon = line.indexOf(':')
+  if (colon === -1) return
+  const close = line.indexOf('*/', colon)
+  return close === -1 ? undefined : line.slice(colon + 1, close).trim()
+}
+const leadingWhitespaceRe = /^\s*/v
 const buildEnv = (): Record<string, string | undefined> => ({ ...process.env })
 const extractJson = (stdout: string): string => {
   const start = stdout.indexOf('{')
@@ -76,7 +85,7 @@ const batchStripRestore = async ({
 const splitOxlintRules = (str: string): string[] =>
   str
     .split(',')
-    .map(r => r.trim().replace(trailingCommentRe, ''))
+    .map(r => stripTrailingComment(r.trim()))
     .filter(Boolean)
 const splitBiomeRest = (rest: string): string[] => {
   const cleaned = rest.split(':')[0] ?? ''
@@ -86,8 +95,7 @@ const splitBiomeRest = (rest: string): string[] => {
     .filter(r => r.startsWith('lint/'))
 }
 const rebuildBiomeLine = ({ line, rules }: { line: string; rules: string[] }): string => {
-  const reasonMatch = biomeReasonRe.exec(line)
-  const reason = reasonMatch?.groups?.reason?.trim() ?? 'suppressed'
+  const reason = biomeReasonOf(line) ?? 'suppressed'
   const indentMatch = leadingWhitespaceRe.exec(line)
   const indent = indentMatch?.[0] ?? ''
   return `${indent}/** biome-ignore-all ${rules.join(', ')}: ${reason} */`
@@ -133,6 +141,54 @@ const parseOxlintDirectiveLines = (lines: string[]): { index: number; rules: str
   }
   return directiveLines
 }
+interface PartitionedRules {
+  diagnostics: UnusedDirective[]
+  kept: string[]
+}
+interface RebuiltDirective {
+  diagnostics: UnusedDirective[]
+  emitted: string[]
+}
+const partitionOxlintRules = ({
+  directive,
+  filePath,
+  fired,
+  index
+}: {
+  directive: { index: number; rules: string[] }
+  filePath: string
+  fired: Set<string>
+  index: number
+}): PartitionedRules => {
+  const kept: string[] = []
+  const diagnostics: UnusedDirective[] = []
+  for (const rule of directive.rules)
+    if (isOxlintRuleFired(rule, fired)) kept.push(rule)
+    else diagnostics.push({ col: 1, file: filePath, line: index + 1, rule })
+  return { diagnostics, kept }
+}
+const rebuildOxlintDirectiveLine = ({
+  directive,
+  filePath,
+  fired,
+  index,
+  line
+}: {
+  directive: { index: number; rules: string[] }
+  filePath: string
+  fired: Set<string>
+  index: number
+  line: string
+}): RebuiltDirective => {
+  oxlintDisableRe.lastIndex = 0
+  const match = oxlintDisableRe.exec(line)
+  const prefix = match?.groups?.prefix ?? '/* oxlint-disable '
+  const suffix = match?.groups?.close ?? ' */'
+  const { diagnostics, kept } = partitionOxlintRules({ directive, filePath, fired, index })
+  if (kept.length === directive.rules.length) return { diagnostics, emitted: [line] }
+  if (kept.length > 0) return { diagnostics, emitted: [`${prefix}${kept.join(', ')}${suffix}`] }
+  return { diagnostics, emitted: [] }
+}
 const rebuildOxlintFile = async ({
   data,
   dryRun,
@@ -149,19 +205,10 @@ const rebuildOxlintFile = async ({
     const line = data.lines[index] ?? ''
     const directive = data.directiveLines.find(d => d.index === index)
     if (directive) {
-      oxlintDisableRe.lastIndex = 0
-      const match = oxlintDisableRe.exec(line)
-      const prefix = match?.groups?.prefix ?? '/* oxlint-disable '
-      const suffix = match?.groups?.close ?? ' */'
-      const kept: string[] = []
-      for (const rule of directive.rules)
-        if (isOxlintRuleFired(rule, fired)) kept.push(rule)
-        else {
-          removed += 1
-          diagnostics.push({ col: 1, file: data.filePath, line: index + 1, rule })
-        }
-      if (kept.length === directive.rules.length) result.push(line)
-      else if (kept.length > 0) result.push(`${prefix}${kept.join(', ')}${suffix}`)
+      const outcome = rebuildOxlintDirectiveLine({ directive, filePath: data.filePath, fired, index, line })
+      removed += outcome.diagnostics.length
+      diagnostics.push(...outcome.diagnostics)
+      result.push(...outcome.emitted)
     } else result.push(line)
   }
   if (removed > 0 && !dryRun) await write(data.filePath, result.join('\n'))
@@ -229,6 +276,42 @@ const parseBiomeDirectiveLines = (lines: string[]): { index: number; rules: stri
   }
   return directiveLines
 }
+const partitionBiomeRules = ({
+  directive,
+  filePath,
+  fired,
+  index
+}: {
+  directive: { index: number; rules: string[] }
+  filePath: string
+  fired: Set<string>
+  index: number
+}): PartitionedRules => {
+  const kept: string[] = []
+  const diagnostics: UnusedDirective[] = []
+  for (const rule of directive.rules)
+    if (fired.has(rule)) kept.push(rule)
+    else diagnostics.push({ col: 1, file: filePath, line: index + 1, rule })
+  return { diagnostics, kept }
+}
+const rebuildBiomeDirectiveLine = ({
+  directive,
+  filePath,
+  fired,
+  index,
+  line
+}: {
+  directive: { index: number; rules: string[] }
+  filePath: string
+  fired: Set<string>
+  index: number
+  line: string
+}): RebuiltDirective => {
+  const { diagnostics, kept } = partitionBiomeRules({ directive, filePath, fired, index })
+  if (kept.length === directive.rules.length) return { diagnostics, emitted: [line] }
+  if (kept.length > 0) return { diagnostics, emitted: [rebuildBiomeLine({ line, rules: kept })] }
+  return { diagnostics, emitted: [] }
+}
 const rebuildBiomeFile = async ({
   data,
   dryRun,
@@ -245,15 +328,10 @@ const rebuildBiomeFile = async ({
     const line = data.lines[index] ?? ''
     const directive = data.directiveLines.find(d => d.index === index)
     if (directive) {
-      const kept: string[] = []
-      for (const rule of directive.rules)
-        if (fired.has(rule)) kept.push(rule)
-        else {
-          removed += 1
-          diagnostics.push({ col: 1, file: data.filePath, line: index + 1, rule })
-        }
-      if (kept.length === directive.rules.length) result.push(line)
-      else if (kept.length > 0) result.push(rebuildBiomeLine({ line, rules: kept }))
+      const outcome = rebuildBiomeDirectiveLine({ directive, filePath: data.filePath, fired, index, line })
+      removed += outcome.diagnostics.length
+      diagnostics.push(...outcome.diagnostics)
+      result.push(...outcome.emitted)
     } else result.push(line)
   }
   if (removed > 0 && !dryRun) await write(data.filePath, result.join('\n'))

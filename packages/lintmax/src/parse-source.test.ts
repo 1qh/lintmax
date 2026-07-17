@@ -16,7 +16,7 @@ describe('parseAnyDialect', () => {
   })
   test('throws with the label when no dialect parses', () => {
     expect(() => parseAnyDialect({ label: 'probe', sourceText: 'const = = =\n' })).toThrow(
-      /probe cannot parse the source/u
+      /probe cannot parse the source/v
     )
   })
 })

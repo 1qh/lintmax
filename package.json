@@ -1,5 +1,6 @@
 {
   "private": true,
+  "description": "lintmax monorepo — the max-strictness TypeScript lint gate for coding agents",
   "workspaces": [
     "packages/*",
     "apps/*",

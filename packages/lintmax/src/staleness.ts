@@ -16,7 +16,7 @@ const envForce = 'LINTMAX_STALENESS_FORCE'
 const trackedPackages = async (): Promise<string[]> => {
   const pkg = await readJson({ path: joinPath(lintmaxRoot, 'package.json') })
   const deps = pkg.dependencies
-  return isRecord(deps) ? Object.keys(deps).toSorted() : []
+  return isRecord(deps) ? Object.keys(deps).toSorted((a, b) => a.localeCompare(b)) : []
 }
 /** Resolves a package's newest publish time, or throws. The abbreviated packument (`application/vnd.npm.install-v1+json`) carries no `time`, so asking for it and then requiring `time` yielded "unknown" for every package on every run — and "unknown" was being read as "fresh". An unanswerable lookup is reported, never folded into the same value as a healthy one. */
 const fetchLatestPublish = async (name: string): Promise<number> => {

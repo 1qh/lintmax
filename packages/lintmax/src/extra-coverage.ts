@@ -7,8 +7,9 @@ interface ExtraTargets {
   shell: string[]
   toml: string[]
 }
-const DOCKERFILE_RE = /(?:^|\/)Dockerfile(?:\.[\w.-]+)?$/u
-const SHELLCHECK_LINE_RE = /^(?<file>.+?):(?<line>\d+):\d+:\s+(?:warning|error|note|style):\s+.*\[(?<rule>\S+)\]/u
+const DOCKERFILE_RE = /(?:^|\/)Dockerfile(?:\.[\w\-.]+)?$/v
+const SHELLCHECK_LINE_RE =
+  /^(?<file>.+?):(?<line>\d+):\d+:\s+(?:error|note|style|warning):\s+(?:\S.*)?\[(?<rule>[^\]\[]+)\]$/v
 const isShell = (filePath: string): boolean => filePath.endsWith('.sh') || filePath.endsWith('.bash')
 const isToml = (filePath: string): boolean => filePath.endsWith('.toml')
 const isDockerfile = (filePath: string): boolean => DOCKERFILE_RE.test(filePath)
@@ -44,6 +45,39 @@ interface ExtraBins {
   dprint: string
   tombi: string
 }
+interface ShellcheckStepInput {
+  bin: string
+  env: Record<string, string | undefined>
+  files: readonly string[]
+}
+interface ShfmtStepInput {
+  bin: string
+  command: 'check' | 'fix'
+  env: Record<string, string | undefined>
+  files: readonly string[]
+}
+const parseShellcheckLine = (line: string): Diagnostic | null => {
+  const groups = SHELLCHECK_LINE_RE.exec(line)?.groups
+  if (groups?.file && groups.line && groups.rule)
+    return { file: groups.file, line: Number(groups.line), linter: 'shellcheck', rule: groups.rule }
+  return null
+}
+const runShfmtStep = async ({ bin, command, env, files }: ShfmtStepInput): Promise<Diagnostic[]> => {
+  if (command === 'fix') await runCapture({ args: ['-w', ...files], command: bin, env, label: 'shfmt' })
+  const fmtCheck = await runCapture({ args: ['-d', ...files], command: bin, env, label: 'shfmt' })
+  if (fmtCheck.exitCode !== 0 || fmtCheck.stdout.trim().length > 0) return [failureDiagnostic('shfmt', files)]
+  return []
+}
+const runShellcheckStep = async ({ bin, env, files }: ShellcheckStepInput): Promise<Diagnostic[]> => {
+  const result = await runCapture({ args: ['-f', 'gcc', ...files], command: bin, env, label: 'shellcheck' })
+  const diagnostics: Diagnostic[] = []
+  for (const line of result.stdout.split('\n')) {
+    const diagnostic = parseShellcheckLine(line)
+    if (diagnostic !== null) diagnostics.push(diagnostic)
+  }
+  if (result.exitCode !== 0 && diagnostics.length === 0) diagnostics.push(failureDiagnostic('shellcheck', files))
+  return diagnostics
+}
 const runShell = async ({
   command,
   env,
@@ -60,23 +94,8 @@ const runShell = async ({
   if (shellcheck === null || shfmt === null)
     notes.push('shellcheck/shfmt not on PATH — shell files unchecked (install: brew install shellcheck shfmt)')
   const diagnostics: Diagnostic[] = []
-  if (shfmt !== null) {
-    if (command === 'fix') await runCapture({ args: ['-w', ...files], command: shfmt, env, label: 'shfmt' })
-    const fmtCheck = await runCapture({ args: ['-d', ...files], command: shfmt, env, label: 'shfmt' })
-    if (fmtCheck.exitCode !== 0 || fmtCheck.stdout.trim().length > 0) diagnostics.push(failureDiagnostic('shfmt', files))
-  }
-  if (shellcheck !== null) {
-    const result = await runCapture({ args: ['-f', 'gcc', ...files], command: shellcheck, env, label: 'shellcheck' })
-    let parsed = false
-    for (const line of result.stdout.split('\n')) {
-      const groups = SHELLCHECK_LINE_RE.exec(line)?.groups
-      if (groups?.file && groups.line && groups.rule) {
-        diagnostics.push({ file: groups.file, line: Number(groups.line), linter: 'shellcheck', rule: groups.rule })
-        parsed = true
-      }
-    }
-    if (result.exitCode !== 0 && !parsed) diagnostics.push(failureDiagnostic('shellcheck', files))
-  }
+  if (shfmt !== null) diagnostics.push(...(await runShfmtStep({ bin: shfmt, command, env, files })))
+  if (shellcheck !== null) diagnostics.push(...(await runShellcheckStep({ bin: shellcheck, env, files })))
   return { diagnostics, notes }
 }
 const runTombi = async ({

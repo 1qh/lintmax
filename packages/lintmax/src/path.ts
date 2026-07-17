@@ -1,5 +1,5 @@
-const DRIVE_PATH_REGEX = /^[A-Za-z]:\//u
-const MULTI_SLASH_REGEX = /\/+/gu
+const DRIVE_PATH_REGEX = /^[A-Za-z]:\//v
+const MULTI_SLASH_REGEX = /\/+/gv
 const normalizeSlashes = (value: string) => value.replaceAll('\\', '/')
 const trimLeadingSlash = (value: string) => {
   let result = value
@@ -32,8 +32,7 @@ const joinPath = (...parts: string[]) => {
   const segments = [trimTrailingSlash(head ?? '')]
   for (const segment of tail) segments.push(trimLeadingSlash(trimTrailingSlash(segment)))
   const joined = segments.join('/').replace(MULTI_SLASH_REGEX, '/')
-  const withAbsolute = isAbsolute && !joined.startsWith('/') && !DRIVE_PATH_REGEX.test(joined) ? `/${joined}` : joined
-  return withAbsolute
+  return isAbsolute && !joined.startsWith('/') && !DRIVE_PATH_REGEX.test(joined) ? `/${joined}` : joined
 }
 const dirnamePath = (value: string) => {
   const normalized = trimTrailingSlash(normalizeSlashes(value))

@@ -375,6 +375,51 @@ const validateBiomeSyncConfig = ({ biome }: { biome: unknown }): ParsedBiomeSync
   if (parsedOverrides.length > 0) parsed.overrides = parsedOverrides
   return parsed
 }
+const parseEslintImportEntry = ({
+  index,
+  item
+}: {
+  index: number
+  item: Record<string, unknown>
+}): ParsedSyncEslintAppendEntry => {
+  const allowedKeys = new Set(['$lintmax', 'files', 'from', 'ignores', 'name'])
+  for (const key of Object.keys(item))
+    if (!allowedKeys.has(key))
+      throw new Error(
+        `eslint.append[${index}].${key} is not supported for eslint-import entries. Use from, name, files, ignores.`
+      )
+  assertOptionalString({
+    label: `eslint.append[${index}].from`,
+    value: item.from
+  })
+  const { from } = item
+  if (typeof from !== 'string' || from.trim().length === 0)
+    throw new Error(`eslint.append[${index}].from must be a non-empty string`)
+  assertOptionalString({
+    label: `eslint.append[${index}].name`,
+    value: item.name
+  })
+  const files =
+    item.files === undefined
+      ? undefined
+      : normalizePathListInput({
+          label: `eslint.append[${index}].files`,
+          value: item.files
+        })
+  const ignores =
+    item.ignores === undefined
+      ? undefined
+      : normalizePathListInput({
+          label: `eslint.append[${index}].ignores`,
+          value: item.ignores
+        })
+  return {
+    files,
+    from,
+    ignores,
+    name: typeof item.name === 'string' && item.name.trim().length > 0 ? item.name : 'default'
+  }
+}
 const parseEslintAppendEntry = ({
   index,
   item
@@ -383,45 +428,7 @@ const parseEslintAppendEntry = ({
   item: Record<string, unknown>
 }): ParsedSyncEslintAppendEntry => {
   const { $lintmax: marker } = item
-  if (marker === ESLINT_IMPORT_SENTINEL) {
-    const allowedKeys = new Set(['$lintmax', 'files', 'from', 'ignores', 'name'])
-    for (const key of Object.keys(item))
-      if (!allowedKeys.has(key))
-        throw new Error(
-          `eslint.append[${index}].${key} is not supported for eslint-import entries. Use from, name, files, ignores.`
-        )
-    assertOptionalString({
-      label: `eslint.append[${index}].from`,
-      value: item.from
-    })
-    const { from } = item
-    if (typeof from !== 'string' || from.trim().length === 0)
-      throw new Error(`eslint.append[${index}].from must be a non-empty string`)
-    assertOptionalString({
-      label: `eslint.append[${index}].name`,
-      value: item.name
-    })
-    const files =
-      item.files === undefined
-        ? undefined
-        : normalizePathListInput({
-            label: `eslint.append[${index}].files`,
-            value: item.files
-          })
-    const ignores =
-      item.ignores === undefined
-        ? undefined
-        : normalizePathListInput({
-            label: `eslint.append[${index}].ignores`,
-            value: item.ignores
-          })
-    return {
-      files,
-      from,
-      ignores,
-      name: typeof item.name === 'string' && item.name.trim().length > 0 ? item.name : 'default'
-    }
-  }
+  if (marker === ESLINT_IMPORT_SENTINEL) return parseEslintImportEntry({ index, item })
   if ('$lintmax' in item)
     throw new Error(
       `eslint.append[${index}].$lintmax has unsupported value. Use eslintImport(...) or remove the $lintmax key.`
@@ -530,7 +537,7 @@ const buildLinterOptionsWithSharedOverrides = <
   sharedOverrides: SharedOverrideEntry[]
   source?: TOption
 }): TOption | undefined => {
-  if (!(source || sharedOverrides.length > 0)) return source
+  if (!source && sharedOverrides.length <= 0) return source
   const next: TOption = source ? { ...source } : createEmpty()
   next.off = source?.off
   const sharedRuleOverrides = collectSharedRuleOverrides({
@@ -994,8 +1001,9 @@ const sync = async (options?: SyncOptions): Promise<void> => {
     normalizedImportRefs.length === 0
       ? ''
       : `\nconst appendImports = [\n${importEntries}\n]\nconst normalizedAppend = []\nfor (const entry of options.append ?? []) {\n  if (entry && typeof entry === 'object' && !Array.isArray(entry) && ${JSON.stringify(ESLINT_IMPORT_MARKER_KEY)} in entry) {\n    const importIndex = entry[${JSON.stringify(ESLINT_IMPORT_MARKER_KEY)}]\n    if (typeof importIndex !== 'number' || !Number.isInteger(importIndex))\n      throw new Error('Invalid eslint import marker index in generated config')\n    const importRef = appendImports[importIndex]\n    if (!importRef) throw new Error(\`Missing eslint import ref for index \${importIndex}\`)\n    const imported = importRef.module[importRef.exportName]\n    const importedEntries = Array.isArray(imported) ? imported : [imported]\n    for (const importedEntry of importedEntries) {\n      if (!importedEntry || typeof importedEntry !== 'object' || Array.isArray(importedEntry))\n        throw new Error(\`Imported eslint append from \${importRef.exportName} must resolve to config object(s)\`)\n      normalizedAppend.push({\n        ...importedEntry,\n        ...(Array.isArray(importRef.files) ? { files: [...importRef.files] } : {}),\n        ...(Array.isArray(importRef.ignores) ? { ignores: [...importRef.ignores] } : {})\n      })\n    }\n    continue\n  }\n  normalizedAppend.push(entry)\n}\noptions.append = normalizedAppend\n`
+  const importStatementsBlock = importStatements.length > 0 ? `${importStatements}\n` : ''
   const eslintConfig = eslintOptions
-    ? `${importStatements.length > 0 ? `${importStatements}\n` : ''}import { eslint } from 'lintmax/eslint'\nconst options = ${JSON.stringify(eslintOptions)}\nfor (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {\n  const entry = options.append?.[index]\n  if (entry && typeof entry === 'object') entry[Symbol.for(${JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)})] = true\n}${importExpansion}export default await eslint(options)\n`
+    ? `${importStatementsBlock}import { eslint } from 'lintmax/eslint'\nconst options = ${JSON.stringify(eslintOptions)}\nfor (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {\n  const entry = options.append?.[index]\n  if (entry && typeof entry === 'object') entry[Symbol.for(${JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)})] = true\n}${importExpansion}export default await eslint(options)\n`
     : "export { default } from 'lintmax/eslint'\n"
   const runtimeConfig = { comments: options?.comments !== false, compact: options?.compact !== false }
   await write(joinPath(dir, 'biome.json'), `${JSON.stringify(biomeConfig, null, 2)}\n`)

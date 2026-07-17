@@ -11,7 +11,7 @@ const isSymlinkSafe = async (p: string): Promise<boolean> => {
     return false
   }
 }
-const COMPACT_REGEX = /(?:\r?\n){2,}/gu
+const COMPACT_REGEX = /(?:\r?\n){2,}/gv
 const compactBasenames = new Set(['.env.example', '.gitignore', '.npmrc', '.prettierignore', 'Dockerfile', 'Makefile'])
 const compactExtensions = new Set([
   '.cjs',

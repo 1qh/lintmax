@@ -10,7 +10,7 @@ if (!(pkg.name && pkg.version)) {
   process.exit(1)
 }
 /** Only a 404 means the package is genuinely absent; every other npm failure is the registry declining to answer. */
-const notFoundRe = /E404|404 Not Found/u
+const notFoundRe = /404 Not Found|E404/v
 const view = await $`npm view ${pkg.name} versions --json`.quiet().nothrow()
 if (view.exitCode !== 0 && !notFoundRe.test(view.stderr.toString())) {
   console.error(`npm view ${pkg.name} failed, so its old versions are unknown: ${view.stderr.toString().trim()}`)

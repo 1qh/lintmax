@@ -6,7 +6,7 @@ import { findClassNameViolations } from './class-name.js'
 const check = (code: string) => findClassNameViolations({ sourceText: code })
 describe('unparseable source', () => {
   test('throws rather than silently reporting zero violations, so a check can never false-green on a file it could not read', () => {
-    expect(() => check('<div className={`a-${x}`} />\n<span className={`b-${y}`} />')).toThrow(/cannot parse/u)
+    expect(() => check('<div className={`a-${x}`} />\n<span className={`b-${y}`} />')).toThrow(/cannot parse/v)
   })
 })
 describe('cn/no-template-literal', () => {
@@ -151,7 +151,7 @@ describe('edge cases', () => {
       <section className={clsx("a", "b")} />
     </>`)
     expect(violations).toHaveLength(4)
-    expect(violations.map(v => v.rule).toSorted()).toEqual([
+    expect(violations.map(v => v.rule).toSorted((a, b) => a.localeCompare(b))).toEqual([
       'cn/no-banned-callee',
       'cn/no-concatenation',
       'cn/no-template-literal',

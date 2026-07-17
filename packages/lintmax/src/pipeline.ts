@@ -1,5 +1,4 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential pipeline fix steps mutate files in order */
-/* eslint-disable complexity */
 import { $, env as bunEnv, file, Glob } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
@@ -44,6 +43,13 @@ const emitExtra = (result: { diagnostics: Diagnostic[]; notes: string[] }): Diag
   for (const note of result.notes) process.stderr.write(`lintmax: ${note}\n`)
   return result.diagnostics
 }
+const formatFailureDetails = (failures: FailureRecord[]): string =>
+  failures
+    .map(item => {
+      const messageLine = item.message ? `\n${item.message}` : ''
+      return `- ${item.label} (exit ${item.code})${messageLine}`
+    })
+    .join('\n')
 const createStepExecutor = ({
   env,
   failures,
@@ -123,9 +129,7 @@ const createStepExecutor = ({
   }
   const throwIfFailures = () => {
     if (failures.length === 0) return
-    const details = failures
-      .map(item => `- ${item.label} (exit ${item.code})${item.message ? `\n${item.message}` : ''}`)
-      .join('\n')
+    const details = formatFailureDetails(failures)
     const code = failures[0]?.code ?? 1
     throw new CliExitError({
       code,
@@ -301,7 +305,8 @@ const captureAndParse = async ({
   const stdout = result.stdout.trim()
   const stdoutFirst = stdout.split('\n', 1)[0]?.trimStart() ?? ''
   const stdoutIsJson = stdoutFirst.startsWith('[') || stdoutFirst.startsWith('{')
-  const message = stderr.length > 0 ? stderr : stdoutIsJson ? undefined : stdout || undefined
+  const stdoutMessage = stdoutIsJson ? undefined : stdout || undefined
+  const message = stderr.length > 0 ? stderr : stdoutMessage
   failures.push({ code: result.exitCode, label, message })
   return []
 }
@@ -468,9 +473,7 @@ const throwAgentResults = ({ diagnostics, failures }: { diagnostics: Diagnostic[
   const output = formatGrouped({ files: grouped })
   if (output.length > 0) process.stdout.write(`${output}\n`)
   if (failures.length > 0) {
-    const details = failures
-      .map(item => `- ${item.label} (exit ${item.code})${item.message ? `\n${item.message}` : ''}`)
-      .join('\n')
+    const details = formatFailureDetails(failures)
     process.stderr.write(`${details}\n`)
   }
   throw new CliExitError({ code: 1 })
@@ -484,19 +487,106 @@ const readOxlintIgnorePatterns = async ({ dir }: { dir: string }): Promise<strin
   if (!Array.isArray(patterns)) return [...DEFAULT_SHARED_IGNORE_PATTERNS]
   return patterns.filter((x): x is string => typeof x === 'string')
 }
-const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; human?: boolean }) => {
-  const dir = joinPath(cwd, cacheDir)
-  await ensureDirectory({ directory: dir })
-  const configPath = joinPath(cwd, 'lintmax.config.ts')
-  const hasConfig = await pathExists({ path: configPath })
+interface BranchContext {
+  agentParams: Parameters<typeof runAgentCheck>[0]
+  allGitFiles: string[]
+  checkSteps: StepSpec[]
+  env: Record<string, string | undefined>
+  extraBins: ExtraBins
+  failures: FailureRecord[]
+  runSteps: (arg: { steps: StepSpec[] }) => Promise<void>
+  shouldComments: boolean
+  sourceFiles: string[]
+  throwIfFailures: () => void
+}
+const collectAgentDiagnostics = async (ctx: BranchContext): Promise<Diagnostic[]> => {
+  const allDiagnostics = await runAgentCheck(ctx.agentParams)
+  if (ctx.shouldComments) allDiagnostics.push(...(await checkComments({ files: ctx.sourceFiles })))
+  allDiagnostics.push(...(await checkClassName({ root: cwd })), ...(await checkJsxExtension({ root: cwd })))
+  return allDiagnostics
+}
+const runFixHuman = async (ctx: BranchContext): Promise<void> => {
+  await ctx.runSteps({ steps: ctx.checkSteps })
+  const extraHuman = emitExtra(
+    await runExtraCoverage({ bins: ctx.extraBins, command: 'fix', env: ctx.env, gitFiles: ctx.allGitFiles })
+  )
+  if (extraHuman.length > 0) {
+    const output = formatGrouped({ files: aggregate({ diagnostics: extraHuman }) })
+    if (output.length > 0) process.stdout.write(`${output}\n`)
+    ctx.failures.push({ code: 1, label: 'extra-coverage' })
+  }
+  ctx.throwIfFailures()
+}
+const runFixAgent = async (ctx: BranchContext): Promise<void> => {
+  const allDiagnostics = await collectAgentDiagnostics(ctx)
+  allDiagnostics.push(
+    ...emitExtra(await runExtraCoverage({ bins: ctx.extraBins, command: 'fix', env: ctx.env, gitFiles: ctx.allGitFiles }))
+  )
+  throwAgentResults({ diagnostics: allDiagnostics, failures: ctx.failures })
+}
+const runCheckHuman = async (ctx: BranchContext): Promise<void> => {
+  await ctx.runSteps({ steps: ctx.checkSteps })
+  const cnDiagsHuman = await checkClassName({ root: cwd })
+  const jsxDiagsHuman = await checkJsxExtension({ root: cwd })
+  const unusedHuman =
+    ctx.sourceFiles.length > 0
+      ? await removeUnusedSuppressions({ dryRun: true, filePaths: ctx.sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
+      : { diagnostics: [], files: [], removed: 0 }
+  const humanCustomDiags = [
+    ...cnDiagsHuman,
+    ...jsxDiagsHuman,
+    ...unusedToDiagnostics({ root: cwd, unused: unusedHuman.diagnostics }),
+    ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
+    ...emitExtra(
+      await runExtraCoverage({ bins: ctx.extraBins, command: 'check', env: ctx.env, gitFiles: ctx.allGitFiles })
+    )
+  ]
+  if (humanCustomDiags.length > 0) {
+    const grouped = aggregate({ diagnostics: humanCustomDiags })
+    const output = formatGrouped({ files: grouped })
+    if (output.length > 0) process.stdout.write(`${output}\n`)
+    ctx.failures.push({ code: 1, label: 'cn' })
+  }
+  ctx.throwIfFailures()
+}
+const runCheckAgent = async (ctx: BranchContext): Promise<void> => {
+  const allDiagnostics = await collectAgentDiagnostics(ctx)
+  if (ctx.sourceFiles.length > 0) {
+    const unusedAgent = await removeUnusedSuppressions({
+      dryRun: true,
+      filePaths: ctx.sourceFiles.map(f => joinPath(cwd, f)),
+      root: cwd
+    })
+    allDiagnostics.push(...unusedToDiagnostics({ root: cwd, unused: unusedAgent.diagnostics }))
+  }
+  allDiagnostics.push(
+    ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
+    ...emitExtra(
+      await runExtraCoverage({ bins: ctx.extraBins, command: 'check', env: ctx.env, gitFiles: ctx.allGitFiles })
+    )
+  )
+  if (allDiagnostics.length > 0 || ctx.failures.length > 0) {
+    const grouped = aggregate({ diagnostics: allDiagnostics })
+    const output = formatGrouped({ files: grouped })
+    if (output.length > 0) process.stdout.write(`${output}\n`)
+    if (ctx.failures.length > 0) process.stderr.write(`${formatFailureDetails(ctx.failures)}\n`)
+    throw new CliExitError({ code: 1 })
+  }
+}
+const buildLintEnv = (): Record<string, string | undefined> => {
   const bundledBinA = joinPath(lintmaxRoot, 'node_modules', '.bin')
   const bundledBinB = joinPath(dirnamePath(lintmaxRoot), '.bin')
   const cwdBinDir = joinPath(cwd, 'node_modules', '.bin')
-  const runtimePath = joinPath(dir, 'lintmax.json')
-  const env = {
-    ...bunEnv,
-    PATH: `${bundledBinA}:${bundledBinB}:${cwdBinDir}:${bunEnv.PATH ?? ''}`
-  }
+  return { ...bunEnv, PATH: `${bundledBinA}:${bundledBinB}:${cwdBinDir}:${bunEnv.PATH ?? ''}` }
+}
+const synchronizeConfig = async ({
+  configPath,
+  env
+}: {
+  configPath: string
+  env: Record<string, string | undefined>
+}): Promise<void> => {
+  const hasConfig = await pathExists({ path: configPath })
   await (hasConfig
     ? run({
         args: [
@@ -509,6 +599,47 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
         silent: true
       })
     : sync())
+}
+const resolveAllBins = async (): Promise<[string, string, string, string, string, string, string]> => {
+  const bins = await Promise.all([
+    resolveBin({ bin: 'sort-package-json', pkg: 'sort-package-json' }),
+    resolveBin({ bin: 'biome', pkg: '@biomejs/biome' }),
+    resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
+    resolveBin({ bin: 'eslint', pkg: 'eslint' }),
+    resolveBin({ bin: 'prettier', pkg: 'prettier' }),
+    resolveBin({ bin: 'tombi', pkg: 'tombi' }),
+    resolveBin({ bin: 'dprint', pkg: 'dprint' })
+  ])
+  return bins
+}
+const runFixCommand = async ({
+  clearFailures,
+  ctx,
+  fixSteps,
+  human,
+  runStepsSilent
+}: {
+  clearFailures: () => void
+  ctx: BranchContext
+  fixSteps: StepSpec[]
+  human: boolean
+  runStepsSilent: (arg: { steps: StepSpec[] }) => Promise<void>
+}): Promise<void> => {
+  if (ctx.shouldComments) await fixComments({ files: ctx.sourceFiles })
+  if (ctx.sourceFiles.length > 0) await cleanIgnores(ctx.sourceFiles.map(f => joinPath(cwd, f)))
+  await (human ? ctx.runSteps({ steps: fixSteps }) : runStepsSilent({ steps: fixSteps }))
+  clearFailures()
+  if (ctx.sourceFiles.length > 0)
+    await removeUnusedSuppressions({ filePaths: ctx.sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
+  await (human ? runFixHuman(ctx) : runFixAgent(ctx))
+}
+const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; human?: boolean }) => {
+  const dir = joinPath(cwd, cacheDir)
+  await ensureDirectory({ directory: dir })
+  const configPath = joinPath(cwd, 'lintmax.config.ts')
+  const runtimePath = joinPath(dir, 'lintmax.json')
+  const env = buildLintEnv()
+  await synchronizeConfig({ configPath, env })
   const runtime = (await readJson({ path: runtimePath })) as {
     comments?: boolean
     compact?: boolean
@@ -521,15 +652,7 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   })
   if (command === 'fix' && runtime.compact === true) await runCompactContinue({ human, mode: 'fix' })
   const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs')]
-  const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await Promise.all([
-    resolveBin({ bin: 'sort-package-json', pkg: 'sort-package-json' }),
-    resolveBin({ bin: 'biome', pkg: '@biomejs/biome' }),
-    resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
-    resolveBin({ bin: 'eslint', pkg: 'eslint' }),
-    resolveBin({ bin: 'prettier', pkg: 'prettier' }),
-    resolveBin({ bin: 'tombi', pkg: 'tombi' }),
-    resolveBin({ bin: 'dprint', pkg: 'dprint' })
-  ])
+  const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await resolveAllBins()
   const extraBins: ExtraBins = { dprint: dprintBin, tombi: tombiBin }
   const hasFlowmark = (await $`which flowmark`.env(env).quiet().nothrow()).exitCode === 0
   const gitWorkTree = await isGitWorkTree({ env, root: cwd })
@@ -556,9 +679,32 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   })
   const shouldComments = runtime.comments !== false
   const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
+  const agentParams = {
+    biomeBin,
+    dir,
+    env,
+    eslintArgs,
+    eslintBin,
+    failures,
+    oxlintBin,
+    oxlintIgnorePatterns,
+    prettierBin,
+    prettierMarkdownTargets,
+    sortPkgJson
+  }
+  const ctx: BranchContext = {
+    agentParams,
+    allGitFiles,
+    checkSteps,
+    env,
+    extraBins,
+    failures,
+    runSteps,
+    shouldComments,
+    sourceFiles,
+    throwIfFailures
+  }
   if (command === 'fix') {
-    if (shouldComments) await fixComments({ files: sourceFiles })
-    if (sourceFiles.length > 0) await cleanIgnores(sourceFiles.map(f => joinPath(cwd, f)))
     const fixSteps = createFixSteps({
       biomeBin,
       dir,
@@ -571,115 +717,9 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       prettierMarkdownTargets,
       sortPkgJson
     })
-    await (human ? runSteps({ steps: fixSteps }) : runStepsSilent({ steps: fixSteps }))
-    clearFailures()
-    if (sourceFiles.length > 0)
-      await removeUnusedSuppressions({ filePaths: sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
-    if (human) {
-      await runSteps({ steps: checkSteps })
-      const extraHuman = emitExtra(await runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles }))
-      if (extraHuman.length > 0) {
-        const output = formatGrouped({ files: aggregate({ diagnostics: extraHuman }) })
-        if (output.length > 0) process.stdout.write(`${output}\n`)
-        failures.push({ code: 1, label: 'extra-coverage' })
-      }
-      throwIfFailures()
-      return
-    }
-    const allDiagnostics = await runAgentCheck({
-      biomeBin,
-      dir,
-      env,
-      eslintArgs,
-      eslintBin,
-      failures,
-      oxlintBin,
-      oxlintIgnorePatterns,
-      prettierBin,
-      prettierMarkdownTargets,
-      sortPkgJson
-    })
-    if (shouldComments) {
-      const commentDiags = await checkComments({ files: sourceFiles })
-      allDiagnostics.push(...commentDiags)
-    }
-    const cnDiags = await checkClassName({ root: cwd })
-    const jsxDiags = await checkJsxExtension({ root: cwd })
-    allDiagnostics.push(
-      ...cnDiags,
-      ...jsxDiags,
-      ...emitExtra(await runExtraCoverage({ bins: extraBins, command: 'fix', env, gitFiles: allGitFiles }))
-    )
-    throwAgentResults({ diagnostics: allDiagnostics, failures })
+    await runFixCommand({ clearFailures, ctx, fixSteps, human, runStepsSilent })
     return
   }
-  if (human) {
-    await runSteps({ steps: checkSteps })
-    const cnDiagsHuman = await checkClassName({ root: cwd })
-    const jsxDiagsHuman = await checkJsxExtension({ root: cwd })
-    const unusedHuman =
-      sourceFiles.length > 0
-        ? await removeUnusedSuppressions({ dryRun: true, filePaths: sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
-        : { diagnostics: [], files: [], removed: 0 }
-    const humanCustomDiags = [
-      ...cnDiagsHuman,
-      ...jsxDiagsHuman,
-      ...unusedToDiagnostics({ root: cwd, unused: unusedHuman.diagnostics }),
-      ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
-      ...emitExtra(await runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles }))
-    ]
-    if (humanCustomDiags.length > 0) {
-      const grouped = aggregate({ diagnostics: humanCustomDiags })
-      const output = formatGrouped({ files: grouped })
-      if (output.length > 0) process.stdout.write(`${output}\n`)
-      failures.push({ code: 1, label: 'cn' })
-    }
-    throwIfFailures()
-    return
-  }
-  const allDiagnostics = await runAgentCheck({
-    biomeBin,
-    dir,
-    env,
-    eslintArgs,
-    eslintBin,
-    failures,
-    oxlintBin,
-    oxlintIgnorePatterns,
-    prettierBin,
-    prettierMarkdownTargets,
-    sortPkgJson
-  })
-  if (shouldComments) {
-    const commentDiags = await checkComments({ files: sourceFiles })
-    allDiagnostics.push(...commentDiags)
-  }
-  const cnDiags = await checkClassName({ root: cwd })
-  const jsxDiags = await checkJsxExtension({ root: cwd })
-  allDiagnostics.push(...cnDiags, ...jsxDiags)
-  if (sourceFiles.length > 0) {
-    const unusedAgent = await removeUnusedSuppressions({
-      dryRun: true,
-      filePaths: sourceFiles.map(f => joinPath(cwd, f)),
-      root: cwd
-    })
-    allDiagnostics.push(...unusedToDiagnostics({ root: cwd, unused: unusedAgent.diagnostics }))
-  }
-  allDiagnostics.push(
-    ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
-    ...emitExtra(await runExtraCoverage({ bins: extraBins, command: 'check', env, gitFiles: allGitFiles }))
-  )
-  if (allDiagnostics.length > 0 || failures.length > 0) {
-    const grouped = aggregate({ diagnostics: allDiagnostics })
-    const output = formatGrouped({ files: grouped })
-    if (output.length > 0) process.stdout.write(`${output}\n`)
-    if (failures.length > 0) {
-      const details = failures
-        .map(item => `- ${item.label} (exit ${item.code})${item.message ? `\n${item.message}` : ''}`)
-        .join('\n')
-      process.stderr.write(`${details}\n`)
-    }
-    throw new CliExitError({ code: 1 })
-  }
+  await (human ? runCheckHuman(ctx) : runCheckAgent(ctx))
 }
 export { runLint }

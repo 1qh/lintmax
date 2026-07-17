@@ -55,6 +55,29 @@ const classNameExprRule = (expr: Node): null | string => {
   if (isJoinCall(expr)) return 'cn/no-join'
   return null
 }
+const collectClassNameAttrViolation = (node: Node, sourceText: string, violations: Violation[]): void => {
+  const container = node.value
+  if (isClassNameAttr(node) && container?.type === 'JSXExpressionContainer' && container.expression) {
+    const rule = classNameExprRule(container.expression)
+    if (rule) violations.push({ line: lineAt(sourceText, container.expression.start), rule })
+  }
+}
+const collectBannedCalleeViolation = ({
+  grand,
+  node,
+  parent,
+  sourceText,
+  violations
+}: {
+  grand: Node | null
+  node: Node
+  parent: Node | null
+  sourceText: string
+  violations: Violation[]
+}): void => {
+  if (isBannedCallee(node) && (parent?.type !== 'JSXExpressionContainer' || !isClassNameAttr(grand)))
+    violations.push({ line: lineAt(sourceText, node.start), rule: 'cn/no-banned-callee' })
+}
 const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violation[] => {
   const { program } = parseAnyDialect({ label: 'className check', sourceText })
   const violations: Violation[] = []
@@ -69,13 +92,8 @@ const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violat
         for (const key of Object.keys(raw)) visit((raw as Record<string, unknown>)[key], parent, grand)
       return
     }
-    const container = node.value
-    if (isClassNameAttr(node) && container?.type === 'JSXExpressionContainer' && container.expression) {
-      const rule = classNameExprRule(container.expression)
-      if (rule) violations.push({ line: lineAt(sourceText, container.expression.start), rule })
-    }
-    if (isBannedCallee(node) && !(parent?.type === 'JSXExpressionContainer' && isClassNameAttr(grand)))
-      violations.push({ line: lineAt(sourceText, node.start), rule: 'cn/no-banned-callee' })
+    collectClassNameAttrViolation(node, sourceText, violations)
+    collectBannedCalleeViolation({ grand, node, parent, sourceText, violations })
     for (const key of Object.keys(node)) if (key !== 'type') visit(node[key], node, parent)
   }
   visit(program, null, null)

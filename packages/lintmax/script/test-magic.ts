@@ -2,7 +2,7 @@ import { $, file, write } from 'bun'
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 
-const OK_LINE_RE = /^ok(?: \(cached\))?$/u
+const OK_LINE_RE = /^ok(?: \(cached\))?$/v
 const root = join(import.meta.dir, '..')
 const workFile = join(root, 'src/magic-work.ts')
 const cli = join(root, 'dist/cli.mjs')
@@ -93,7 +93,7 @@ for (const line of lines) {
   const trimmed = line.trim()
   if (trimmed.startsWith('//') || trimmed.startsWith('/*'))
     assert(
-      trimmed.startsWith('/**') || /eslint-disable|biome-ignore|@ts-/u.test(trimmed),
+      trimmed.startsWith('/**') || /eslint-disable|biome-ignore|@ts-/v.test(trimmed),
       `unexpected comment in fixed file: ${trimmed}`
     )
 }

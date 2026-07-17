@@ -17,7 +17,7 @@ interface Target {
   version: string
 }
 /** Only a 404 means the package is genuinely not on npm; every other npm failure is the registry declining to answer. */
-const notFoundRe = /E404|404 Not Found/u
+const notFoundRe = /404 Not Found|E404/v
 const root = process.cwd()
 const rootPkg = (await file(join(root, 'package.json'))
   .json()
@@ -65,7 +65,8 @@ if (onNpm.length === 0) {
 }
 const toPublish = onNpm.filter(t => !t.published)
 if (toPublish.length === 0) {
-  console.log(`already published: ${onNpm.map(t => `${t.name}@${t.version}`).join(', ')}`)
+  const alreadyPublishedList = onNpm.map(t => `${t.name}@${t.version}`).join(', ')
+  console.log(`already published: ${alreadyPublishedList}`)
   process.exit(0)
 }
 const publishOne = async (t: Target): Promise<Target & { ok: boolean }> => {
@@ -77,7 +78,8 @@ const publishOne = async (t: Target): Promise<Target & { ok: boolean }> => {
 const results = await Promise.all(toPublish.map(publishOne))
 const failed = results.filter(r => !r.ok)
 if (failed.length > 0) {
-  console.error(`publish failed: ${failed.map(f => `${f.name}@${f.version}`).join(', ')}`)
+  const failedList = failed.map(f => `${f.name}@${f.version}`).join(', ')
+  console.error(`publish failed: ${failedList}`)
   process.exit(1)
 }
 const first = results[0]
@@ -87,9 +89,8 @@ const pushed = tagged.exitCode === 0 ? await $`git push origin ${tag}`.nothrow()
 const released =
   pushed.exitCode === 0 ? await $`gh release create ${tag} --title ${tag} --generate-notes`.nothrow() : pushed
 if (released.exitCode !== 0) {
-  console.error(
-    `published ${results.map(r => `${r.name}@${r.version}`).join(', ')} but ${tag} did not land: ${released.stderr.toString().trim()}`
-  )
+  const publishedList = results.map(r => `${r.name}@${r.version}`).join(', ')
+  console.error(`published ${publishedList} but ${tag} did not land: ${released.stderr.toString().trim()}`)
   process.exit(1)
 }
 const staleTags = async (): Promise<string[]> => {
@@ -114,4 +115,5 @@ if (survivors.length > 0) {
   console.error(`released ${tag} but older tags remain on the remote: ${survivors.join(', ')}`)
   process.exit(1)
 }
-console.log(`released: ${results.map(r => `${r.name}@${r.version}`).join(', ')}`)
+const releasedList = results.map(r => `${r.name}@${r.version}`).join(', ')
+console.log(`released: ${releasedList}`)

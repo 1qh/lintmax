@@ -36,7 +36,7 @@ try {
       .nothrow()
   const ESC = String.fromCodePoint(27)
   const ANSI_RE = new RegExp(`${ESC}\\[[0-9;]*m`, 'gu')
-  const PATH_RE = /\/[^\s:]+\//gu
+  const PATH_RE = /\/[^\s:]+\//gv
   const stripAnsiAndPaths = (s: string) => s.replaceAll(ANSI_RE, '').replaceAll(PATH_RE, '/')
   const verboseRaw = [
     decoder.decode(biomeResult.stdout),

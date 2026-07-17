@@ -69,6 +69,10 @@ const saveState = async (state: StateShape): Promise<void> => {
     process.exitCode ??= 0
   }
 }
+const compare = (left: string, right: string): number => {
+  if (left < right) return -1
+  return left > right ? 1 : 0
+}
 const hashTree = async ({
   files,
   root,
@@ -80,7 +84,7 @@ const hashTree = async ({
 }): Promise<string> => {
   const hash = createHash('sha256')
   hash.update(`lintmax:${version}\n`)
-  const sorted = [...files].toSorted((left, right) => (left < right ? -1 : left > right ? 1 : 0))
+  const sorted = [...files].toSorted(compare)
   const digests = await Promise.all(
     sorted.map(async relativePath => {
       try {

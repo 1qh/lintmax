@@ -8,9 +8,9 @@ const lineAt = (sourceText: string, offset: number): number => {
   return line
 }
 const KEEP_PATTERN =
-  /eslint-disable|biome-ignore|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|@refresh|@flow|istanbul ignore|c8 ignore|webpackChunkName|prettier-ignore|noinspection|nolint|@jsx|@jsxImportSource|@jsxFrag|@license|@preserve|type-coverage:ignore/u
-const WHITESPACE_ONLY = /^\s*$/u
-const WS_CHAR = /\s/u
+  /biome-ignore|eslint-disable|oxlint-disable|@ts-nocheck|@ts-expect-error|@ts-ignore|@refresh|@flow|c8 ignore|istanbul ignore|noinspection|nolint|prettier-ignore|webpackChunkName|@jsx|@license|@preserve|type-coverage:ignore/v
+const WHITESPACE_ONLY = /^\s*$/v
+const WS_CHAR = /\s/v
 const COMMENT_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
 const extOf = (path: string): string => {
   const dot = path.lastIndexOf('.')
