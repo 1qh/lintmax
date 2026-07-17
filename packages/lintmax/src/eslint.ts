@@ -157,7 +157,11 @@ const packageJsonConfig = (): Linter.Config => {
   const stylistic = packageJsonConfigs.stylistic as Linter.Config
   return {
     ...recommended,
-    rules: { ...warnToError({ ...recommended.rules, ...stylistic.rules }), 'package-json/require-type': 'off' }
+    rules: {
+      ...warnToError({ ...recommended.rules, ...stylistic.rules }),
+      'package-json/require-type': 'off',
+      'package-json/specify-peers-locally': 'off'
+    }
   }
 }
 interface ReactConfigsParams {

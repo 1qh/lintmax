@@ -52,6 +52,10 @@ try {
     })
   process.stdout.write(`smoke dir: ${dir}\n`)
   await $`bun init -y`.cwd(dir).quiet()
+  const pkgPath = join(dir, 'package.json')
+  const pkg = JSON.parse(await file(pkgPath).text()) as Record<string, unknown>
+  pkg.description = 'lintmax smoke fixture'
+  await write(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
   await write(join(dir, 'index.ts'), "const ok = 'lintmax-smoke'\nexport { ok }\n")
   await $`bun add ${join(root, tarball)}`.cwd(dir).quiet()
   const checks = await Promise.all(required.map(async f => ({ exists: await has(f), f })))
