@@ -45,11 +45,8 @@ const double = function(n: number) {
 }
 // Check if number is positive
 const isPositive = function(n: number) {
-  if (n > 0) {
-    return true
-  } else {
-    return false
-  }
+  const positive = n > 0
+  return positive
 }
 // Get absolute value
 const abs = function(n: number) {
