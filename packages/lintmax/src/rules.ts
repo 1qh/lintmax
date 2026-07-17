@@ -1,6 +1,7 @@
 import { $, file, write } from 'bun'
 import { unlink } from 'node:fs/promises'
 import { cwd, resolveBin } from './core.js'
+import { isRecord } from './normalize.js'
 import { fromFileUrl, joinPath } from './path.js'
 
 interface RuleEntry {
@@ -28,27 +29,24 @@ const extractBiomeRules = async (): Promise<RuleEntry[]> => {
   }
   return results
 }
-const OXLINT_FIX_MARKERS = new Set(['⚠️🛠️️', '💡', '🛠️', '🛠️💡'])
+/** Reads oxlint's own resolved config. `--rules` prints nothing on current oxlint while still exiting 0 and still being listed in its help, so parsing that table yielded an empty oxlint section — and an empty section renders exactly like a linter that contributes nothing. It contributes 726 of the roughly 1738 rules this gate runs, so the command answering "what is enforced?" was wrong by more than a third while looking complete. */
 const extractOxlintRules = async (): Promise<RuleEntry[]> => {
   const configPath = joinPath(cwd, 'node_modules/.cache/lintmax/.oxlintrc.json')
-  const result = await $`bun node_modules/.bin/oxlint -c ${configPath} --rules`.cwd(cwd).quiet().nothrow()
-  const output = result.stdout.toString()
+  const bin = await resolveBin({ bin: 'oxlint', pkg: 'oxlint' })
+  const result = await $`bun ${bin} -c ${configPath} --print-config`.cwd(cwd).quiet().nothrow()
+  if (result.exitCode !== 0)
+    throw new Error(`oxlint --print-config failed, so its rule set is unknown: ${result.stderr.toString().trim()}`)
+  const parsed: unknown = JSON.parse(result.stdout.toString())
+  if (!isRecord(parsed)) throw new Error('oxlint --print-config returned no document')
+  const { rules } = parsed
+  if (!isRecord(rules)) throw new Error('oxlint --print-config returned no rules map')
   const results: RuleEntry[] = []
-  const lines = output.split('\n')
-  for (const line of lines)
-    if (line.startsWith('|') && !line.includes('Rule name')) {
-      const cols = line.split('|').map(c => c.trim())
-      const ruleName = cols[1]
-      const source = cols[2]
-      const fixCol = cols[5] ?? ''
-      const enabledCol = cols[4] ?? ''
-      if (ruleName && source && !ruleName.startsWith('---') && enabledCol.includes('✅'))
-        results.push({
-          fixable: OXLINT_FIX_MARKERS.has(fixCol.trim()),
-          linter: 'oxlint',
-          rule: source === 'oxc' ? ruleName : `${source}(${ruleName})`
-        })
-    }
+  for (const [rule, value] of Object.entries(rules)) {
+    const severity: unknown = Array.isArray(value) ? (value as unknown[])[0] : value
+    if (severity === 'deny') results.push({ fixable: false, linter: 'oxlint', rule })
+  }
+  if (results.length === 0)
+    throw new Error('oxlint reports zero enabled rules — the gate runs it, so that cannot be right')
   return results
 }
 const extractEslintRules = async (): Promise<RuleEntry[]> => {
@@ -58,12 +56,15 @@ const extractEslintRules = async (): Promise<RuleEntry[]> => {
   await write(dummyFile, 'export {}\n')
   const result = await $`bun ${eslintBin} --config ${configPath} --print-config ${dummyFile}`.cwd(cwd).quiet().nothrow()
   await unlink(dummyFile).catch(() => undefined)
-  if (result.exitCode !== 0) return []
+  if (result.exitCode !== 0)
+    throw new Error(`eslint --print-config failed, so its rule set is unknown: ${result.stderr.toString().trim()}`)
   let parsed: { rules?: Record<string, unknown> }
   try {
     parsed = JSON.parse(result.stdout.toString()) as typeof parsed
-  } catch {
-    return []
+  } catch (error) {
+    throw new Error(`eslint --print-config returned unreadable JSON: ${error instanceof Error ? error.message : ''}`, {
+      cause: error
+    })
   }
   const allRules = parsed.rules ?? {}
   const results: RuleEntry[] = []
