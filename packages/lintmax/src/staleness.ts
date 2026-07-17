@@ -1,5 +1,6 @@
-import { envValue } from './core.js'
+import { envValue, lintmaxRoot, readJson } from './core.js'
 import { isRecord } from './normalize.js'
+import { joinPath } from './path.js'
 import { loadState, saveState } from './state.js'
 
 interface StaleIssue {
@@ -9,42 +10,35 @@ interface StaleIssue {
 const httpTimeoutMs = 15_000
 const cacheTtlMs = 24 * 60 * 60 * 1000
 const sixMonthsMs = 183 * 24 * 60 * 60 * 1000
-const trackedPackages: readonly string[] = [
-  '@biomejs/biome',
-  'eslint',
-  'eslint-plugin-perfectionist',
-  'oxlint',
-  'prettier',
-  'sort-package-json',
-  'typescript',
-  'typescript-eslint'
-]
 const envSkip = 'LINTMAX_SKIP_STALENESS'
 const envForce = 'LINTMAX_STALENESS_FORCE'
-const fetchLatestPublish = async (name: string): Promise<null | number> => {
-  try {
-    const response = await fetch(`https://registry.npmjs.org/${name}`, {
-      headers: { accept: 'application/vnd.npm.install-v1+json' },
-      signal: AbortSignal.timeout(httpTimeoutMs)
-    })
-    if (!response.ok) return null
-    const body: unknown = await response.json()
-    if (!isRecord(body)) return null
-    const distTags = body['dist-tags']
-    const { time } = body
-    if (!(isRecord(distTags) && isRecord(time))) return null
-    const { latest } = distTags
-    if (typeof latest !== 'string') return null
-    const published = time[latest]
-    if (typeof published !== 'string') return null
-    const parsed = Date.parse(published)
-    return Number.isNaN(parsed) ? null : parsed
-  } catch {
-    return null
-  }
+/** Every linter this ships, read from the manifest that declares them. A hand-kept list beside the real one watches whatever it happened to name on the day it was written: it held eight of twenty-four, and the dep pinning the whole fleet to an old eslint major sat outside it, stale for well over a year, unseen. */
+const trackedPackages = async (): Promise<string[]> => {
+  const pkg = await readJson({ path: joinPath(lintmaxRoot, 'package.json') })
+  const deps = pkg.dependencies
+  return isRecord(deps) ? Object.keys(deps).toSorted() : []
 }
-const toIssue = (name: string, publishedAt: null | number): null | StaleIssue => {
-  if (publishedAt === null) return null
+/** Resolves a package's newest publish time, or throws. The abbreviated packument (`application/vnd.npm.install-v1+json`) carries no `time`, so asking for it and then requiring `time` yielded "unknown" for every package on every run — and "unknown" was being read as "fresh". An unanswerable lookup is reported, never folded into the same value as a healthy one. */
+const fetchLatestPublish = async (name: string): Promise<number> => {
+  const response = await fetch(`https://registry.npmjs.org/${name}`, {
+    signal: AbortSignal.timeout(httpTimeoutMs)
+  })
+  if (!response.ok) throw new Error(`registry answered ${String(response.status)} for ${name}`)
+  const body: unknown = await response.json()
+  if (!isRecord(body)) throw new Error(`registry sent no document for ${name}`)
+  const distTags = body['dist-tags']
+  const { time } = body
+  if (!isRecord(distTags)) throw new Error(`no dist-tags for ${name}`)
+  if (!isRecord(time)) throw new Error(`no publish times for ${name} — the abbreviated packument omits them`)
+  const { latest } = distTags
+  if (typeof latest !== 'string') throw new Error(`no latest tag for ${name}`)
+  const published = time[latest]
+  if (typeof published !== 'string') throw new Error(`no publish time for ${name}@${latest}`)
+  const parsed = Date.parse(published)
+  if (Number.isNaN(parsed)) throw new Error(`unparsable publish time for ${name}@${latest}: ${published}`)
+  return parsed
+}
+const toIssue = (name: string, publishedAt: number): null | StaleIssue => {
   const age = Date.now() - publishedAt
   if (age < sixMonthsMs) return null
   return { ageDays: Math.floor(age / (24 * 60 * 60 * 1000)), name }
@@ -54,10 +48,17 @@ const scanStaleness = async (force = false): Promise<StaleIssue[]> => {
   const ci = envValue('CI') === 'true' || envValue('CI') === '1'
   const forced = force || ci || envValue(envForce) === '1'
   const state = await loadState()
-  if (!forced && state.lastCheck > 0 && Date.now() - state.lastCheck < cacheTtlMs) return []
-  const results = await Promise.all(trackedPackages.map(async name => toIssue(name, await fetchLatestPublish(name))))
-  await saveState({ ...state, lastCheck: Date.now() })
-  return results.filter((issue): issue is StaleIssue => issue !== null)
+  if (!forced && state.lastCheck > 0 && Date.now() - state.lastCheck < cacheTtlMs) return state.staleIssues
+  const names = await trackedPackages()
+  const results = await Promise.all(
+    names.map(async name => {
+      const publishedAt = await fetchLatestPublish(name)
+      return toIssue(name, publishedAt)
+    })
+  )
+  const issues = results.filter((issue): issue is StaleIssue => issue !== null)
+  await saveState({ ...state, lastCheck: Date.now(), staleIssues: issues })
+  return issues
 }
 const formatStaleness = (issues: readonly StaleIssue[]): string => {
   if (issues.length === 0) return ''

@@ -4,9 +4,15 @@ import { homedir, platform, tmpdir } from 'node:os'
 import { isRecord } from './normalize.js'
 import { joinPath } from './path.js'
 
+interface StaleEntry {
+  ageDays: number
+  name: string
+}
 interface StateShape {
   lastCheck: number
   lastGreenByCwd: Record<string, string>
+  /** The last staleness verdict, kept so a cached run repeats it. Storing only the timestamp meant every run inside the window reported clean regardless of what the last real scan found. */
+  staleIssues: StaleEntry[]
   versions: Record<string, string>
 }
 const appDir = 'lintmax'
@@ -22,7 +28,15 @@ const statePath = (): string => {
   if (base.length === 0) return joinPath(tmpdir(), appDir, fileName)
   return joinPath(base, appDir, fileName)
 }
-const emptyState = (): StateShape => ({ lastCheck: 0, lastGreenByCwd: {}, versions: {} })
+const emptyState = (): StateShape => ({ lastCheck: 0, lastGreenByCwd: {}, staleIssues: [], versions: {} })
+const coerceStaleIssues = (value: unknown): StaleEntry[] => {
+  if (!Array.isArray(value)) return []
+  const out: StaleEntry[] = []
+  for (const raw of value)
+    if (isRecord(raw) && typeof raw.name === 'string' && typeof raw.ageDays === 'number')
+      out.push({ ageDays: raw.ageDays, name: raw.name })
+  return out
+}
 const coerceStringMap = (value: unknown): Record<string, string> => {
   if (!isRecord(value)) return {}
   const out: Record<string, string> = {}
@@ -40,6 +54,7 @@ const loadState = async (): Promise<StateShape> => {
     return {
       lastCheck,
       lastGreenByCwd: coerceStringMap(parsed.lastGreenByCwd),
+      staleIssues: coerceStaleIssues(parsed.staleIssues),
       versions: coerceStringMap(parsed.versions)
     }
   } catch {
