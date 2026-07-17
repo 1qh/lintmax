@@ -63,7 +63,6 @@
     "@eslint/compat": "latest",
     "@eslint/js": "latest",
     "@next/eslint-plugin-next": "latest",
-    "@taplo/cli": "latest",
     "@types/bun": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
@@ -79,6 +78,7 @@
     "oxlint": "latest",
     "prettier": "latest",
     "sort-package-json": "latest",
+    "tombi": "latest",
     "typescript": "~6.0.3",
     "typescript-eslint": "latest"
   }

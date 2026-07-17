@@ -521,16 +521,16 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   })
   if (command === 'fix' && runtime.compact === true) await runCompactContinue({ human, mode: 'fix' })
   const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs')]
-  const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, taploBin, dprintBin] = await Promise.all([
+  const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await Promise.all([
     resolveBin({ bin: 'sort-package-json', pkg: 'sort-package-json' }),
     resolveBin({ bin: 'biome', pkg: '@biomejs/biome' }),
     resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
     resolveBin({ bin: 'eslint', pkg: 'eslint' }),
     resolveBin({ bin: 'prettier', pkg: 'prettier' }),
-    resolveBin({ bin: 'taplo', pkg: '@taplo/cli' }),
+    resolveBin({ bin: 'tombi', pkg: 'tombi' }),
     resolveBin({ bin: 'dprint', pkg: 'dprint' })
   ])
-  const extraBins: ExtraBins = { dprint: dprintBin, taplo: taploBin }
+  const extraBins: ExtraBins = { dprint: dprintBin, tombi: tombiBin }
   const hasFlowmark = (await $`which flowmark`.env(env).quiet().nothrow()).exitCode === 0
   const gitWorkTree = await isGitWorkTree({ env, root: cwd })
   const allGitFiles = gitWorkTree ? await listCompactFiles({ env, root: cwd }) : []

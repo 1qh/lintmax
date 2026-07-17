@@ -42,7 +42,7 @@ const failureDiagnostic = (linter: string, files: readonly string[]): Diagnostic
 })
 interface ExtraBins {
   dprint: string
-  taplo: string
+  tombi: string
 }
 const runShell = async ({
   command,
@@ -79,7 +79,7 @@ const runShell = async ({
   }
   return { diagnostics, notes }
 }
-const runTaplo = async ({
+const runTombi = async ({
   bin,
   command,
   env,
@@ -91,11 +91,11 @@ const runTaplo = async ({
   files: readonly string[]
 }): Promise<Diagnostic[]> => {
   if (files.length === 0) return []
-  if (command === 'fix') await runCapture({ args: [bin, 'fmt', ...files], command: 'bun', env, label: 'taplo' })
-  const lint = await runCapture({ args: [bin, 'lint', ...files], command: 'bun', env, label: 'taplo' })
-  const fmtCheck = await runCapture({ args: [bin, 'fmt', '--check', ...files], command: 'bun', env, label: 'taplo' })
+  if (command === 'fix') await runCapture({ args: [bin, 'format', ...files], command: 'bun', env, label: 'tombi' })
+  const lint = await runCapture({ args: [bin, 'lint', ...files], command: 'bun', env, label: 'tombi' })
+  const fmtCheck = await runCapture({ args: [bin, 'format', '--check', ...files], command: 'bun', env, label: 'tombi' })
   if (lint.exitCode === 0 && fmtCheck.exitCode === 0) return []
-  return [failureDiagnostic('taplo', files)]
+  return [failureDiagnostic('tombi', files)]
 }
 const runDprintDockerfile = async ({
   bin,
@@ -130,12 +130,12 @@ const runExtraCoverage = async ({
 }): Promise<StepResult> => {
   const targets = collectExtraTargets(gitFiles)
   const pluginPath = resolveDprintPluginPath()
-  const [shell, taplo, dprint] = await Promise.all([
+  const [shell, tombi, dprint] = await Promise.all([
     runShell({ command, env, files: targets.shell }),
-    runTaplo({ bin: bins.taplo, command, env, files: targets.toml }),
+    runTombi({ bin: bins.tombi, command, env, files: targets.toml }),
     runDprintDockerfile({ bin: bins.dprint, command, env, files: targets.dockerfiles, pluginPath })
   ])
-  const diagnostics: Diagnostic[] = [...taplo, ...dprint, ...shell.diagnostics]
+  const diagnostics: Diagnostic[] = [...tombi, ...dprint, ...shell.diagnostics]
   return { diagnostics, notes: shell.notes }
 }
 export type { ExtraBins }
