@@ -34,13 +34,15 @@ const persistGreen = async (greenKey: null | string): Promise<void> => {
   state.lastGreenByCwd[cwd] = greenKey
   await saveState(state)
 }
+/** A scan that cannot reach the registry says so. An offline developer never has their lint gate failed by it, but the silence is what let this check report clean while answering nothing for every package on every run — an unanswerable scan is reported, never folded into the same output as a clean one. */
 const emitStaleness = async (): Promise<void> => {
   try {
     const issues = await scanStaleness()
     const formatted = formatStaleness(issues)
     if (formatted.length > 0) process.stderr.write(`${formatted}\n`)
-  } catch {
-    process.exitCode ??= 0
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    process.stderr.write(`lintmax: staleness scan could not complete, so dep freshness is UNKNOWN: ${reason}\n`)
   }
 }
 const runGate = async ({ command, human, version }: { command: 'check' | 'fix'; human: boolean; version: string }) => {

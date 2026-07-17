@@ -38,7 +38,16 @@ const fetchLatestPublish = async (name: string): Promise<number> => {
   if (Number.isNaN(parsed)) throw new Error(`unparsable publish time for ${name}@${latest}: ${published}`)
   return parsed
 }
+/** Age alone cannot tell a rotting package from a finished one, so a package leaves the gate ONLY with a reason and the trigger that ends the exception — never by being quietly dropped from the tracked set, which reads identically to "fresh" forever. Each entry is re-argued whenever this list is touched: an inherited exception is not a justified one. */
+const staleExceptions: Readonly<Record<string, { reason: string; revisitWhen: string }>> = {
+  '@types/react-dom': {
+    reason:
+      'DefinitelyTyped publishes actively (@types/react ships within weeks) and react-dom bundles no types of its own, so this is the only type source and its age means the surface is settled, not abandoned',
+    revisitWhen: 'react-dom ships bundled types, or @types/react-dom publishes again'
+  }
+}
 const toIssue = (name: string, publishedAt: number): null | StaleIssue => {
+  if (name in staleExceptions) return null
   const age = Date.now() - publishedAt
   if (age < sixMonthsMs) return null
   return { ageDays: Math.floor(age / (24 * 60 * 60 * 1000)), name }
