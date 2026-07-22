@@ -175,7 +175,9 @@ const OXLINT_CLI_ALLOW: readonly string[] = [
   'eslint/no-underscore-dangle',
   'react/jsx-no-literals',
   'unicorn/prefer-export-from',
-  'react/react-compiler'
+  'react/react-compiler',
+  'react/function-component-definition',
+  'node/no-top-level-await'
 ]
 export {
   BIOME_IGNORE_PATTERNS,
