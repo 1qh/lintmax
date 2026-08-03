@@ -62,14 +62,21 @@ const parseShellcheckLine = (line: string): Diagnostic | null => {
     return { file: groups.file, line: Number(groups.line), linter: 'shellcheck', rule: groups.rule }
   return null
 }
+const SHFMT_FLAGS = ['-s', '-ci', '-bn', '-sr', '-i', '2']
+const SHELLCHECK_FLAGS = ['--enable=all', '--severity=style', '--external-sources']
 const runShfmtStep = async ({ bin, command, env, files }: ShfmtStepInput): Promise<Diagnostic[]> => {
-  if (command === 'fix') await runCapture({ args: ['-w', ...files], command: bin, env, label: 'shfmt' })
-  const fmtCheck = await runCapture({ args: ['-d', ...files], command: bin, env, label: 'shfmt' })
+  if (command === 'fix') await runCapture({ args: [...SHFMT_FLAGS, '-w', ...files], command: bin, env, label: 'shfmt' })
+  const fmtCheck = await runCapture({ args: [...SHFMT_FLAGS, '-d', ...files], command: bin, env, label: 'shfmt' })
   if (fmtCheck.exitCode !== 0 || fmtCheck.stdout.trim().length > 0) return [failureDiagnostic('shfmt', files)]
   return []
 }
 const runShellcheckStep = async ({ bin, env, files }: ShellcheckStepInput): Promise<Diagnostic[]> => {
-  const result = await runCapture({ args: ['-f', 'gcc', ...files], command: bin, env, label: 'shellcheck' })
+  const result = await runCapture({
+    args: [...SHELLCHECK_FLAGS, '-f', 'gcc', ...files],
+    command: bin,
+    env,
+    label: 'shellcheck'
+  })
   const diagnostics: Diagnostic[] = []
   for (const line of result.stdout.split('\n')) {
     const diagnostic = parseShellcheckLine(line)
