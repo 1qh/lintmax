@@ -63,7 +63,7 @@ const parseShellcheckLine = (line: string): Diagnostic | null => {
   return null
 }
 const SHFMT_FLAGS = ['-s', '-ci', '-bn', '-sr', '-i', '2']
-const SHELLCHECK_FLAGS = ['--enable=all', '--severity=style', '--external-sources']
+const SHELLCHECK_FLAGS = ['--enable=all', '--severity=style', '--external-sources', '--exclude=SC2312']
 const runShfmtStep = async ({ bin, command, env, files }: ShfmtStepInput): Promise<Diagnostic[]> => {
   if (command === 'fix') await runCapture({ args: [...SHFMT_FLAGS, '-w', ...files], command: bin, env, label: 'shfmt' })
   const fmtCheck = await runCapture({ args: [...SHFMT_FLAGS, '-d', ...files], command: bin, env, label: 'shfmt' })
