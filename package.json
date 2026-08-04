@@ -22,6 +22,9 @@
   "simple-git-hooks": {
     "pre-commit": "sh up.sh && git add -u"
   },
+  "dependencies": {
+    "@biomejs/biome": "^2.5.7"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "latest",
     "@types/mdx": "latest",

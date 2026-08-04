@@ -32,6 +32,7 @@ const BIOME_RULES_OFF: readonly string[] = [
   'noReactSpecificProps',
   'noSecrets',
   'noSolidDestructuredProps',
+  'noTailwindArbitraryValue',
   'noTernary',
   'noUndeclaredDependencies',
   'noUnresolvedImports',
