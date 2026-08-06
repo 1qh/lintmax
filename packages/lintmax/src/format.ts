@@ -8,8 +8,8 @@ const formatGrouped = ({ files }: { files: GroupedFile[] }): string => {
     for (const l of f.linters) {
       parts.push(` ${l.linter}`)
       for (const r of l.rules) {
-        const lineStr = r.lines.length > 0 ? r.lines.join(',') : ''
-        parts.push(`  ${lineStr}${lineStr.length > 0 ? ' ' : ''}${r.rule}`)
+        const lineStr = r.lines.length > 0 ? `L${r.lines.join(',')} ` : ''
+        parts.push(`  ${lineStr}${r.rule}`)
       }
     }
   }

@@ -25,22 +25,22 @@ lintmax fix --human
 
 ## What it does
 
-lintmax combines biome, oxlint, eslint, prettier, and sort-package-json into one command. Default output is optimized for AI agents — grouped by file, then linter, then rule, with compressed line numbers.
+lintmax combines biome, oxlint, eslint, prettier, and sort-package-json into one command. Default output is optimized for AI agents — grouped by file, then linter, then rule, with `L`-prefixed source line locations (the `L` keeps a line number from ever reading as a finding count).
 
 ### Agent output (default)
 
 ```
 src/utils.ts
  biome
-  42,55,60 lint/suspicious/noExplicitAny
-  1312 lint/correctness/noChildrenProp
+  L42,55,60 lint/suspicious/noExplicitAny
+  L1312 lint/correctness/noChildrenProp
  eslint
-  1184,1209 @typescript-eslint/no-unsafe-call
+  L1184,1209 @typescript-eslint/no-unsafe-call
  oxlint
-  800,804 eslint-plugin-react-perf(jsx-no-jsx-as-prop)
+  L800,804 eslint-plugin-react-perf(jsx-no-jsx-as-prop)
 ```
 
-Prints `ok` on success (exit code 0).
+Each rule lists the lines it fired on: `noExplicitAny` at three lines, `noChildrenProp` at one (line 1312, not 1312 findings). Prints `ok` on success (exit code 0).
 
 ### Human output (`--human`)
 

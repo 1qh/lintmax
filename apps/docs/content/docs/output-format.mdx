@@ -5,36 +5,41 @@ description: Token-efficient output format for AI agents
 
 ## Agent Mode (default)
 
-Grouped by file, then linter, then rule, with compressed line numbers:
+Grouped by file, then linter, then rule. Each rule line is `L<line>,<line>,… rule/name` — the `L` prefix marks the numbers as **source line locations**, never a finding count:
 
 ```
 file.ts
  linter
-  line,line,line rule/name
+  L<line>,<line>,<line> rule/name
 ```
+
+The `L` prefix exists because a bare number before a rule name (`1312 noChildrenProp`) reads as "1312 findings of this rule" when it is really "one finding, at line 1312". `L1312` cannot be misread.
 
 ### Example
 
 ```
 apps/web/showcase.tsx
  biome
-  42,55,60,78,92,103 lint/suspicious/noExplicitAny
-  1312 lint/correctness/noChildrenProp
+  L42,55,60,78,92,103 lint/suspicious/noExplicitAny
+  L1312 lint/correctness/noChildrenProp
  eslint
-  1184,1209,1215,1220,1225 @typescript-eslint/no-unsafe-call
+  L1184,1209,1215,1220,1225 @typescript-eslint/no-unsafe-call
  oxlint
-  800,804 eslint-plugin-react-perf(jsx-no-jsx-as-prop)
+  L800,804 eslint-plugin-react-perf(jsx-no-jsx-as-prop)
  prettier
   unformatted
 sync.ts
  oxlint
-  37,66 eslint-plugin-unicorn(no-await-expression-member)
+  L37,66 eslint-plugin-unicorn(no-await-expression-member)
 ```
+
+Read the block above as: `noExplicitAny` at six lines (42, 55, …), `noChildrenProp` at one line (1312), and so on — the count of findings for a rule is how many `L` locations it lists, never the numbers themselves.
 
 ### Rules
 
 - Prints `ok` on success (exit 0)
 - Exit 1 on errors with grouped output
+- Each rule's numbers are `L`-prefixed source line locations, comma-joined; the finding count is how many are listed
 - Deduplication across linters (biome > oxlint > eslint priority)
 - Prettier violations show as `unformatted` (no line numbers)
 - sort-package-json violations show as `unsorted`
