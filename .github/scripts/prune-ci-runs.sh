@@ -10,7 +10,7 @@ set -eu
 # the first then asks its own repo to delete another repo's run ids — every call 404s, nothing
 # is pruned, and the history quietly keeps growing. A run-owned file cannot be clobbered.
 runs=$(mktemp)
-trap 'rm -f "${runs}"' EXIT
+trap 'rm -f "$runs"' EXIT
 gh run list --repo "${REPO}" --limit 400 --json databaseId,status \
   -q '.[] | select(.status=="completed") | .databaseId' < /dev/null > "${runs}"
 # A run already gone is nothing to report; anything else means the prune did not do its job, and
