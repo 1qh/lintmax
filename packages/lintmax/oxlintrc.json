@@ -152,6 +152,7 @@
     "unicorn/no-await-expression-member": "off",
     "unicorn/no-null": "off",
     "unicorn/prefer-global-this": "off",
+    "unicorn/prefer-number-coercion": "off",
     "unicorn/switch-case-braces": ["error", "avoid"],
     "vitest/prefer-importing-vitest-globals": "off",
     "vitest/prefer-strict-boolean-matchers": "off",
