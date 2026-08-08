@@ -40,6 +40,11 @@ const fetchLatestPublish = async (name: string): Promise<number> => {
 }
 /** Age alone cannot tell a rotting package from a finished one, so a package leaves the gate ONLY with a reason and the trigger that ends the exception — never by being quietly dropped from the tracked set, which reads identically to "fresh" forever. Each entry is re-argued whenever this list is touched: an inherited exception is not a justified one. */
 const staleExceptions: Readonly<Record<string, { reason: string; revisitWhen: string }>> = {
+  '@eslint/js': {
+    reason:
+      'it is the eslint monorepo own co-published config package, republished only when its recommended/all rule map changes; eslint core ships actively (10.8.x within days) while @eslint/js sits at 10.0.1 because that rule map is settled under eslint 10 — the age means finished, not abandoned',
+    revisitWhen: 'eslint core is dropped from the gate, or @eslint/js publishes a version past 10.0.1'
+  },
   '@types/react-dom': {
     reason:
       'DefinitelyTyped publishes actively (@types/react ships within weeks) and react-dom bundles no types of its own, so this is the only type source and its age means the surface is settled, not abandoned',
