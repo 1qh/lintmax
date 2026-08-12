@@ -4,7 +4,7 @@ command -v zsh > /dev/null 2>&1 || {
   exit 1
 }
 log=$(mktemp)
-if sh "$(dirname "$0")/clean.sh" > "${log}" 2>&1 && bun i --silent >> "${log}" 2>&1 && bun run build >> "${log}" 2>&1 && bun run fix >> "${log}" 2>&1 && bun run check >> "${log}" 2>&1; then
+if sh clean.sh > "${log}" 2>&1 && bun i --silent >> "${log}" 2>&1 && bun run build >> "${log}" 2>&1 && bun run fix >> "${log}" 2>&1 && bun run check >> "${log}" 2>&1; then
   rm -f "${log}"
 else
   cat "${log}"
