@@ -46,6 +46,7 @@ const BIOME_RULES_OFF: readonly string[] = [
   'useImportExtensions',
   'useNamingConvention',
   'useQwikValidLexicalScope',
+  'useReactCompiler',
   'useSingleVarDeclarator',
   'useSolidForComponent',
   'useSortedClasses'
