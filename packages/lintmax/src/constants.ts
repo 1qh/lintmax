@@ -179,6 +179,8 @@ const OXLINT_CLI_ALLOW: readonly string[] = [
   'unicorn/prefer-export-from',
   'react/react-compiler',
   'react/function-component-definition',
+  'react/memo-dependencies',
+  'react/preserve-manual-memoization',
   'node/no-top-level-await',
   'eslint/one-var'
 ]

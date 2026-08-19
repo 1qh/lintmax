@@ -2,6 +2,7 @@ import { $, file, write } from 'bun'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { readRequiredJson } from '../src/core.js'
 
 const decoder = new TextDecoder()
 const root = join(import.meta.dir, '..')
@@ -15,7 +16,7 @@ if (pack.exitCode !== 0 || !tarball) throw new Error(`pack failed: ${decoder.dec
 const dir = await mkdtemp(join(tmpdir(), 'lintmax-smoke-'))
 const cleanup = async () => rm(dir, { force: true, recursive: true })
 const has = async (f: string) => file(join(dir, f)).exists()
-const readJson = async <T>(f: string): Promise<T> => JSON.parse(await file(join(dir, f)).text()) as T
+const readJson = async <T>(f: string): Promise<T> => readRequiredJson<T>(await file(join(dir, f)).text())
 const lintmaxCli = 'node_modules/lintmax/dist/cli.mjs'
 const writeConfig = async ({ content }: { content: string }) => write(join(dir, 'lintmax.config.ts'), content)
 const required = [
@@ -53,7 +54,7 @@ try {
   process.stdout.write(`smoke dir: ${dir}\n`)
   await $`bun init -y`.cwd(dir).quiet()
   const pkgPath = join(dir, 'package.json')
-  const pkg = JSON.parse(await file(pkgPath).text()) as Record<string, unknown>
+  const pkg = readRequiredJson<Record<string, unknown>>(await file(pkgPath).text())
   pkg.description = 'lintmax smoke fixture'
   await write(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
   await write(join(dir, 'index.ts'), "const ok = 'lintmax-smoke'\nexport { ok }\n")

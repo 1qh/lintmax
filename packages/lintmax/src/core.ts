@@ -65,10 +65,10 @@ const readJson = async ({ path }: { path: string }): Promise<Record<string, unkn
     return {}
   }
 }
-const readRequiredJson = async <T>({ path }: { path: string }): Promise<T> => {
-  const text = await file(path).text()
-  return JSON.parse(text) as T
-}
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- typed JSON boundary: each caller declares the shape it parses
+const readRequiredJson = <T>(text: string): T =>
+  /** biome-ignore lint/nursery/noUnsafeTypeAssertion: single validated JSON parse boundary */
+  JSON.parse(text) as T
 const ensureDirectory = async ({ directory }: { directory: string }): Promise<void> => {
   const result = await $`mkdir -p ${directory}`.quiet().nothrow()
   if (result.exitCode === 0) return
@@ -94,7 +94,7 @@ const resolveBin = async ({ bin, pkg }: { bin: string; pkg: string }): Promise<s
       code: 1,
       message: `Cannot find ${pkg} — run: bun add -d ${pkg}`
     })
-  const pkgJson = await readRequiredJson<{ bin?: Record<string, string> | string }>({ path: packageJsonPath })
+  const pkgJson = readRequiredJson<{ bin?: Record<string, string> | string }>(await file(packageJsonPath).text())
   const pkgDir = dirnamePath(packageJsonPath)
   const binPath = typeof pkgJson.bin === 'string' ? pkgJson.bin : (pkgJson.bin?.[bin] ?? '')
   return joinPath(pkgDir, binPath)
@@ -126,9 +126,7 @@ const runCapture = async ({
 }
 const envValue = (name: string): string => bunEnv[name] ?? ''
 const readVersion = async () => {
-  const pkg = await readRequiredJson<{ version: string }>({
-    path: joinPath(lintmaxRoot, 'package.json')
-  })
+  const pkg = readRequiredJson<{ version: string }>(await file(joinPath(lintmaxRoot, 'package.json')).text())
   return pkg.version
 }
 const usage = ({ version }: { version: string }) => {

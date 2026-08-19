@@ -11,12 +11,11 @@ const containsJsxNode = (program: unknown): boolean => {
       for (const child of node) visit(child)
       return
     }
-    const typed = node as { type?: string }
-    if (typed.type === 'JSXElement' || typed.type === 'JSXFragment') {
+    if ('type' in node && (node.type === 'JSXElement' || node.type === 'JSXFragment')) {
       found = true
       return
     }
-    for (const key of Object.keys(node)) if (key !== 'type') visit((node as Record<string, unknown>)[key])
+    for (const [key, child] of Object.entries(node)) if (key !== 'type') visit(child)
   }
   visit(program)
   return found

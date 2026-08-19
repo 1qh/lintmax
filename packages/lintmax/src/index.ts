@@ -123,9 +123,9 @@ const resolveBiomeSchema = async ({
   cwd: string
 }): Promise<{ categories: string[]; ruleMap: Map<string, string> }> => {
   const schemaPath = await resolveSchemaPath({ cwd })
-  const schema = await readRequiredJson<{
+  const schema = readRequiredJson<{
     $defs: Record<string, { properties?: Record<string, unknown> }>
-  }>({ path: schemaPath })
+  }>(await file(schemaPath).text())
   const rulesProps = schema.$defs.Rules?.properties ?? {}
   const categories = Object.keys(rulesProps).filter(k => {
     const groupDef = schema.$defs[k.charAt(0).toUpperCase() + k.slice(1)]
@@ -234,7 +234,7 @@ const normalizeSharedOverrides = ({
       value: rawOverride
     })
     for (const key of Object.keys(override))
-      if (!SHARED_OVERRIDE_KEYS.includes(key as (typeof SHARED_OVERRIDE_KEYS)[number]))
+      if (!SHARED_OVERRIDE_KEYS.some(k => k === key))
         throw new Error(`${label}.${pattern}.${key} is not supported. Use biome, eslint, or oxlint.`)
     entries.push({
       ...override,
@@ -648,6 +648,7 @@ const buildEslintOptions = ({
         })
         appendEntries.push({
           [ESLINT_IMPORT_MARKER_KEY]: importRefIndex - 1
+          /** biome-ignore lint/nursery/noUnsafeTypeAssertion: marker object is intentionally promoted to the external ESLint config type */
         } as Linter.Config)
       }
     const mergedAppend: Linter.Config[] = [...sharedRuleOverrides, ...appendEntries]
@@ -854,12 +855,12 @@ const createOxlintConfig = async ({
   options?: OxlintOptions
   sharedIgnorePatterns?: string[]
 }): Promise<Record<string, unknown>> => {
-  const base = await readRequiredJson<{
+  const base = readRequiredJson<{
     [key: string]: unknown
     ignorePatterns?: string[]
     overrides?: { files: string[]; rules: Record<string, unknown> }[]
     rules: Record<string, unknown>
-  }>({ path: joinPath(pkgRoot, 'oxlintrc.json') })
+  }>(await file(joinPath(pkgRoot, 'oxlintrc.json')).text())
   const knownRules = new Set<string>([
     ...Object.keys(base.rules),
     ...(base.overrides ?? []).flatMap(override => Object.keys(override.rules)),

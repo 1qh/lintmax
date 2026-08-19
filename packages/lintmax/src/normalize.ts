@@ -29,6 +29,7 @@ const normalizePathListInput = ({
   return out
 }
 const hasPlainObjectPrototype = ({ value }: { value: object }): boolean => {
+  /** biome-ignore lint/nursery/noUnsafeTypeAssertion: Object.getPrototypeOf returns an untyped external object boundary */
   const prototype: null | object = Object.getPrototypeOf(value) as null | object
   return prototype === null || prototype === Object.prototype
 }

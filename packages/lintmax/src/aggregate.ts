@@ -1,3 +1,4 @@
+import { readRequiredJson } from './core.js'
 import { getCanonicalRule } from './rule-equivalence.js'
 
 interface Diagnostic {
@@ -33,7 +34,7 @@ const parseBiomeDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] => 
     }[]
   }
   try {
-    parsed = JSON.parse(stdout) as typeof parsed
+    parsed = readRequiredJson<typeof parsed>(stdout)
   } catch {
     return []
   }
@@ -63,7 +64,7 @@ const parseOxlintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] =>
     }[]
   }
   try {
-    parsed = JSON.parse(stdout) as typeof parsed
+    parsed = readRequiredJson<typeof parsed>(stdout)
   } catch {
     return []
   }
@@ -116,7 +117,7 @@ const eslintDiagnosticsForFile = (fileEntry: EslintFileEntry): Diagnostic[] => {
 const parseEslintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] => {
   let parsed: EslintFileEntry[]
   try {
-    parsed = JSON.parse(stdout) as typeof parsed
+    parsed = readRequiredJson<typeof parsed>(stdout)
   } catch {
     return []
   }

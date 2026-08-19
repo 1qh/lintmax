@@ -14,8 +14,11 @@ interface Node {
   type: string
   value?: Node
 }
-const asNode = (v: unknown): Node | null =>
-  v && typeof v === 'object' && typeof (v as Node).type === 'string' ? (v as Node) : null
+const asNode = (v: unknown): Node | null => {
+  if (!v || typeof v !== 'object' || !('type' in v) || typeof v.type !== 'string') return null
+  /** biome-ignore lint/nursery/noUnsafeTypeAssertion: external parser AST node is narrowed only at this boundary */
+  return v as Node
+}
 const strName = (n: Node | undefined): string => (typeof n?.name === 'string' ? n.name : '')
 const lineAt = (sourceText: string, offset: number): number => {
   let line = 1
@@ -88,8 +91,7 @@ const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violat
     }
     const node = asNode(raw)
     if (!node) {
-      if (raw && typeof raw === 'object')
-        for (const key of Object.keys(raw)) visit((raw as Record<string, unknown>)[key], parent, grand)
+      if (raw && typeof raw === 'object') for (const child of Object.values(raw)) visit(child, parent, grand)
       return
     }
     collectClassNameAttrViolation(node, sourceText, violations)

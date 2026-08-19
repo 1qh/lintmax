@@ -84,9 +84,12 @@ const normalizeRule = (rule: string): string[] => {
 }
 const loadOxlintOffRules = async (): Promise<Set<string>> => {
   const configPath = joinPath(process.cwd(), cacheDir, '.oxlintrc.json')
-  const config = await readRequiredJson<{
-    rules?: Record<string, unknown>
-  }>({ path: configPath }).catch(() => null)
+  let config: null | { rules?: Record<string, unknown> }
+  try {
+    config = readRequiredJson<{ rules?: Record<string, unknown> }>(await file(configPath).text())
+  } catch {
+    config = null
+  }
   if (!config) return new Set()
   const off = new Set<string>()
   for (const [rule, val] of Object.entries(config.rules ?? {})) {

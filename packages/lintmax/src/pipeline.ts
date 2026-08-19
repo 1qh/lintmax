@@ -26,7 +26,7 @@ import {
   lintmaxRoot,
   pathExists,
   PRETTIER_MD_ARGS,
-  readJson,
+  readRequiredJson,
   resolveBin,
   run,
   runCapture
@@ -482,7 +482,7 @@ const readOxlintIgnorePatterns = async ({ dir }: { dir: string }): Promise<strin
   const generated = file(joinPath(dir, '.oxlintrc.json'))
   const exists = await generated.exists()
   if (!exists) return [...DEFAULT_SHARED_IGNORE_PATTERNS]
-  const parsed = (await generated.json()) as { ignorePatterns?: unknown }
+  const parsed = readRequiredJson<{ ignorePatterns?: unknown }>(await generated.text())
   const patterns = parsed.ignorePatterns
   if (!Array.isArray(patterns)) return [...DEFAULT_SHARED_IGNORE_PATTERNS]
   return patterns.filter((x): x is string => typeof x === 'string')
@@ -640,10 +640,10 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   const runtimePath = joinPath(dir, 'lintmax.json')
   const env = buildLintEnv()
   await synchronizeConfig({ configPath, env })
-  const runtime = (await readJson({ path: runtimePath })) as {
+  const runtime = readRequiredJson<{
     comments?: boolean
     compact?: boolean
-  }
+  }>(await file(runtimePath).text())
   const failures: FailureRecord[] = []
   const { clearFailures, runCompactContinue, runSteps, runStepsSilent, throwIfFailures } = createStepExecutor({
     env,

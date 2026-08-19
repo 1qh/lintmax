@@ -112,8 +112,9 @@ const collectKnownEslintRuleNames = ({
   return knownRuleNames
 }
 const getSharedAppendConfig = ({ config }: { config: Linter.Config }): null | SharedOverrideAppendConfig => {
-  const raw = config as Record<PropertyKey, unknown>
-  return raw[sharedOverrideMarker] === true ? (config as SharedOverrideAppendConfig) : null
+  if (Reflect.get(config, sharedOverrideMarker) !== true) return null
+  /** biome-ignore lint/nursery/noUnsafeTypeAssertion: internal marker identifies this external config as the shared append shape */
+  return config as SharedOverrideAppendConfig
 }
 const resolveTailwindEntry = async ({
   root,
@@ -148,12 +149,15 @@ const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
   entryPoint ? eslintPluginBetterTailwindcss.configs['recommended-error'].rules : {}
 /** regexp's `flat/recommended` is the curated set: it keeps every correctness rule (no-super-linear-backtracking — the real ReDoS — plus no-misleading-capturing-group, no-dupe-disjunctions, no-unused-capturing-group) and drops the pure-style ones `flat/all` adds (prefer-named-capture-group, require-unicode-sets-regexp, sort-character-class-elements) and the author-excluded advisory no-super-linear-move. Its rules ship at warn, and a warn enforces nothing because the gate's `warnToError` covers consumer overrides, not a config reached through `extends`, so they are lifted to error here. */
 const regexpRecommendedAtError = (): Linter.Config => {
+  /** biome-ignore lint/nursery/noUnsafeTypeAssertion: external regexp plugin config is structurally compatible with ESLint's config boundary */
   const rec = regexpConfigs['flat/recommended'] as Linter.Config
   return { ...rec, rules: warnToError(rec.rules ?? {}) }
 }
 /** package.json is a file type the gate would otherwise never lint. The plugin ships its own `files` glob and JSON parser, so it stands alone rather than riding the TypeScript block. Its `recommended` + `stylistic` are the curated set; the `require-*` family stays out because those demand OPT-IN metadata (`bin`, `browser`, `cpu`, `gypfile`, `libc`, `man`, `os`) that no ordinary package declares. `require-type` is disabled with cause: its autofix stamps `"type": "commonjs"` onto any manifest missing `type`, which silently BREAKS an ESM package (a Next/MDX app relying on extension-based resolution) — a rule that guesses a load-bearing field and defaults it wrong is harm, not strictness. */
 const packageJsonConfig = (): Linter.Config => {
+  /** biome-ignore lint/nursery/noUnsafeTypeAssertion: external package-json plugin config is structurally compatible with ESLint's config boundary */
   const recommended = packageJsonConfigs.recommended as Linter.Config
+  /** biome-ignore lint/nursery/noUnsafeTypeAssertion: external package-json plugin config is structurally compatible with ESLint's config boundary */
   const stylistic = packageJsonConfigs.stylistic as Linter.Config
   return {
     ...recommended,

@@ -1,6 +1,6 @@
 import { $, file, write } from 'bun'
 import { unlink } from 'node:fs/promises'
-import { cwd, resolveBin } from './core.js'
+import { cwd, readRequiredJson, resolveBin } from './core.js'
 import { isRecord } from './normalize.js'
 import { fromFileUrl, joinPath } from './path.js'
 
@@ -11,9 +11,9 @@ interface RuleEntry {
 }
 const extractBiomeRules = async (): Promise<RuleEntry[]> => {
   const pkgPath = fromFileUrl(import.meta.resolve('@biomejs/biome/configuration_schema.json'))
-  const schema = JSON.parse(await file(pkgPath).text()) as {
+  const schema = readRequiredJson<{
     $defs?: Record<string, { properties?: Record<string, unknown> }>
-  }
+  }>(await file(pkgPath).text())
   const defs = schema.$defs ?? {}
   const categories = ['a11y', 'complexity', 'correctness', 'nursery', 'performance', 'security', 'style', 'suspicious']
   const results: RuleEntry[] = []
@@ -42,7 +42,7 @@ const extractOxlintRules = async (): Promise<RuleEntry[]> => {
   if (!isRecord(rules)) throw new Error('oxlint --print-config returned no rules map')
   const results: RuleEntry[] = []
   for (const [rule, value] of Object.entries(rules)) {
-    const severity: unknown = Array.isArray(value) ? (value as unknown[])[0] : value
+    const severity: unknown = Array.isArray(value) ? value[0] : value
     if (severity === 'deny') results.push({ fixable: false, linter: 'oxlint', rule })
   }
   if (results.length === 0)
@@ -60,7 +60,7 @@ const extractEslintRules = async (): Promise<RuleEntry[]> => {
     throw new Error(`eslint --print-config failed, so its rule set is unknown: ${result.stderr.toString().trim()}`)
   let parsed: { rules?: Record<string, unknown> }
   try {
-    parsed = JSON.parse(result.stdout.toString()) as typeof parsed
+    parsed = readRequiredJson<typeof parsed>(result.stdout.toString())
   } catch (error) {
     throw new Error(`eslint --print-config returned unreadable JSON: ${error instanceof Error ? error.message : ''}`, {
       cause: error
@@ -69,7 +69,7 @@ const extractEslintRules = async (): Promise<RuleEntry[]> => {
   const allRules = parsed.rules ?? {}
   const results: RuleEntry[] = []
   for (const [rule, config] of Object.entries(allRules)) {
-    const level = Array.isArray(config) ? (config as unknown[])[0] : config
+    const level: unknown = Array.isArray(config) ? config[0] : config
     if (level !== 0 && level !== 'off')
       results.push({
         fixable: false,

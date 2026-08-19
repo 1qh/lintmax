@@ -1,9 +1,10 @@
 import { file, Glob, write } from 'bun'
-import { afterAll, describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, it } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
+import { readRequiredJson } from './core.js'
 import { sync } from './index.js'
 
 const tmp = await mkdtemp(join(tmpdir(), 'config-gen-test-'))
@@ -20,78 +21,74 @@ const setupProject = async () => {
   }
 }
 describe('biome config generation', () => {
-  test('generates biome.json with experimentalScannerIgnores', async () => {
+  it('generates biome.json with experimentalScannerIgnores', async () => {
     await setupProject()
     const biomePath = join(cacheDir, 'biome.json')
     expect(await file(biomePath).exists()).toBe(true)
-    const config = (await file(biomePath).json()) as {
+    const config = readRequiredJson<{
       files?: { experimentalScannerIgnores?: string[]; includes?: string[] }
-    }
+    }>(await file(biomePath).text())
     expect(config.files?.experimentalScannerIgnores).toBeDefined()
     expect(Array.isArray(config.files?.experimentalScannerIgnores)).toBe(true)
   })
-  test('experimentalScannerIgnores contains node_modules', async () => {
-    const config = (await file(join(cacheDir, 'biome.json')).json()) as {
-      files?: { experimentalScannerIgnores?: string[] }
-    }
+  it('experimentalScannerIgnores contains node_modules', async () => {
+    const config = readRequiredJson<{ files?: { experimentalScannerIgnores?: string[] } }>(
+      await file(join(cacheDir, 'biome.json')).text()
+    )
     const scannerIgnores = config.files?.experimentalScannerIgnores ?? []
     expect(scannerIgnores.some(p => p.includes('node_modules'))).toBe(true)
   })
-  test('experimentalScannerIgnores contains .next', async () => {
-    const config = (await file(join(cacheDir, 'biome.json')).json()) as {
-      files?: { experimentalScannerIgnores?: string[] }
-    }
+  it('experimentalScannerIgnores contains .next', async () => {
+    const config = readRequiredJson<{ files?: { experimentalScannerIgnores?: string[] } }>(
+      await file(join(cacheDir, 'biome.json')).text()
+    )
     const scannerIgnores = config.files?.experimentalScannerIgnores ?? []
     expect(scannerIgnores.some(p => p.includes('.next'))).toBe(true)
   })
-  test('includes has !! negation patterns', async () => {
-    const config = (await file(join(cacheDir, 'biome.json')).json()) as {
-      files?: { includes?: string[] }
-    }
+  it('includes has !! negation patterns', async () => {
+    const config = readRequiredJson<{ files?: { includes?: string[] } }>(await file(join(cacheDir, 'biome.json')).text())
     const includes = config.files?.includes ?? []
     expect(includes.some(p => p.startsWith('!!'))).toBe(true)
   })
-  test('no ignore field in files (biome 2.x)', async () => {
-    const config = (await file(join(cacheDir, 'biome.json')).json()) as {
-      files?: Record<string, unknown>
-    }
+  it('no ignore field in files (biome 2.x)', async () => {
+    const config = readRequiredJson<{ files?: Record<string, unknown> }>(await file(join(cacheDir, 'biome.json')).text())
     expect(config.files).not.toHaveProperty('ignore')
   })
 })
 describe('Glob-based isIgnored matching', () => {
   const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
   const isIgnored = (p: string): boolean => ignoreGlobs.some(g => g.match(p))
-  test('matches readonly/ui/src/components/foo.tsx', () => {
+  it('matches readonly/ui/src/components/foo.tsx', () => {
     expect(isIgnored('readonly/ui/src/components/foo.tsx')).toBe(true)
   })
-  test('matches readonly/ui/src/styles/globals.css', () => {
+  it('matches readonly/ui/src/styles/globals.css', () => {
     expect(isIgnored('readonly/ui/src/styles/globals.css')).toBe(true)
   })
-  test('matches .next/server/app/page.js', () => {
+  it('matches .next/server/app/page.js', () => {
     expect(isIgnored('.next/server/app/page.js')).toBe(true)
   })
-  test('matches web/stdb/blog/.next/cache/x.js', () => {
+  it('matches web/stdb/blog/.next/cache/x.js', () => {
     expect(isIgnored('web/stdb/blog/.next/cache/x.js')).toBe(true)
   })
-  test('matches dist/index.js', () => {
+  it('matches dist/index.js', () => {
     expect(isIgnored('dist/index.js')).toBe(true)
   })
-  test('matches _generated/api.ts', () => {
+  it('matches _generated/api.ts', () => {
     expect(isIgnored('_generated/api.ts')).toBe(true)
   })
-  test('matches nested _generated', () => {
+  it('matches nested _generated', () => {
     expect(isIgnored('lib/spacetimedb/src/generated/index.ts')).toBe(true)
   })
-  test('matches module_bindings', () => {
+  it('matches module_bindings', () => {
     expect(isIgnored('backend/spacetimedb/module_bindings/index.ts')).toBe(true)
   })
-  test('does NOT match lib/shared/src/constants.ts', () => {
+  it('does NOT match lib/shared/src/constants.ts', () => {
     expect(isIgnored('lib/shared/src/constants.ts')).toBe(false)
   })
-  test('does NOT match web/stdb/blog/src/app/page.tsx', () => {
+  it('does NOT match web/stdb/blog/src/app/page.tsx', () => {
     expect(isIgnored('web/stdb/blog/src/app/page.tsx')).toBe(false)
   })
-  test('does NOT match src/index.ts', () => {
+  it('does NOT match src/index.ts', () => {
     expect(isIgnored('src/index.ts')).toBe(false)
   })
 })
