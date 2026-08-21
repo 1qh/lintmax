@@ -178,6 +178,7 @@ const OXLINT_CLI_ALLOW: readonly string[] = [
   'react/jsx-no-literals',
   'unicorn/prefer-export-from',
   'react/react-compiler',
+  'react/todo',
   'react/function-component-definition',
   'react/memo-dependencies',
   'react/preserve-manual-memoization',
