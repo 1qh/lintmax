@@ -120,8 +120,9 @@ const requireLintAnswer = ({
 }): string => {
   const json = extractJson(stdout)
   const refuse = (why: string): never => {
+    const said = [stderr.trim(), stdout.trim()].filter(part => part !== '').join(' | ')
     throw new Error(
-      `${label}: ${why} (exit ${exitCode}). Refusing rather than reading it as "nothing fired", which would report every directive unused. ${stderr.slice(0, 400)}`
+      `${label}: ${why} (exit ${exitCode}). Refusing rather than reading it as "nothing fired", which would report every directive unused. ${said.slice(0, 600)}`
     )
   }
   let parsed: { diagnostics?: unknown }
@@ -142,6 +143,10 @@ const firedOxlintByFile = async ({
   files: string[]
   oxlintBin: string
 }): Promise<Map<string, Set<string>>> => {
+  if (!(await file(configPath).exists()))
+    throw new Error(
+      `oxlint-unused: the generated config is absent at ${configPath}, so no rule can fire and every directive would read as unused. The stage that writes it did not run.`
+    )
   const result = await runCapture({
     args: [oxlintBin, '-c', configPath, '-f', 'json', ...files],
     command: 'bun',

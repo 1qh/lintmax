@@ -29,6 +29,17 @@ beforeAll(async () => {
 })
 afterAll(async () => rm(root, { force: true, recursive: true }))
 describe('removeUnusedSuppressions', () => {
+  test('refuses when the generated config is absent, naming the stage that did not run', async () => {
+    const bare = await mkdtemp(join(tmpdir(), 'unused-suppressions-noconfig-'))
+    await mkdir(join(bare, 'node_modules/.cache/lintmax'), { recursive: true })
+    const path = join(bare, 'ox-noconfig.ts')
+    await bunWrite(path, '/* oxlint-disable no-debugger */\ndebugger\nexport {}\n')
+    await expect(removeUnusedSuppressions({ filePaths: [path], root: bare })).rejects.toThrow(
+      /generated config is absent/u
+    )
+    expect(await bunFile(path).text()).toContain('oxlint-disable no-debugger')
+    await rm(bare, { force: true, recursive: true })
+  })
   test('refuses when the lint cannot answer, rather than reporting every directive unused', async () => {
     const broken = await mkdtemp(join(tmpdir(), 'unused-suppressions-broken-'))
     const brokenCache = join(broken, 'node_modules/.cache/lintmax')
