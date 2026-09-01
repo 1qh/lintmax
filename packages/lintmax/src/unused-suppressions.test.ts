@@ -29,6 +29,17 @@ beforeAll(async () => {
 })
 afterAll(async () => rm(root, { force: true, recursive: true }))
 describe('removeUnusedSuppressions', () => {
+  test('refuses when the lint cannot answer, rather than reporting every directive unused', async () => {
+    const broken = await mkdtemp(join(tmpdir(), 'unused-suppressions-broken-'))
+    const brokenCache = join(broken, 'node_modules/.cache/lintmax')
+    await mkdir(brokenCache, { recursive: true })
+    await bunWrite(join(brokenCache, '.oxlintrc.json'), '{ this is not json')
+    const path = join(broken, 'ox-broken.ts')
+    await bunWrite(path, '/* oxlint-disable no-debugger */\ndebugger\nexport {}\n')
+    await expect(removeUnusedSuppressions({ filePaths: [path], root: broken })).rejects.toThrow(/Refusing/u)
+    expect(await bunFile(path).text()).toContain('oxlint-disable no-debugger')
+    await rm(broken, { force: true, recursive: true })
+  })
   test('removes unused single-rule oxlint-disable', async () => {
     const path = await writeFile('ox-single.ts', '/* oxlint-disable no-debugger */\nconst x = 1\nexport { x }\n')
     const result = await removeUnusedSuppressions({ filePaths: [path], root })

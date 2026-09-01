@@ -4,7 +4,7 @@
 import { file, write } from 'bun'
 import { parseBiomeDiagnostics, parseOxlintDiagnostics } from './aggregate.js'
 import { normalizeRule } from './clean-ignores.js'
-import { cacheDir, cwd, resolveBin, runCapture } from './core.js'
+import { cacheDir, cwd, readRequiredJson, resolveBin, runCapture } from './core.js'
 import { joinPath } from './path.js'
 
 interface RemoveResult {
@@ -100,6 +100,39 @@ const rebuildBiomeLine = ({ line, rules }: { line: string; rules: string[] }): s
   const indent = indentMatch?.[0] ?? ''
   return `${indent}/** biome-ignore-all ${rules.join(', ')}: ${reason} */`
 }
+/**
+ * A lint run that could not ANSWER must refuse, never resolve to an empty fired set. An empty map reads as
+ * `no rule fired anywhere`, which marks EVERY directive in the tree unused — MEASURED on one CI lane, 35 of 35
+ * directives reported while each one was genuinely needed. A clean run is not this shape: both linters emit
+ * `{"diagnostics": []}` and exit 0 when they find nothing, so requiring a parsed diagnostics array refuses a
+ * crash without ever refusing a clean tree.
+ */
+const requireLintAnswer = ({
+  exitCode,
+  label,
+  stderr,
+  stdout
+}: {
+  exitCode: number
+  label: string
+  stderr: string
+  stdout: string
+}): string => {
+  const json = extractJson(stdout)
+  const refuse = (why: string): never => {
+    throw new Error(
+      `${label}: ${why} (exit ${exitCode}). Refusing rather than reading it as "nothing fired", which would report every directive unused. ${stderr.slice(0, 400)}`
+    )
+  }
+  let parsed: { diagnostics?: unknown }
+  try {
+    parsed = readRequiredJson<typeof parsed>(json)
+  } catch {
+    refuse('produced no parseable JSON')
+  }
+  if (!Array.isArray(parsed.diagnostics)) refuse('returned JSON carrying no diagnostics array')
+  return json
+}
 const firedOxlintByFile = async ({
   configPath,
   files,
@@ -115,7 +148,14 @@ const firedOxlintByFile = async ({
     env: buildEnv(),
     label: 'oxlint-unused'
   })
-  const diagnostics = parseOxlintDiagnostics({ stdout: extractJson(result.stdout) })
+  const diagnostics = parseOxlintDiagnostics({
+    stdout: requireLintAnswer({
+      exitCode: result.exitCode,
+      label: 'oxlint-unused',
+      stderr: result.stderr,
+      stdout: result.stdout
+    })
+  })
   const byFile = new Map<string, Set<string>>()
   for (const d of diagnostics) {
     const key = absFile(d.file)
@@ -251,7 +291,14 @@ const firedBiomeByFile = async ({
     env: buildEnv(),
     label: 'biome-unused'
   })
-  const diagnostics = parseBiomeDiagnostics({ stdout: extractJson(result.stdout) })
+  const diagnostics = parseBiomeDiagnostics({
+    stdout: requireLintAnswer({
+      exitCode: result.exitCode,
+      label: 'biome-unused',
+      stderr: result.stderr,
+      stdout: result.stdout
+    })
+  })
   const byFile = new Map<string, Set<string>>()
   for (const d of diagnostics) {
     const key = absFile(d.file)

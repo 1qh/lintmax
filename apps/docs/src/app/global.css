@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/nursery/noUndeclaredCustomProperties: every --color-fd-* is declared by the vendored fumadocs-ui preset this file imports, which the rule cannot follow across the import */
 @import 'tailwindcss';
 @import 'shadcn/tailwind.css';
 @import 'fumadocs-ui/css/neutral.css';
