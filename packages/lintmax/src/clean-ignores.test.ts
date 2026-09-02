@@ -5,7 +5,15 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { cleanFileIgnores, isRuleActive, normalizeRule, splitDirective, splitRules } from './clean-ignores.js'
+import {
+  cleanFileIgnores,
+  isRuleActive,
+  loadOxlintOffRules,
+  normalizeRule,
+  splitDirective,
+  splitRules
+} from './clean-ignores.js'
+import { cacheDir } from './core.js'
 import { parseRules } from './ignores.js'
 
 const tmp = await mkdtemp(join(tmpdir(), 'clean-ignores-test-'))
@@ -323,5 +331,35 @@ describe('parseRules (ignores.ts)', () => {
   })
   test('returns empty for no match', () => {
     expect(parseRules('const x = 1', eslintRe)).toEqual([])
+  })
+})
+describe('loadOxlintOffRules', () => {
+  const inDir = async <T>(dir: string, fn: () => Promise<T>): Promise<T> => {
+    const before = process.cwd()
+    process.chdir(dir)
+    try {
+      return await fn()
+    } finally {
+      process.chdir(before)
+    }
+  }
+  test('refuses when the generated config is absent rather than reading it as "no rule is off"', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'off-absent-'))
+    expect(inDir(dir, loadOxlintOffRules)).rejects.toThrow(/generated config is absent/u)
+  })
+  test('refuses when the generated config carries no parseable JSON', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'off-garbage-'))
+    await write(join(dir, cacheDir, '.oxlintrc.json'), 'not json at all')
+    expect(inDir(dir, loadOxlintOffRules)).rejects.toThrow(/no parseable JSON/u)
+  })
+  test('reads an off rule from a valid config, so the refusal is not blanket', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'off-valid-'))
+    await write(
+      join(dir, cacheDir, '.oxlintrc.json'),
+      JSON.stringify({ rules: { 'no-console': 'off', 'no-debugger': 'error' } })
+    )
+    const off = await inDir(dir, loadOxlintOffRules)
+    expect(off.has('no-console')).toBe(true)
+    expect(off.has('no-debugger')).toBe(false)
   })
 })

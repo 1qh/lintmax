@@ -84,13 +84,19 @@ const normalizeRule = (rule: string): string[] => {
 }
 const loadOxlintOffRules = async (): Promise<Set<string>> => {
   const configPath = joinPath(process.cwd(), cacheDir, '.oxlintrc.json')
-  let config: null | { rules?: Record<string, unknown> }
+  if (!(await file(configPath).exists()))
+    throw new Error(
+      `clean-ignores: the generated config is absent at ${configPath}, so no rule reads as off and every directive for an off rule would be kept. The stage that writes it did not run.`
+    )
+  let config: { rules?: Record<string, unknown> }
   try {
     config = readRequiredJson<{ rules?: Record<string, unknown> }>(await file(configPath).text())
-  } catch {
-    config = null
+  } catch (error) {
+    throw new Error(
+      `clean-ignores: the generated config at ${configPath} carries no parseable JSON. Refusing rather than reading it as "no rule is off", which would silently keep every directive.`,
+      { cause: error }
+    )
   }
-  if (!config) return new Set()
   const off = new Set<string>()
   for (const [rule, val] of Object.entries(config.rules ?? {})) {
     const severity = Array.isArray(val) ? String(val[0]) : val
@@ -218,4 +224,13 @@ const cleanIgnores = async (filePaths: string[]): Promise<CleanResult> => {
   }
   return { cleaned, files }
 }
-export { buildActiveRuleSet, cleanFileIgnores, cleanIgnores, isRuleActive, normalizeRule, splitDirective, splitRules }
+export {
+  buildActiveRuleSet,
+  cleanFileIgnores,
+  cleanIgnores,
+  isRuleActive,
+  loadOxlintOffRules,
+  normalizeRule,
+  splitDirective,
+  splitRules
+}

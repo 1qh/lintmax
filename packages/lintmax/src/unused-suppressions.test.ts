@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { removeUnusedSuppressions } from './unused-suppressions.js'
+import { OXLINT_CLI_ALLOW } from './constants.js'
+import { oxlintUnusedArgs, removeUnusedSuppressions } from './unused-suppressions.js'
 
 const root = await mkdtemp(join(tmpdir(), 'unused-suppressions-test-'))
 const cacheConfigDir = join(root, 'node_modules/.cache/lintmax')
@@ -104,5 +105,24 @@ describe('removeUnusedSuppressions', () => {
     const result = await removeUnusedSuppressions({ filePaths: [path], root })
     expect(result.removed).toBeGreaterThan(0)
     expect(await readFile(path)).not.toContain('biome-ignore-all')
+  })
+})
+describe('oxlintUnusedArgs', () => {
+  test('carries every CLI-allowed rule, so the stage judges the rule set the gate enforces', () => {
+    const args = oxlintUnusedArgs({ configPath: join(root, '.oxlintrc.json'), files: ['a.ts'], oxlintBin: 'oxlint' })
+    expect(OXLINT_CLI_ALLOW.length).toBeGreaterThan(0)
+    for (const rule of OXLINT_CLI_ALLOW) {
+      const at = args.indexOf(rule)
+      expect(at).toBeGreaterThan(-1)
+      expect(args[at - 1]).toBe('--allow')
+    }
+  })
+  test('puts the files last so a rule name is never read as a path', () => {
+    const args = oxlintUnusedArgs({
+      configPath: join(root, '.oxlintrc.json'),
+      files: ['a.ts', 'b.ts'],
+      oxlintBin: 'oxlint'
+    })
+    expect(args.slice(-2)).toEqual(['a.ts', 'b.ts'])
   })
 })

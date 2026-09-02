@@ -4,6 +4,7 @@
 import { file, write } from 'bun'
 import { parseBiomeDiagnostics, parseOxlintDiagnostics } from './aggregate.js'
 import { normalizeRule } from './clean-ignores.js'
+import { OXLINT_CLI_ALLOW } from './constants.js'
 import { cacheDir, cwd, readRequiredJson, resolveBin, runCapture } from './core.js'
 import { joinPath } from './path.js'
 
@@ -107,6 +108,23 @@ const rebuildBiomeLine = ({ line, rules }: { line: string; rules: string[] }): s
  * `{"diagnostics": []}` and exit 0 when they find nothing, so requiring a parsed diagnostics array refuses a
  * crash without ever refusing a clean tree.
  */
+const oxlintUnusedArgs = ({
+  configPath,
+  files,
+  oxlintBin
+}: {
+  configPath: string
+  files: readonly string[]
+  oxlintBin: string
+}): string[] => [
+  oxlintBin,
+  '-c',
+  configPath,
+  '-f',
+  'json',
+  ...OXLINT_CLI_ALLOW.flatMap(rule => ['--allow', rule]),
+  ...files
+]
 const requireLintAnswer = ({
   exitCode,
   label,
@@ -120,9 +138,13 @@ const requireLintAnswer = ({
 }): string => {
   const json = extractJson(stdout)
   const refuse = (why: string): never => {
-    const said = [stderr.trim(), stdout.trim()].filter(part => part !== '').join(' | ')
+    const out = stdout.trim()
+    const shape = `[${String(out.length)} bytes]`
+    const head = out.slice(0, 400)
+    const tail = out.length > 400 ? ` … TAIL ${out.slice(-200)}` : ''
+    const said = [stderr.trim(), `${shape} ${head}${tail}`].filter(part => part !== '').join(' | ')
     throw new Error(
-      `${label}: ${why} (exit ${exitCode}). Refusing rather than reading it as "nothing fired", which would report every directive unused. ${said.slice(0, 600)}`
+      `${label}: ${why} (exit ${exitCode}). Refusing rather than reading it as "nothing fired", which would report every directive unused. ${said}`
     )
   }
   let parsed: { diagnostics?: unknown }
@@ -148,7 +170,7 @@ const firedOxlintByFile = async ({
       `oxlint-unused: the generated config is absent at ${configPath}, so no rule can fire and every directive would read as unused. The stage that writes it did not run.`
     )
   const result = await runCapture({
-    args: [oxlintBin, '-c', configPath, '-f', 'json', ...files],
+    args: oxlintUnusedArgs({ configPath, files, oxlintBin }),
     command: 'bun',
     env: buildEnv(),
     label: 'oxlint-unused'
@@ -447,4 +469,4 @@ const removeUnusedSuppressions = async ({
   return { diagnostics, files: [...changedFiles], removed }
 }
 export type { RemoveResult, UnusedDirective }
-export { removeUnusedSuppressions }
+export { oxlintUnusedArgs, removeUnusedSuppressions }
