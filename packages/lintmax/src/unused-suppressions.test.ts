@@ -29,6 +29,13 @@ beforeAll(async () => {
 })
 afterAll(async () => rm(root, { force: true, recursive: true }))
 describe('removeUnusedSuppressions', () => {
+  test('judges every file when several are passed, keeping a used directive and removing an unused one', async () => {
+    const used = await writeFile('multi-used.ts', '/* oxlint-disable no-debugger */\ndebugger\nexport {}\n')
+    const unused = await writeFile('multi-unused.ts', '/* oxlint-disable no-debugger */\nconst x = 1\nexport { x }\n')
+    await removeUnusedSuppressions({ filePaths: [used, unused], root })
+    expect(await readFile(used)).toContain('oxlint-disable no-debugger')
+    expect(await readFile(unused)).not.toContain('oxlint-disable')
+  })
   test('refuses when the generated config is absent, naming the stage that did not run', async () => {
     const bare = await mkdtemp(join(tmpdir(), 'unused-suppressions-noconfig-'))
     await mkdir(join(bare, 'node_modules/.cache/lintmax'), { recursive: true })
