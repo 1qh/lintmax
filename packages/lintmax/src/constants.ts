@@ -26,6 +26,7 @@ const BIOME_RULES_OFF: readonly string[] = [
   'noJsxPropsBind',
   'noMagicNumbers',
   'noNestedTernary',
+  'noBunModules',
   'noNodejsModules',
   'noProcessGlobal',
   'noReactNativeRawText',
