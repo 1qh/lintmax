@@ -15,6 +15,7 @@ const tarball = output
 if (pack.exitCode !== 0 || !tarball) throw new Error(`pack failed: ${decoder.decode(pack.stderr)}`)
 const dir = await mkdtemp(join(tmpdir(), 'lintmax-smoke-'))
 const cleanup = async () => rm(dir, { force: true, recursive: true })
+let passed = false
 const has = async (f: string) => file(join(dir, f)).exists()
 const readJson = async <T>(f: string): Promise<T> => readRequiredJson<T>(await file(join(dir, f)).text())
 const lintmaxCli = 'node_modules/lintmax/dist/cli.mjs'
@@ -56,6 +57,11 @@ try {
   const pkgPath = join(dir, 'package.json')
   const pkg = readRequiredJson<Record<string, unknown>>(await file(pkgPath).text())
   pkg.description = 'lintmax smoke fixture'
+  const ownPkg = readRequiredJson<{ dependencies?: Record<string, string> }>(await file(join(root, 'package.json')).text())
+  const ownTs = ownPkg.dependencies?.typescript
+  if (!ownTs) throw new Error('this package declares no typescript dependency to pin the fixture to')
+  const peers = pkg.peerDependencies
+  pkg.peerDependencies = { ...(typeof peers === 'object' && peers !== null ? peers : {}), typescript: ownTs }
   await write(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
   await write(join(dir, 'index.ts'), "const ok = 'lintmax-smoke'\nexport { ok }\n")
   await $`bun add ${join(root, tarball)}`.cwd(dir).quiet()
@@ -300,7 +306,9 @@ try {
   await rm(join(dir, 'eslint.config.ts'), { force: true })
   await rm(join(dir, 'lintmax.config.ts'), { force: true })
   process.stdout.write('smoke test passed\n')
+  passed = true
 } finally {
-  await cleanup()
+  if (passed) await cleanup()
+  else process.stderr.write(`smoke failed — the tree it installed is kept for diagnosis at ${dir}\n`)
   await rm(join(root, tarball), { force: true })
 }
