@@ -210,6 +210,7 @@ const createCheckSteps = ({
     })
   return steps
 }
+const DESTRUCTIVE_FIX_OVERRIDES = ['--rule', '{"@eslint-react/no-missing-context-display-name":"off"}']
 const createFixSteps = ({
   biomeBin,
   dir,
@@ -263,7 +264,7 @@ const createFixSteps = ({
       silent: true
     },
     {
-      args: [eslintBin, ...eslintArgs, '--fix'],
+      args: [eslintBin, ...eslintArgs, ...DESTRUCTIVE_FIX_OVERRIDES, '--fix'],
       label: 'eslint',
       silent: true
     },

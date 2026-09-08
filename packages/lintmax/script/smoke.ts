@@ -69,6 +69,27 @@ try {
   for (const { exists, f } of checks) if (!exists) throw new Error(`missing ${f} in installed package`)
   await run({ cmd: ['bun', lintmaxCli, 'fix'], label: 'lintmax fix' })
   await runCheck({ label: 'lintmax check' })
+  const ctxFile = join(dir, 'ctx.tsx')
+  const ctxSource = [
+    "import { createContext } from 'react'",
+    '',
+    'const TabsCtx = createContext<string | undefined>(undefined)',
+    '',
+    'const useTabs = () => TabsCtx',
+    '',
+    'export { TabsCtx, useTabs }',
+    ''
+  ].join('\n')
+  await write(ctxFile, ctxSource)
+  await runExpectFail({
+    cmd: ['bun', lintmaxCli, 'fix'],
+    expect: 'no-missing-context-display-name',
+    label: 'a destructive upstream fixer is denied its fix and keeps its report'
+  })
+  const ctxAfter = await file(ctxFile).text()
+  if (ctxAfter.includes('const\n') || !ctxAfter.includes('const useTabs'))
+    throw new Error(`the display-name fixer corrupted the file:\n${ctxAfter}`)
+  await rm(ctxFile, { force: true })
   await writeConfig({
     content: "import { defineConfig } from 'lintmax'\n\nexport default defineConfig({ ignores: ['generated/**'] })\n"
   })
