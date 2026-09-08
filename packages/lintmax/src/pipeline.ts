@@ -74,11 +74,20 @@ const createStepExecutor = ({
       throw error
     }
   }
-  const runCompactContinue = async ({ human = false, mode }: { human?: boolean; mode: 'check' | 'fix' }) => {
+  const runCompactContinue = async ({
+    human = false,
+    isIgnored,
+    mode
+  }: {
+    human?: boolean
+    isIgnored?: (filePath: string) => boolean
+    mode: 'check' | 'fix'
+  }) => {
     try {
       await runCompact({
         env,
         human,
+        isIgnored,
         mode,
         root
       })
@@ -650,16 +659,18 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     failures,
     root: cwd
   })
-  if (command === 'fix' && runtime.compact === true) await runCompactContinue({ human, mode: 'fix' })
+  const oxlintIgnorePatternsEarly = await readOxlintIgnorePatterns({ dir })
+  const ignoreGlobsEarly = oxlintIgnorePatternsEarly.map(p => new Glob(p))
+  const isIgnored = (filePath: string): boolean => ignoreGlobsEarly.some(g => g.match(filePath))
+  if (command === 'fix' && runtime.compact === true) await runCompactContinue({ human, isIgnored, mode: 'fix' })
   const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs')]
   const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await resolveAllBins()
   const extraBins: ExtraBins = { dprint: dprintBin, tombi: tombiBin }
   const hasFlowmark = (await $`which flowmark`.env(env).quiet().nothrow()).exitCode === 0
   const gitWorkTree = await isGitWorkTree({ env, root: cwd })
-  const allGitFiles = gitWorkTree ? await listCompactFiles({ env, root: cwd }) : []
-  const oxlintIgnorePatterns = await readOxlintIgnorePatterns({ dir })
-  const ignoreGlobs = oxlintIgnorePatterns.map(p => new Glob(p))
-  const isIgnored = (filePath: string): boolean => ignoreGlobs.some(g => g.match(filePath))
+  const listedGitFiles = gitWorkTree ? await listCompactFiles({ env, root: cwd }) : []
+  const allGitFiles = listedGitFiles.filter(one => !isIgnored(one))
+  const oxlintIgnorePatterns = oxlintIgnorePatternsEarly
   const prettierMarkdownTargets = await createPrettierMarkdownTargets({
     gitFiles: allGitFiles,
     gitWorkTree,

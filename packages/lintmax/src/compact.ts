@@ -79,15 +79,18 @@ const listCompactFiles = async ({
 const runCompact = async ({
   env,
   human = false,
+  isIgnored,
   mode,
   root
 }: {
   env: Record<string, string | undefined>
   human?: boolean
+  isIgnored?: (filePath: string) => boolean
   mode: 'check' | 'fix'
   root: string
 }) => {
-  const files = await listCompactFiles({ env, root })
+  const listed = await listCompactFiles({ env, root })
+  const files = isIgnored === undefined ? listed : listed.filter(one => !isIgnored(one))
   const results = await Promise.all(
     files.map(async relativePath => {
       if (!isCompactCandidate({ relativePath })) return { changed: false, relativePath, scanned: false }
