@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readRequiredJson } from '../src/core.js'
-
 const decoder = new TextDecoder()
 const root = join(import.meta.dir, '..')
 const pack = await $`bun pm pack`.cwd(root).quiet().nothrow()

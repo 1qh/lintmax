@@ -1,7 +1,6 @@
 import { file, write } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import { parseAnyDialect } from './parse-source.js'
-
 const lineAt = (sourceText: string, offset: number): number => {
   let line = 1
   for (let i = 0; i < offset && i < sourceText.length; i += 1) if (sourceText[i] === '\n') line += 1

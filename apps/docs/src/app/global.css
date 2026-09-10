@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/nursery/useLayeredStyles: the imports here are framework entry points — tailwind, shadcn and the fumadocs preset — whose own cascade layering they define themselves, so wrapping them in a layer changes precedence against a vendored preset this file cannot see inside */
 /** biome-ignore-all lint/nursery/noUndeclaredCustomProperties: every --color-fd-* is declared by the vendored fumadocs-ui preset this file imports, which the rule cannot follow across the import */
 @import 'tailwindcss';
 @import 'shadcn/tailwind.css';

@@ -1,7 +1,6 @@
 import { file, Glob } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import { parseAnyDialect } from './parse-source.js'
-
 const CN_NAMES = new Set(['cn'])
 const BANNED_CALLEE_NAMES = new Set(['classnames', 'clsx', 'cx', 'twMerge'])
 interface Node {

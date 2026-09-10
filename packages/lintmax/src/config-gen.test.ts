@@ -6,7 +6,6 @@ import { join } from 'node:path'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { readRequiredJson } from './core.js'
 import { sync } from './index.js'
-
 const tmp = await mkdtemp(join(tmpdir(), 'config-gen-test-'))
 const cacheDir = join(tmp, 'node_modules', '.cache', 'lintmax')
 afterAll(async () => rm(tmp, { recursive: true }))

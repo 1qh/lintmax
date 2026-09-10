@@ -4,7 +4,6 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { findDangerousSuppressions } from './ignores.js'
-
 describe('findDangerousSuppressions', () => {
   let dir: string
   beforeEach(async () => {

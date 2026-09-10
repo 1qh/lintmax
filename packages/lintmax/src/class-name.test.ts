@@ -2,7 +2,6 @@
 /** biome-ignore-all lint/suspicious/noTemplateCurlyInString: test fixtures contain JSX template literal strings */
 import { describe, expect, test } from 'bun:test'
 import { findClassNameViolations } from './class-name.js'
-
 const check = (code: string) => findClassNameViolations({ sourceText: code })
 describe('unparseable source', () => {
   test('throws rather than silently reporting zero violations, so a check can never false-green on a file it could not read', () => {

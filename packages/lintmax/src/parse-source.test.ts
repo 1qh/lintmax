@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 import { parseAnyDialect } from './parse-source.js'
-
 const AMBIENT_DTS = 'const styles: Record<string, string>\nexport default styles\n'
 const JSX_TSX = 'const A = () => <div>{1}</div>\nexport default A\n'
 const GENERIC_ARROW_TS = 'const id = <T,>(v: T): T => v\nexport { id }\n'

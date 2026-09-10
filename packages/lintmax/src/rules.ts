@@ -3,7 +3,6 @@ import { unlink } from 'node:fs/promises'
 import { cwd, readRequiredJson, resolveBin } from './core.js'
 import { isRecord } from './normalize.js'
 import { fromFileUrl, joinPath } from './path.js'
-
 interface RuleEntry {
   fixable: boolean
   linter: string

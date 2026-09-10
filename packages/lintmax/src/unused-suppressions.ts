@@ -7,7 +7,6 @@ import { normalizeRule } from './clean-ignores.js'
 import { OXLINT_CLI_ALLOW } from './constants.js'
 import { cacheDir, cwd, readRequiredJson, resolveBin, runCapture } from './core.js'
 import { joinPath } from './path.js'
-
 interface RemoveResult {
   diagnostics: UnusedDirective[]
   files: string[]

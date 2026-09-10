@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { GroupedFile } from './aggregate.js'
 import { formatGrouped } from './format.js'
-
 describe('formatGrouped', () => {
   const oneFinding: GroupedFile[] = [
     { file: 'src/utils.ts', linters: [{ linter: 'biome', rules: [{ lines: [1312], rule: 'noChildrenProp' }] }] }

@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { OXLINT_CLI_ALLOW } from './constants.js'
 import { oxlintUnusedArgs, removeUnusedSuppressions } from './unused-suppressions.js'
-
 const root = await mkdtemp(join(tmpdir(), 'unused-suppressions-test-'))
 const cacheConfigDir = join(root, 'node_modules/.cache/lintmax')
 const writeFile = async (name: string, content: string): Promise<string> => {

@@ -3,7 +3,6 @@ import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CliExitError, decodeText } from './core.js'
 import { joinPath } from './path.js'
-
 const isSymlinkSafe = async (p: string): Promise<boolean> => {
   try {
     return (await lstat(p)).isSymbolicLink()

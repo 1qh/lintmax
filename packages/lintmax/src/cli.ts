@@ -2,7 +2,6 @@
 import { CliExitError, readVersion, usage } from './core.js'
 import { runGate } from './gate.js'
 import { extractAllRules, formatRulesCompact, formatRulesHuman } from './rules.js'
-
 const command = process.argv[2]
 const main = async () => {
   const version = await readVersion()

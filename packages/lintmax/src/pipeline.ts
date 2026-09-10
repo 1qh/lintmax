@@ -38,7 +38,6 @@ import { sync } from './index.js'
 import { checkJsxExtension } from './jsx-extension.js'
 import { dirnamePath, joinPath } from './path.js'
 import { removeUnusedSuppressions } from './unused-suppressions.js'
-
 const emitExtra = (result: { diagnostics: Diagnostic[]; notes: string[] }): Diagnostic[] => {
   for (const note of result.notes) process.stderr.write(`lintmax: ${note}\n`)
   return result.diagnostics

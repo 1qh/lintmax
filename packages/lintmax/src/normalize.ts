@@ -1,6 +1,5 @@
 import type { Linter } from 'eslint'
 import type { TailwindOption } from './lintmax-types.js'
-
 const normalizeIgnorePattern = ({ pattern }: { pattern: string }): string => {
   const trimmed = pattern.trim()
   if (trimmed.length === 0) return ''

@@ -2,7 +2,6 @@
 /** biome-ignore-all lint/nursery/useNamedCaptureGroup: not needed */
 import { $, Glob } from 'bun'
 import { DEFAULT_SHARED_IGNORE_PATTERNS, ESLINT_TEST_FILE_PATTERNS } from './constants.js'
-
 const eslintDisableRe = /eslint-disable(?:-next-line)?\s+([^\n]*)/gv
 const oxlintDisableRe = /oxlint-disable(?:-next-line)?\s+([^\n]*)/gv
 const biomeIgnoreRe = /biome-ignore(?:-all)?\s+([\w/]+)/gu

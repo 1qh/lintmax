@@ -15,7 +15,6 @@ import {
 } from './clean-ignores.js'
 import { cacheDir } from './core.js'
 import { parseRules } from './ignores.js'
-
 const tmp = await mkdtemp(join(tmpdir(), 'clean-ignores-test-'))
 afterAll(async () => rm(tmp, { recursive: true }))
 const active = new Set([

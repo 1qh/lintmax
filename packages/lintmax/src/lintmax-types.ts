@@ -1,5 +1,4 @@
 import type { Linter } from 'eslint'
-
 interface BiomeOptions {
   ignores?: PathListInput
   off?: RulesOffInput

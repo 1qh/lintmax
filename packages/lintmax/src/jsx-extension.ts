@@ -2,7 +2,6 @@ import { file, Glob } from 'bun'
 import { parseSync } from 'oxc-parser'
 import type { Diagnostic } from './aggregate.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
-
 const containsJsxNode = (program: unknown): boolean => {
   let found = false
   const visit = (node: unknown) => {

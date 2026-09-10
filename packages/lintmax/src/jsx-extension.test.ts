@@ -4,7 +4,6 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { checkJsxExtension, hasJsx } from './jsx-extension.js'
-
 const tmp = await mkdtemp(join(tmpdir(), 'jsx-ext-test-'))
 afterAll(async () => rm(tmp, { recursive: true }))
 const write = async (name: string, code: string) => bunWrite(join(tmp, name), code)

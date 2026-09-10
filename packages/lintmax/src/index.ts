@@ -32,7 +32,6 @@ import {
   stripPluginNamespace
 } from './normalize.js'
 import { dirnamePath, fromFileUrl, joinPath } from './path.js'
-
 const SHARED_OVERRIDE_KEYS = ['biome', 'eslint', 'oxlint'] as const
 interface BiomeOverrideConfig {
   css?: { parser: { tailwindDirectives: boolean } }

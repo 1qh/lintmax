@@ -1,7 +1,6 @@
 import { $ } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import { runCapture } from './core.js'
-
 interface ExtraTargets {
   dockerfiles: string[]
   shell: string[]

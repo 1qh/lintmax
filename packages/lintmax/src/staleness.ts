@@ -2,7 +2,6 @@ import { envValue, lintmaxRoot, readJson } from './core.js'
 import { isRecord } from './normalize.js'
 import { joinPath } from './path.js'
 import { loadState, saveState } from './state.js'
-
 interface StaleIssue {
   ageDays: number
   name: string

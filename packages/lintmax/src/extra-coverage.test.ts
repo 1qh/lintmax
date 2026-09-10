@@ -3,7 +3,6 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { collectExtraTargets, runExtraCoverage } from './extra-coverage.js'
-
 const emptyPathEnv = async (): Promise<Record<string, string>> => {
   const dir = await mkdtemp(join(tmpdir(), 'lintmax-nopath-'))
   return { PATH: dir }

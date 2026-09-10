@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { tmpdir } from 'node:os'
 import { runCompact } from './compact.js'
-
 describe('the compact stage honours the ignore list', () => {
   test('a file the config ignores is not rewritten, while one it does not is', async () => {
     const root = `${tmpdir()}/lintmax-compact-${Bun.randomUUIDv7()}`

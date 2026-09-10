@@ -1,5 +1,4 @@
 import { source } from '@/lib/source'
-
 export const GET = async () => {
   const pages = source.getPages()
   const sections: string[] = [

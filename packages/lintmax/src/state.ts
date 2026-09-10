@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto'
 import { homedir, platform, tmpdir } from 'node:os'
 import { isRecord } from './normalize.js'
 import { joinPath } from './path.js'
-
 interface StaleEntry {
   ageDays: number
   name: string

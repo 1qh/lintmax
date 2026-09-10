@@ -1,7 +1,6 @@
 import { $, file, write } from 'bun'
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
-
 const OK_LINE_RE = /^ok(?: \(cached\))?$/v
 const root = join(import.meta.dir, '..')
 const workFile = join(root, 'src/magic-work.ts')

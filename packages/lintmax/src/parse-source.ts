@@ -1,6 +1,5 @@
 import { parseSync } from 'oxc-parser'
 import { PARSE_DIALECTS } from './constants.js'
-
 type Parsed = ReturnType<typeof parseSync>
 const parseAnyDialect = ({ label, sourceText }: { label: string; sourceText: string }): Parsed => {
   let firstError: string | undefined

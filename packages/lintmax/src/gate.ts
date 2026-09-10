@@ -3,7 +3,6 @@ import { bunEnv, cwd, envValue } from './core.js'
 import { runLint } from './pipeline.js'
 import { formatStaleness, scanStaleness } from './staleness.js'
 import { hashTree, loadState, saveState } from './state.js'
-
 const envNoCache = 'LINTMAX_NO_CACHE'
 const listTrackedFiles = async (): Promise<null | string[]> => {
   const isWorkTree = await $`git -C ${cwd} rev-parse --is-inside-work-tree`.env(bunEnv).quiet().nothrow()
