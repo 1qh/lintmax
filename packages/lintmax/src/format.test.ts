@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { GroupedFile } from './aggregate.js'
 import { formatGrouped } from './format.js'
+const LINE_WITHOUT_PREFIX_RE = /^ {2}\d/u
 describe('formatGrouped', () => {
   const oneFinding: GroupedFile[] = [
     { file: 'src/utils.ts', linters: [{ linter: 'biome', rules: [{ lines: [1312], rule: 'noChildrenProp' }] }] }
@@ -23,7 +24,7 @@ describe('formatGrouped', () => {
     const out = formatGrouped({ files })
     expect(out).toContain('  L42,55,60 noExplicitAny')
     expect(out).toContain('  L800,804 react-perf')
-    for (const line of out.split('\n')) expect(/^ {2}\d/u.test(line)).toBe(false)
+    for (const line of out.split('\n')) expect(LINE_WITHOUT_PREFIX_RE.test(line)).toBe(false)
   })
   test('a lineless finding (prettier) prints the marker alone, no L', () => {
     const files: GroupedFile[] = [

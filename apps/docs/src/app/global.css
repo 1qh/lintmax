@@ -42,5 +42,5 @@ code {
   font-family: var(--font-mono), ui-monospace, monospace;
 }
 html > body[data-scroll-locked] {
-  margin-right: 0px !important;
+  margin-inline-end: 0px !important;
 }

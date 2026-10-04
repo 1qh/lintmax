@@ -58,7 +58,9 @@ describe('cleanFileIgnores — eslint', () => {
   test('keeps the reason when trimming a rule, even though the reason holds a comma', async () => {
     const { content, removed } = await writeAndClean(
       'trim-keeps-reason.ts',
-      '/* eslint-disable no-console, some-fake-rule -- the index is the identity, so a key adds nothing */\nconst x = 1\n'
+      `/* eslint-disable no-console, some-fake-rule -- the index is the identity, so a key adds nothing */
+const x = 1
+`
     )
     expect(removed).toBe(1)
     expect(content).toContain('no-console')
@@ -256,7 +258,9 @@ describe('cleanFileIgnores — multi-file batch', () => {
   test('handles file with multiple ignore types', async () => {
     const { content, removed } = await writeAndClean(
       'mixed.ts',
-      '/* eslint-disable fake-rule */\n/* oxlint-disable fake/thing */\n/** biome-ignore-all lint/fake/x: y */\nconst x = 1\n'
+      `/* eslint-disable fake-rule */
+const x = 1
+`
     )
     expect(removed).toBe(3)
     expect(content).toBe('const x = 1\n')
@@ -264,7 +268,9 @@ describe('cleanFileIgnores — multi-file batch', () => {
   test('handles file with mix of active and inactive', async () => {
     const { content, removed } = await writeAndClean(
       'mixed-active.ts',
-      '/* eslint-disable no-console */\n/* eslint-disable fake-rule */\n/** biome-ignore-all lint/style/noProcessEnv: x */\nconst x = 1\n'
+      `/* eslint-disable no-console */
+const x = 1
+`
     )
     expect(removed).toBe(1)
     expect(content).toContain('no-console')
@@ -344,12 +350,12 @@ describe('loadOxlintOffRules', () => {
   }
   test('refuses when the generated config is absent rather than reading it as "no rule is off"', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'off-absent-'))
-    expect(inDir(dir, loadOxlintOffRules)).rejects.toThrow(/generated config is absent/u)
+    await expect(inDir(dir, loadOxlintOffRules)).rejects.toThrow(/generated config is absent/u)
   })
   test('refuses when the generated config carries no parseable JSON', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'off-garbage-'))
     await write(join(dir, cacheDir, '.oxlintrc.json'), 'not json at all')
-    expect(inDir(dir, loadOxlintOffRules)).rejects.toThrow(/no parseable JSON/u)
+    await expect(inDir(dir, loadOxlintOffRules)).rejects.toThrow(/no parseable JSON/u)
   })
   test('reads an off rule from a valid config, so the refusal is not blanket', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'off-valid-'))

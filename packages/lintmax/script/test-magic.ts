@@ -1,6 +1,7 @@
 import { $, file, write } from 'bun'
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
+const COMMENT_DIRECTIVE_RE = /eslint-disable|biome-ignore|@ts-/v
 const OK_LINE_RE = /^ok(?: \(cached\))?$/v
 const root = join(import.meta.dir, '..')
 const workFile = join(root, 'src/magic-work.ts')
@@ -54,7 +55,9 @@ const abs = function(n: number) {
 // Unused type
 type StringOrNumber = string | number
 // Export all the functions and constants
-export { greet, processData, checkExists, buildPath, MAX_RETRIES, DEFAULT_TIMEOUT, API_BASE, double, isPositive, abs }
+export {
+  greet, processData, checkExists, buildPath, MAX_RETRIES, DEFAULT_TIMEOUT, API_BASE, double, isPositive, abs
+}
 export type { StringOrNumber }
 `
 const run = async (args: string[]) => $`bun ${cli} ${args}`.cwd(root).quiet().nothrow()
@@ -88,10 +91,7 @@ const lines = fixed.split('\n')
 for (const line of lines) {
   const trimmed = line.trim()
   if (trimmed.startsWith('//') || trimmed.startsWith('/*'))
-    assert(
-      trimmed.startsWith('/**') || /eslint-disable|biome-ignore|@ts-/v.test(trimmed),
-      `unexpected comment in fixed file: ${trimmed}`
-    )
+    assert(trimmed.startsWith('/**') || COMMENT_DIRECTIVE_RE.test(trimmed), `unexpected comment in fixed file: ${trimmed}`)
 }
 await unlink(workFile)
 process.stdout.write('magic test passed\n')

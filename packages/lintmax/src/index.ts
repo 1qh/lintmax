@@ -647,7 +647,7 @@ const buildEslintOptions = ({
         })
         appendEntries.push({
           [ESLINT_IMPORT_MARKER_KEY]: importRefIndex - 1
-          /** biome-ignore lint/nursery/noUnsafeTypeAssertion: marker object is intentionally promoted to the external ESLint config type */
+          /** biome-ignore lint/nursery/noUnsafeTypeAssertion: marker object requires the external ESLint config type */
         } as Linter.Config)
       }
     const mergedAppend: Linter.Config[] = [...sharedRuleOverrides, ...appendEntries]
@@ -771,6 +771,7 @@ const createBiomeConfig = async ({
       linter: {
         rules: {
           nursery: {
+            useLayeredStyles: { level: 'error', options: { requireImportLayers: false } },
             useReactFunctionComponentDefinition: { level: 'error', options: { namedComponents: 'arrowFunction' } }
           }
         }
@@ -992,18 +993,57 @@ const sync = async (options?: SyncOptions): Promise<void> => {
     .map((importRef, index) => `import * as __lintmaxAppendImport${index} from ${JSON.stringify(importRef.source)}`)
     .join('\n')
   const importEntries = normalizedImportRefs
-    .map(
-      (importRef, index) =>
-        `  { exportName: ${JSON.stringify(importRef.exportName)}, files: ${JSON.stringify(importRef.files ?? null)}, ignores: ${JSON.stringify(importRef.ignores ?? null)}, module: __lintmaxAppendImport${index} }`
+    .map((importRef, index) =>
+      [
+        `  { exportName: ${JSON.stringify(importRef.exportName)}, `,
+        `files: ${JSON.stringify(importRef.files ?? null)}, `,
+        `ignores: ${JSON.stringify(importRef.ignores ?? null)}, module: __lintmaxAppendImport${index} }`
+      ].join('')
     )
     .join(',\n')
+  const importMarkerKey = JSON.stringify(ESLINT_IMPORT_MARKER_KEY)
+  const sharedOverrideSymbolKey = JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)
   const importExpansion =
     normalizedImportRefs.length === 0
       ? ''
-      : `\nconst appendImports = [\n${importEntries}\n]\nconst normalizedAppend = []\nfor (const entry of options.append ?? []) {\n  if (entry && typeof entry === 'object' && !Array.isArray(entry) && ${JSON.stringify(ESLINT_IMPORT_MARKER_KEY)} in entry) {\n    const importIndex = entry[${JSON.stringify(ESLINT_IMPORT_MARKER_KEY)}]\n    if (typeof importIndex !== 'number' || !Number.isInteger(importIndex))\n      throw new Error('Invalid eslint import marker index in generated config')\n    const importRef = appendImports[importIndex]\n    if (!importRef) throw new Error(\`Missing eslint import ref for index \${importIndex}\`)\n    const imported = importRef.module[importRef.exportName]\n    const importedEntries = Array.isArray(imported) ? imported : [imported]\n    for (const importedEntry of importedEntries) {\n      if (!importedEntry || typeof importedEntry !== 'object' || Array.isArray(importedEntry))\n        throw new Error(\`Imported eslint append from \${importRef.exportName} must resolve to config object(s)\`)\n      normalizedAppend.push({\n        ...importedEntry,\n        ...(Array.isArray(importRef.files) ? { files: [...importRef.files] } : {}),\n        ...(Array.isArray(importRef.ignores) ? { ignores: [...importRef.ignores] } : {})\n      })\n    }\n    continue\n  }\n  normalizedAppend.push(entry)\n}\noptions.append = normalizedAppend\n`
+      : `
+const appendImports = [
+${importEntries}
+]
+const normalizedAppend = []
+for (const entry of options.append ?? []) {
+  if (entry && typeof entry === 'object' && !Array.isArray(entry) && ${importMarkerKey} in entry) {
+    const importIndex = entry[${importMarkerKey}]
+    if (typeof importIndex !== 'number' || !Number.isInteger(importIndex))
+      throw new Error('Invalid eslint import marker index in generated config')
+    const importRef = appendImports[importIndex]
+    if (!importRef) throw new Error(\`Missing eslint import ref for index \${importIndex}\`)
+    const imported = importRef.module[importRef.exportName]
+    const importedEntries = Array.isArray(imported) ? imported : [imported]
+    for (const importedEntry of importedEntries) {
+      if (!importedEntry || typeof importedEntry !== 'object' || Array.isArray(importedEntry))
+        throw new Error(\`Imported eslint append from \${importRef.exportName} must resolve to config object(s)\`)
+      normalizedAppend.push({
+        ...importedEntry,
+        ...(Array.isArray(importRef.files) ? { files: [...importRef.files] } : {}),
+        ...(Array.isArray(importRef.ignores) ? { ignores: [...importRef.ignores] } : {})
+      })
+    }
+    continue
+  }
+  normalizedAppend.push(entry)
+}
+options.append = normalizedAppend
+`
   const importStatementsBlock = importStatements.length > 0 ? `${importStatements}\n` : ''
   const eslintConfig = eslintOptions
-    ? `${importStatementsBlock}import { eslint } from 'lintmax/eslint'\nconst options = ${JSON.stringify(eslintOptions)}\nfor (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {\n  const entry = options.append?.[index]\n  if (entry && typeof entry === 'object') entry[Symbol.for(${JSON.stringify(SHARED_OVERRIDE_SYMBOL_KEY)})] = true\n}${importExpansion}export default await eslint(options)\n`
+    ? `${importStatementsBlock}import { eslint } from 'lintmax/eslint'
+const options = ${JSON.stringify(eslintOptions)}
+for (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {
+  const entry = options.append?.[index]
+  if (entry && typeof entry === 'object') entry[Symbol.for(${sharedOverrideSymbolKey})] = true
+}${importExpansion}export default await eslint(options)
+`
     : "export { default } from 'lintmax/eslint'\n"
   const runtimeConfig = { comments: options?.comments !== false, compact: options?.compact !== false }
   await write(joinPath(dir, 'biome.json'), `${JSON.stringify(biomeConfig, null, 2)}\n`)

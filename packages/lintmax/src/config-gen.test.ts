@@ -20,6 +20,22 @@ const setupProject = async () => {
   }
 }
 describe('biome config generation', () => {
+  it('requires layered style rules while allowing imports with their own layers', async () => {
+    await setupProject()
+    const config = readRequiredJson<{
+      overrides?: {
+        includes?: string[]
+        linter?: {
+          rules?: { nursery?: { useLayeredStyles?: { level: string; options: { requireImportLayers: boolean } } } }
+        }
+      }[]
+    }>(await file(join(cacheDir, 'biome.json')).text())
+    const override = config.overrides?.find(o => o.includes?.includes('**') && o.linter?.rules?.nursery?.useLayeredStyles)
+    expect(override?.linter?.rules?.nursery?.useLayeredStyles).toEqual({
+      level: 'error',
+      options: { requireImportLayers: false }
+    })
+  })
   it('generates biome.json with experimentalScannerIgnores', async () => {
     await setupProject()
     const biomePath = join(cacheDir, 'biome.json')
