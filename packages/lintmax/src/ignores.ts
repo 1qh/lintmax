@@ -1,12 +1,13 @@
 /* eslint-disable prefer-named-capture-group */
 /** biome-ignore-all lint/nursery/useNamedCaptureGroup: not needed */
-import { $, Glob } from 'bun'
+import { file, Glob } from 'bun'
 import { DEFAULT_SHARED_IGNORE_PATTERNS, ESLINT_TEST_FILE_PATTERNS } from './constants.js'
+import { joinPath } from './path.js'
+import { listProjectFiles } from './project-files.js'
 const eslintDisableRe = /eslint-disable(?:-next-line)?\s+([^\n]*)/gv
 const oxlintDisableRe = /oxlint-disable(?:-next-line)?\s+([^\n]*)/gv
 const biomeIgnoreRe = /biome-ignore(?:-all)?\s+([\w/]+)/gu
 const tsIgnoreRe = /@ts-(?:expect-error|ignore|nocheck)/gv
-/** Strip a trailing `-- reason` and a trailing block-comment close from one split rule. indexOf is linear where the leading-whitespace regexes backtrack. */
 const stripRuleTail = (rule: string): string => {
   const dash = rule.indexOf('--')
   const noComment = dash === -1 ? rule : rule.slice(0, dash)
@@ -14,6 +15,8 @@ const stripRuleTail = (rule: string): string => {
   return (close === -1 ? noComment : noComment.slice(0, close)).trim()
 }
 const tsInlineRe = /@ts-(?:expect-error|ignore|nocheck)/v
+const suppressionLineRe =
+  /^\s*(?:\/\/\s*(?:eslint-disable|oxlint-disable|@ts-ignore|@ts-expect-error|@ts-nocheck)|\/\*\s*(?:eslint-disable|oxlint-disable|@ts-nocheck)|\/\*\*\s*biome-ignore)/v
 const DANGEROUS_PATTERNS = [
   'no-unsafe-argument',
   'no-unsafe-assignment',
@@ -47,25 +50,10 @@ interface DangerousSuppression {
   line: number
   rule: string
 }
-const isDangerousRule = (rule: string, file: string): boolean => {
+const isDangerousRule = (rule: string, filePath: string): boolean => {
   if (DANGEROUS_PATTERNS.some(p => rule.includes(p))) return true
-  if (DANGEROUS_NON_TEST_PATTERNS.some(p => rule.includes(p))) return !isTestFile(file)
+  if (DANGEROUS_NON_TEST_PATTERNS.some(p => rule.includes(p))) return !isTestFile(filePath)
   return false
-}
-interface ParsedLine {
-  content: string
-  file: string
-  lineNum: number
-}
-const parseRipgrepLine = (raw: string, cwd: string): ParsedLine | undefined => {
-  const firstColon = raw.indexOf(':')
-  const secondColon = raw.indexOf(':', firstColon + 1)
-  if (secondColon <= firstColon) return
-  return {
-    content: raw.slice(secondColon + 1),
-    file: raw.slice(0, firstColon).replace(`${cwd}/`, ''),
-    lineNum: Number(raw.slice(firstColon + 1, secondColon))
-  }
 }
 const rulesFromContent = (content: string): string[] => {
   const rules = [
@@ -81,21 +69,22 @@ const rulesFromContent = (content: string): string[] => {
   return rules
 }
 const findDangerousSuppressions = async (cwd: string): Promise<DangerousSuppression[]> => {
-  const excludes = DEFAULT_SHARED_IGNORE_PATTERNS.flatMap(p => ['-g', `!${p}`])
-  const result =
-    await $`rg -n "^\s*//\s*eslint-disable|^\s*/\*\s*eslint-disable|^\s*//\s*oxlint-disable|^\s*/\*\s*oxlint-disable|^\s*/\*\*\s*biome-ignore|^\s*//\s*@ts-ignore|^\s*//\s*@ts-expect-error|^\s*//\s*@ts-nocheck|^\s*/\*\s*@ts-nocheck" ${cwd} -g '*.ts' -g '*.tsx' -g '!node_modules' -g '!*.d.ts' ${excludes}`
-      .quiet()
-      .nothrow()
-  const out: DangerousSuppression[] = []
-  for (const raw of result.stdout.toString().trim().split('\n').filter(Boolean)) {
-    const parsed = parseRipgrepLine(raw, cwd)
-    if (parsed) {
-      const { content, file, lineNum } = parsed
-      for (const rule of rulesFromContent(content))
-        if (isDangerousRule(rule, file)) out.push({ file, line: lineNum, rule })
-    }
-  }
+  const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
+  const files = (await listProjectFiles({ root: cwd })).filter(
+    p => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.d.ts') && !ignoreGlobs.some(g => g.match(p))
+  )
+  const results = await Promise.all(
+    files.map(async relativePath => {
+      const lines = (await file(joinPath(cwd, relativePath)).text()).split('\n')
+      const findings: DangerousSuppression[] = []
+      for (const [index, content] of lines.entries())
+        if (suppressionLineRe.test(content))
+          for (const rule of rulesFromContent(content))
+            if (isDangerousRule(rule, relativePath)) findings.push({ file: relativePath, line: index + 1, rule })
+      return findings
+    })
+  )
+  const out = results.flat()
   return out
 }
-export type { DangerousSuppression }
-export { findDangerousSuppressions, parseRules }
+export { type DangerousSuppression, findDangerousSuppressions, parseRules }

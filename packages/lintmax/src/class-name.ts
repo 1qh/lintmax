@@ -1,6 +1,8 @@
-import { file, Glob } from 'bun'
+import { file } from 'bun'
 import type { Diagnostic } from './aggregate.js'
 import { parseAnyDialect } from './parse-source.js'
+import { joinPath } from './path.js'
+import { listProjectFiles } from './project-files.js'
 const CN_NAMES = new Set(['cn'])
 const BANNED_CALLEE_NAMES = new Set(['classnames', 'clsx', 'cx', 'twMerge'])
 interface Node {
@@ -119,13 +121,12 @@ const checkClassNameFile = async (filePath: string): Promise<Diagnostic[]> => {
   }))
 }
 const checkClassName = async ({ root }: { root: string }): Promise<Diagnostic[]> => {
-  const glob = new Glob('**/*.tsx')
-  const allDiagnostics: Diagnostic[] = []
-  for await (const path of glob.scan({ absolute: true, cwd: root, dot: false }))
-    if (!(path.includes('node_modules') || path.includes('readonly') || path.includes('.next') || path.includes('dist'))) {
-      const diagnostics = await checkClassNameFile(path)
-      allDiagnostics.push(...diagnostics)
-    }
-  return allDiagnostics
+  const paths = (await listProjectFiles({ root })).filter(
+    path =>
+      isTsxFile(path) &&
+      !(path.includes('node_modules') || path.includes('readonly') || path.includes('.next') || path.includes('dist'))
+  )
+  const diagnostics = await Promise.all(paths.map(async path => checkClassNameFile(joinPath(root, path))))
+  return diagnostics.flat()
 }
 export { BANNED_CALLEE_NAMES, checkClassName, checkClassNameFile, CN_NAMES, findClassNameViolations }

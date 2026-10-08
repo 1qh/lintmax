@@ -35,6 +35,7 @@ import {
   warnToError
 } from './normalize.js'
 import { isAbsolutePath, joinPath } from './path.js'
+import { listProjectFiles } from './project-files.js'
 interface SharedOverrideAppendConfig {
   files?: string[]
   rules?: Linter.RulesRecord
@@ -126,9 +127,11 @@ const resolveTailwindEntry = async ({
   if (tailwindSetting === false) return
   if (typeof tailwindSetting === 'string')
     return isAbsolutePath(tailwindSetting) ? tailwindSetting : joinPath(root, tailwindSetting)
+  const projectFiles = new Set(await listProjectFiles({ root }))
   const matches = (
     await Promise.all(
       TAILWIND_ENTRY_CANDIDATES.map(async candidate => {
+        if (!projectFiles.has(candidate)) return []
         const resolved = joinPath(root, candidate)
         return (await file(resolved).exists()) ? [resolved] : []
       })

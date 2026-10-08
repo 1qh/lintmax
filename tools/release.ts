@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /* eslint-disable no-console */
-import { $, file, Glob } from 'bun'
+import { file, Glob, spawn } from 'bun'
 import { dirname, join } from 'node:path'
+import { listProjectFiles } from '../packages/lintmax/src/project-files.js'
 const nameVer = (p: { name: string; version: string }): string => `${p.name}@${p.version}`
 interface Pkg {
   name?: string
@@ -16,7 +17,6 @@ interface Target {
   published: boolean
   version: string
 }
-/** Only a 404 means the package is genuinely not on npm; every other npm failure is the registry declining to answer. */
 const notFoundRe = /E404|404 Not Found/u
 const toVersionList = (parsed: unknown): string[] => {
   if (Array.isArray(parsed)) return parsed.filter((v): v is string => typeof v === 'string')
@@ -30,15 +30,30 @@ const readPkg = async (path: string): Promise<Pkg> => {
   return typeof parsed === 'object' && parsed !== null ? parsed : {}
 }
 const root = process.cwd()
+const runCommand = async (
+  cmd: string[],
+  cwd = root,
+  quiet = false
+): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
+  const subprocess = spawn({ cmd, cwd, stderr: 'pipe', stdout: 'pipe', timeout: 300_000 })
+  const [exitCode, stdout, stderr] = await Promise.all([
+    subprocess.exited,
+    new Response(subprocess.stdout).text(),
+    new Response(subprocess.stderr).text()
+  ])
+  if (!quiet) {
+    process.stdout.write(stdout)
+    process.stderr.write(stderr)
+  }
+  return { exitCode, stderr, stdout }
+}
 const rootPkg = await readPkg(join(root, 'package.json'))
 const globs = rootPkg.workspaces ?? ['packages/*']
-const scanned = await Promise.all(
-  globs.map(async g =>
-    (await Array.fromAsync(new Glob(`${g}/package.json`).scan({ cwd: root }))).map(rel => join(root, rel))
-  )
-)
-const rootCandidate = rootPkg.name ? [join(root, 'package.json')] : []
-const paths = [...rootCandidate, ...scanned.flat()]
+const workspaceGlobs = globs.map(g => new Glob(`${g}/package.json`))
+const files = await listProjectFiles({ root })
+const paths = files
+  .filter(rel => (rel === 'package.json' && (rootPkg.name ?? '') !== '') || workspaceGlobs.some(g => g.match(rel)))
+  .map(rel => join(root, rel))
 const pkgs = await Promise.all(
   paths.map(async path => ({
     path,
@@ -47,12 +62,10 @@ const pkgs = await Promise.all(
 )
 const resolve = async (path: string, pkg: Pkg): Promise<null | Target> => {
   if (!(pkg.name && pkg.version) || pkg.private) return null
-  const view = await $`npm view ${pkg.name} versions --json`.quiet().nothrow()
-  if (view.exitCode !== 0 && !notFoundRe.test(view.stderr.toString()))
-    throw new Error(
-      `npm view ${pkg.name} failed, so whether it needs publishing is unknown: ${view.stderr.toString().trim()}`
-    )
-  const all = toVersionList(view.exitCode === 0 ? JSON.parse(view.stdout.toString().trim() || '[]') : [])
+  const view = await runCommand(['npm', 'view', pkg.name, 'versions', '--json'], root, true)
+  if (view.exitCode !== 0 && !notFoundRe.test(view.stderr))
+    throw new Error(`npm view ${pkg.name} failed, so whether it needs publishing is unknown: ${view.stderr.trim()}`)
+  const all = toVersionList(view.exitCode === 0 ? JSON.parse(view.stdout.trim() || '[]') : [])
   return {
     dir: dirname(path),
     name: pkg.name,
@@ -75,10 +88,10 @@ if (toPublish.length === 0) {
   process.exit(0)
 }
 const publishOne = async (t: Target): Promise<Target & { ok: boolean }> => {
-  const pub = await $`bun publish --access public`.cwd(t.dir).nothrow()
+  const pub = await runCommand(['bun', 'publish', '--access', 'public'], t.dir)
   if (pub.exitCode === 0) return { ...t, ok: true }
-  const recheck = await $`npm view ${t.name}@${t.version} version`.quiet().nothrow()
-  return { ...t, ok: recheck.exitCode === 0 && recheck.stdout.toString().trim().length > 0 }
+  const recheck = await runCommand(['npm', 'view', `${t.name}@${t.version}`, 'version'], root, true)
+  return { ...t, ok: recheck.exitCode === 0 && recheck.stdout.trim().length > 0 }
 }
 const results = await Promise.all(toPublish.map(publishOne))
 const failed = results.filter(r => !r.ok)
@@ -88,22 +101,19 @@ if (failed.length > 0) {
 }
 const first = results[0]
 const tag = `v${first?.version ?? '0.0.0'}`
-const tagged = await $`git tag ${tag}`.nothrow()
-const pushed = tagged.exitCode === 0 ? await $`git push origin ${tag}`.nothrow() : tagged
+const tagged = await runCommand(['git', 'tag', tag])
+const pushed = tagged.exitCode === 0 ? await runCommand(['git', 'push', 'origin', tag]) : tagged
 const released =
-  pushed.exitCode === 0 ? await $`gh release create ${tag} --title ${tag} --generate-notes`.nothrow() : pushed
+  pushed.exitCode === 0 ? await runCommand(['gh', 'release', 'create', tag, '--title', tag, '--generate-notes']) : pushed
 if (released.exitCode !== 0) {
-  console.error(
-    `published ${results.map(nameVer).join(', ')} but ${tag} did not land: ${released.stderr.toString().trim()}`
-  )
+  console.error(`published ${results.map(nameVer).join(', ')} but ${tag} did not land: ${released.stderr.trim()}`)
   process.exit(1)
 }
 const staleTags = async (): Promise<string[]> => {
-  const ls = await $`git ls-remote --tags origin`.quiet().nothrow()
+  const ls = await runCommand(['git', 'ls-remote', '--tags', 'origin'], root, true)
   if (ls.exitCode !== 0)
-    throw new Error(`cannot list remote tags, so whether older ones remain is unknown: ${ls.stderr.toString().trim()}`)
+    throw new Error(`cannot list remote tags, so whether older ones remain is unknown: ${ls.stderr.trim()}`)
   const names = ls.stdout
-    .toString()
     .split('\n')
     .map(line => line.split('/').at(-1) ?? '')
     .filter(t => t && t !== tag && !t.endsWith('^{}'))
@@ -111,8 +121,8 @@ const staleTags = async (): Promise<string[]> => {
 }
 await Promise.all(
   (await staleTags()).map(async t => {
-    await $`gh release delete ${t} --yes --cleanup-tag`.nothrow()
-    await $`git push origin :refs/tags/${t}`.nothrow()
+    await runCommand(['gh', 'release', 'delete', t, '--yes', '--cleanup-tag'])
+    await runCommand(['git', 'push', 'origin', `:refs/tags/${t}`])
   })
 )
 const survivors = await staleTags()

@@ -1,5 +1,5 @@
 import type { Linter } from 'eslint'
-import { $, file, write } from 'bun'
+import { file, write } from 'bun'
 import { lstat } from 'node:fs/promises'
 import { join as joinFs, relative as relativePath } from 'node:path'
 import type {
@@ -32,6 +32,7 @@ import {
   stripPluginNamespace
 } from './normalize.js'
 import { dirnamePath, fromFileUrl, joinPath } from './path.js'
+import { listProjectFiles } from './project-files.js'
 const SHARED_OVERRIDE_KEYS = ['biome', 'eslint', 'oxlint'] as const
 interface BiomeOverrideConfig {
   css?: { parser: { tailwindDirectives: boolean } }
@@ -817,6 +818,7 @@ const createBiomeConfig = async ({
     },
     files: {
       experimentalScannerIgnores: ignorePatterns.map(p => (p.startsWith('!!') ? p.slice(2) : p)),
+      ignoreUnknown: true,
       includes: ['**', ...ignorePatterns]
     },
     formatter: { indentStyle: 'space', lineWidth: 123 },
@@ -924,12 +926,7 @@ const resolveSyncImportSource = ({ cwd, dir, source }: { cwd: string; dir: strin
   return relativeSource.startsWith('.') ? relativeSource : `./${relativeSource}`
 }
 const discoverSymlinkPatterns = async ({ root }: { root: string }): Promise<readonly string[]> => {
-  const result = await $`git -C ${root} ls-files -z --cached --others --exclude-standard`.quiet().nothrow()
-  if (result.exitCode !== 0) return []
-  const entries = result.stdout
-    .toString()
-    .split('\0')
-    .filter(e => e.length > 0)
+  const entries = await listProjectFiles({ root })
   const symlinkFlags = await Promise.all(
     entries.map(async entry => {
       try {

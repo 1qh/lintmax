@@ -1,8 +1,9 @@
-import { $, file, write } from 'bun'
+import { file, write } from 'bun'
 import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CliExitError, decodeText } from './core.js'
 import { joinPath } from './path.js'
+import { listProjectFiles } from './project-files.js'
 const isSymlinkSafe = async (p: string): Promise<boolean> => {
   try {
     return (await lstat(p)).isSymbolicLink()
@@ -59,19 +60,7 @@ const listCompactFiles = async ({
   env: Record<string, string | undefined>
   root: string
 }): Promise<string[]> => {
-  const result = await $`git -C ${root} ls-files -z --cached --others --exclude-standard`.env(env).quiet().nothrow()
-  if (result.exitCode !== 0) {
-    const stderr = result.stderr.toString().trim()
-    if (stderr.toLowerCase().includes('not a git repository')) return []
-    throw new CliExitError({
-      code: result.exitCode,
-      message: stderr.length > 0 ? stderr : 'Failed to list files for compact step'
-    })
-  }
-  const entries = result.stdout
-    .toString()
-    .split('\0')
-    .filter(e => e.length > 0 && e !== 'bun.lock')
+  const entries = (await listProjectFiles({ env, root })).filter(e => e !== 'bun.lock')
   const symlinkFlags = await Promise.all(entries.map(async e => isSymlinkSafe(join(root, e))))
   return entries.filter((_e, index) => !symlinkFlags[index])
 }

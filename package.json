@@ -13,7 +13,7 @@
     "clean": "sh clean.sh",
     "fix": "bun packages/lintmax/dist/cli.mjs fix",
     "gen": "cd apps/docs && fumadocs-mdx",
-    "postinstall": "sherif -i typescript",
+    "postinstall": "bun tools/check-workspaces.ts",
     "prepare": "bunx simple-git-hooks",
     "smoke": "bash -c \"turbo smoke --output-logs=errors-only 2> >(grep -vE 'WARNING|Could not resolve workspaces|missing field|Turborepo will still function' >&2)\"",
     "test": "bash -c \"turbo smoke test --output-logs=errors-only 2> >(grep -vE 'WARNING|Could not resolve workspaces|missing field|Turborepo will still function' >&2)\"",

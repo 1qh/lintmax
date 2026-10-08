@@ -1,23 +1,12 @@
-import { $ } from 'bun'
-import { bunEnv, cwd, envValue } from './core.js'
+import { cwd, envValue } from './core.js'
 import { runLint } from './pipeline.js'
+import { listProjectFiles } from './project-files.js'
 import { formatStaleness, scanStaleness } from './staleness.js'
 import { hashTree, loadState, saveState } from './state.js'
 const envNoCache = 'LINTMAX_NO_CACHE'
-const listTrackedFiles = async (): Promise<null | string[]> => {
-  const isWorkTree = await $`git -C ${cwd} rev-parse --is-inside-work-tree`.env(bunEnv).quiet().nothrow()
-  if (isWorkTree.exitCode !== 0) return null
-  const result = await $`git -C ${cwd} ls-files -z --cached --others --exclude-standard`.env(bunEnv).quiet().nothrow()
-  if (result.exitCode !== 0) return null
-  return result.stdout
-    .toString()
-    .split('\0')
-    .filter(entry => entry.length > 0)
-}
 const computeGreenKey = async (version: string): Promise<null | string> => {
   if (envValue(envNoCache) === '1') return null
-  const files = await listTrackedFiles()
-  if (files === null) return null
+  const files = await listProjectFiles({ root: cwd })
   return hashTree({ files, root: cwd, version })
 }
 const tryCached = async (greenKey: null | string): Promise<boolean> => {

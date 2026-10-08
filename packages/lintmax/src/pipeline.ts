@@ -37,6 +37,7 @@ import { findDangerousSuppressions } from './ignores.js'
 import { sync } from './index.js'
 import { checkJsxExtension } from './jsx-extension.js'
 import { dirnamePath, joinPath } from './path.js'
+import { escapeGlobPath } from './project-files.js'
 import { removeUnusedSuppressions } from './unused-suppressions.js'
 const emitExtra = (result: { diagnostics: Diagnostic[]; notes: string[] }): Diagnostic[] => {
   for (const note of result.notes) process.stderr.write(`lintmax: ${note}\n`)
@@ -161,7 +162,8 @@ const createCheckSteps = ({
   oxlintIgnorePatterns,
   prettierBin,
   prettierMarkdownTargets,
-  sortPkgJson
+  sortPkgJson,
+  targets
 }: {
   biomeBin: string
   dir: string
@@ -172,6 +174,7 @@ const createCheckSteps = ({
   prettierBin: string
   prettierMarkdownTargets: string[]
   sortPkgJson: string
+  targets: LintTargets
 }): StepSpec[] => {
   const oxlintCliAllow = [
     ...OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r]),
@@ -179,11 +182,11 @@ const createCheckSteps = ({
   ]
   const steps: StepSpec[] = [
     {
-      args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
+      args: [sortPkgJson, '--check', ...targets.packages],
       label: 'sort-package-json'
     },
     {
-      args: [biomeBin, 'ci', '--config-path', dir, '--diagnostic-level=error'],
+      args: [biomeBin, 'ci', '--config-path', dir, '--diagnostic-level=error', ...targets.biome],
       label: 'biome'
     },
     {
@@ -193,7 +196,8 @@ const createCheckSteps = ({
         joinPath(dir, '.oxlintrc.json'),
         '--quiet',
         '--no-error-on-unmatched-pattern',
-        ...oxlintCliAllow
+        ...oxlintCliAllow,
+        ...targets.source
       ],
       label: 'oxlint'
     },
@@ -207,7 +211,13 @@ const createCheckSteps = ({
       args: [prettierBin, ...PRETTIER_MD_ARGS, '--check', '--no-error-on-unmatched-pattern', ...prettierMarkdownTargets],
       label: 'prettier'
     })
-  return steps
+  return steps.filter(step => {
+    if (step.label === 'sort-package-json') return targets.packages.length > 0
+    if (step.label === 'biome') return targets.biome.length > 0
+    if (step.label === 'oxlint') return targets.source.length > 0
+    if (step.label === 'eslint') return targets.eslint.length > 0
+    return true
+  })
 }
 const DESTRUCTIVE_FIX_OVERRIDES = ['--rule', '{"@eslint-react/no-missing-context-display-name":"off"}']
 const createFixSteps = ({
@@ -220,7 +230,8 @@ const createFixSteps = ({
   oxlintIgnorePatterns,
   prettierBin,
   prettierMarkdownTargets,
-  sortPkgJson
+  sortPkgJson,
+  targets
 }: {
   biomeBin: string
   dir: string
@@ -232,6 +243,7 @@ const createFixSteps = ({
   prettierBin: string
   prettierMarkdownTargets: string[]
   sortPkgJson: string
+  targets: LintTargets
 }): StepSpec[] => {
   const oxlintCliAllow = [
     ...OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r]),
@@ -239,12 +251,12 @@ const createFixSteps = ({
   ]
   const steps: StepSpec[] = [
     {
-      args: [sortPkgJson, '**/package.json', '--ignore', '**/node_modules/**'],
+      args: [sortPkgJson, ...targets.packages],
       label: 'sort-package-json',
       silent: true
     },
     {
-      args: [biomeBin, 'check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
+      args: [biomeBin, 'check', '--config-path', dir, '--fix', '--diagnostic-level=error', ...targets.biome],
       label: 'biome',
       silent: true
     },
@@ -257,7 +269,8 @@ const createFixSteps = ({
         '--fix-suggestions',
         '--quiet',
         '--no-error-on-unmatched-pattern',
-        ...oxlintCliAllow
+        ...oxlintCliAllow,
+        ...targets.source
       ],
       label: 'oxlint',
       silent: true
@@ -268,25 +281,32 @@ const createFixSteps = ({
       silent: true
     },
     {
-      args: [biomeBin, 'check', '--config-path', dir, '--fix', '--diagnostic-level=error'],
+      args: [biomeBin, 'check', '--config-path', dir, '--fix', '--diagnostic-level=error', ...targets.biome],
       label: 'biome',
       silent: true
     }
   ]
   if (hasFlowmark)
-    steps.push({
-      args: ['-w', '0', '--auto', '.'],
-      command: 'flowmark',
-      label: 'flowmark',
-      silent: true
-    })
+    for (const target of prettierMarkdownTargets.filter(p => p.endsWith('.md')))
+      steps.push({
+        args: ['-w', '0', '--auto', target],
+        command: 'flowmark',
+        label: 'flowmark',
+        silent: true
+      })
   if (prettierMarkdownTargets.length > 0)
     steps.push({
       args: [prettierBin, ...PRETTIER_MD_ARGS, '--write', '--no-error-on-unmatched-pattern', ...prettierMarkdownTargets],
       label: 'prettier',
       silent: true
     })
-  return steps
+  return steps.filter(step => {
+    if (step.label === 'sort-package-json') return targets.packages.length > 0
+    if (step.label === 'biome') return targets.biome.length > 0
+    if (step.label === 'oxlint') return targets.source.length > 0
+    if (step.label === 'eslint') return targets.eslint.length > 0
+    return true
+  })
 }
 const captureAndParse = async ({
   env,
@@ -330,7 +350,8 @@ const runAgentCheck = async ({
   oxlintIgnorePatterns,
   prettierBin,
   prettierMarkdownTargets,
-  sortPkgJson
+  sortPkgJson,
+  targets
 }: {
   biomeBin: string
   dir: string
@@ -343,6 +364,7 @@ const runAgentCheck = async ({
   prettierBin: string
   prettierMarkdownTargets: string[]
   sortPkgJson: string
+  targets: LintTargets
 }): Promise<Diagnostic[]> => {
   const oxlintCliAllow = [
     ...OXLINT_CLI_ALLOW.flatMap(r => ['--allow', r]),
@@ -352,63 +374,68 @@ const runAgentCheck = async ({
   const push = (d: Diagnostic[]) => {
     if (d.length > 0) allDiagnostics.push(...d)
   }
-  push(
-    await captureAndParse({
-      env,
-      failures,
-      label: 'sort-package-json',
-      opts: {
-        args: [sortPkgJson, '--check', '**/package.json', '--ignore', '**/node_modules/**'],
-        command: 'bun'
-      },
-      parser: parseSortPackageJsonOutput
-    })
-  )
-  push(
-    await captureAndParse({
-      env,
-      failures,
-      label: 'biome',
-      opts: {
-        args: [biomeBin, 'check', '--config-path', dir, '--reporter=json'],
-        command: 'bun'
-      },
-      parser: ({ stdout }) => parseBiomeDiagnostics({ stdout })
-    })
-  )
-  push(
-    await captureAndParse({
-      env,
-      failures,
-      label: 'oxlint',
-      opts: {
-        args: [
-          oxlintBin,
-          '-c',
-          joinPath(dir, '.oxlintrc.json'),
-          '--quiet',
-          '--no-error-on-unmatched-pattern',
-          '-f',
-          'json',
-          ...oxlintCliAllow
-        ],
-        command: 'bun'
-      },
-      parser: ({ stdout }) => parseOxlintDiagnostics({ stdout })
-    })
-  )
-  push(
-    await captureAndParse({
-      env,
-      failures,
-      label: 'eslint',
-      opts: {
-        args: [eslintBin, '--no-error-on-unmatched-pattern', ...eslintArgs, '-f', 'json'],
-        command: 'bun'
-      },
-      parser: ({ stdout }) => parseEslintDiagnostics({ stdout })
-    })
-  )
+  if (targets.packages.length > 0)
+    push(
+      await captureAndParse({
+        env,
+        failures,
+        label: 'sort-package-json',
+        opts: {
+          args: [sortPkgJson, '--check', ...targets.packages],
+          command: 'bun'
+        },
+        parser: parseSortPackageJsonOutput
+      })
+    )
+  if (targets.biome.length > 0)
+    push(
+      await captureAndParse({
+        env,
+        failures,
+        label: 'biome',
+        opts: {
+          args: [biomeBin, 'check', '--config-path', dir, '--reporter=json', ...targets.biome],
+          command: 'bun'
+        },
+        parser: ({ stdout }) => parseBiomeDiagnostics({ stdout })
+      })
+    )
+  if (targets.source.length > 0)
+    push(
+      await captureAndParse({
+        env,
+        failures,
+        label: 'oxlint',
+        opts: {
+          args: [
+            oxlintBin,
+            '-c',
+            joinPath(dir, '.oxlintrc.json'),
+            '--quiet',
+            '--no-error-on-unmatched-pattern',
+            '-f',
+            'json',
+            ...oxlintCliAllow,
+            ...targets.source
+          ],
+          command: 'bun'
+        },
+        parser: ({ stdout }) => parseOxlintDiagnostics({ stdout })
+      })
+    )
+  if (targets.eslint.length > 0)
+    push(
+      await captureAndParse({
+        env,
+        failures,
+        label: 'eslint',
+        opts: {
+          args: [eslintBin, '--no-error-on-unmatched-pattern', ...eslintArgs, '-f', 'json'],
+          command: 'bun'
+        },
+        parser: ({ stdout }) => parseEslintDiagnostics({ stdout })
+      })
+    )
   if (prettierMarkdownTargets.length > 0)
     push(
       await captureAndParse({
@@ -444,38 +471,24 @@ const unusedToDiagnostics = ({ root, unused }: { root: string; unused: UnusedDir
 }
 const dangerousToDiagnostics = (items: DangerousSuppression[]): Diagnostic[] =>
   items.map(d => ({ file: d.file, line: d.line, linter: 'forbidden-suppression', rule: d.rule }))
-const isGitWorkTree = async ({ env, root }: { env: Record<string, string | undefined>; root: string }): Promise<boolean> =>
-  (await $`git -C ${root} rev-parse --is-inside-work-tree`.env(env).quiet().nothrow()).exitCode === 0
+interface LintTargets {
+  biome: string[]
+  eslint: string[]
+  packages: string[]
+  source: string[]
+}
+const SOURCE_EXTENSIONS = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts']
 const PRETTIER_EXTENSIONS = ['.md', '.yml', '.yaml']
-const isPrettierTarget = (filePath: string): boolean => PRETTIER_EXTENSIONS.some(ext => filePath.endsWith(ext))
-const scanPrettierTargets = async ({
-  isIgnored,
-  root
-}: {
-  isIgnored: (filePath: string) => boolean
-  root: string
-}): Promise<string[]> => {
-  const found: string[] = []
-  const glob = new Glob(`**/*{${PRETTIER_EXTENSIONS.join(',')}}`)
-  for await (const path of glob.scan({ absolute: false, cwd: root, dot: false }))
-    if (!(path.includes('node_modules') || isIgnored(path))) found.push(path)
-  return found
-}
-const createPrettierMarkdownTargets = async ({
-  gitFiles,
-  gitWorkTree,
-  isIgnored,
-  root
-}: {
-  gitFiles: string[]
-  gitWorkTree: boolean
-  isIgnored: (filePath: string) => boolean
-  root: string
-}): Promise<string[]> => {
-  if (gitWorkTree) return gitFiles.filter(f => isPrettierTarget(f) && !isIgnored(f))
-  const scanned = await scanPrettierTargets({ isIgnored, root })
-  return scanned
-}
+const hasExtension = (path: string, extensions: readonly string[]): boolean => extensions.some(ext => path.endsWith(ext))
+const createLintTargets = (files: string[]): LintTargets => ({
+  biome: files.map(p => joinPath(cwd, p)),
+  eslint: files.map(p => joinPath(cwd, p)),
+  packages: files
+    .filter(p => p === 'package.json' || p.endsWith('/package.json'))
+    /** sort-package-json treats even explicit file arguments as globs. */
+    .map(p => escapeGlobPath(joinPath(cwd, p))),
+  source: files.filter(p => hasExtension(p, SOURCE_EXTENSIONS)).map(p => joinPath(cwd, p))
+})
 const throwAgentResults = ({ diagnostics, failures }: { diagnostics: Diagnostic[]; failures: FailureRecord[] }) => {
   if (diagnostics.length === 0 && failures.length === 0) return
   const grouped = aggregate({ diagnostics })
@@ -663,20 +676,14 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   const ignoreGlobsEarly = oxlintIgnorePatternsEarly.map(p => new Glob(p))
   const isIgnored = (filePath: string): boolean => ignoreGlobsEarly.some(g => g.match(filePath))
   if (command === 'fix' && runtime.compact === true) await runCompactContinue({ human, isIgnored, mode: 'fix' })
-  const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs')]
+  const allGitFiles = (await listCompactFiles({ env, root: cwd })).filter(one => !isIgnored(one))
+  const targets = createLintTargets(allGitFiles)
+  const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs'), '--no-warn-ignored', ...targets.eslint]
   const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await resolveAllBins()
   const extraBins: ExtraBins = { dprint: dprintBin, tombi: tombiBin }
   const hasFlowmark = (await $`which flowmark`.env(env).quiet().nothrow()).exitCode === 0
-  const gitWorkTree = await isGitWorkTree({ env, root: cwd })
-  const listedGitFiles = gitWorkTree ? await listCompactFiles({ env, root: cwd }) : []
-  const allGitFiles = listedGitFiles.filter(one => !isIgnored(one))
   const oxlintIgnorePatterns = oxlintIgnorePatternsEarly
-  const prettierMarkdownTargets = await createPrettierMarkdownTargets({
-    gitFiles: allGitFiles,
-    gitWorkTree,
-    isIgnored,
-    root: cwd
-  })
+  const prettierMarkdownTargets = allGitFiles.filter(p => hasExtension(p, PRETTIER_EXTENSIONS)).map(p => joinPath(cwd, p))
   const checkSteps = createCheckSteps({
     biomeBin,
     dir,
@@ -686,7 +693,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     oxlintIgnorePatterns,
     prettierBin,
     prettierMarkdownTargets,
-    sortPkgJson
+    sortPkgJson,
+    targets
   })
   const shouldComments = runtime.comments !== false
   const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
@@ -701,7 +709,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     oxlintIgnorePatterns,
     prettierBin,
     prettierMarkdownTargets,
-    sortPkgJson
+    sortPkgJson,
+    targets
   }
   const ctx: BranchContext = {
     agentParams,
@@ -726,7 +735,8 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
       oxlintIgnorePatterns,
       prettierBin,
       prettierMarkdownTargets,
-      sortPkgJson
+      sortPkgJson,
+      targets
     })
     await runFixCommand({ clearFailures, ctx, fixSteps, human, runStepsSilent })
     return
