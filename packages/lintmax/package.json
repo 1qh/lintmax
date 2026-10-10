@@ -55,7 +55,7 @@
     "prepublishOnly": "bun run build",
     "postpublish": "bun ../../tools/prune-versions.ts",
     "smoke": "bun script/smoke.ts",
-    "test": "bun script/test-magic.ts && bun script/test-coverage.ts"
+    "test": "bun test src && bun script/test-magic.ts && bun script/test-coverage.ts"
   },
   "dependencies": {
     "@biomejs/biome": "latest",

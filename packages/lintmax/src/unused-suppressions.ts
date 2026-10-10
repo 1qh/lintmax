@@ -153,6 +153,7 @@ const requireLintAnswer = ({
     refuse('produced no parseable JSON')
   }
   if (!Array.isArray(parsed.diagnostics)) refuse('returned JSON carrying no diagnostics array')
+  if (exitCode !== 0 && parsed.diagnostics.length === 0) refuse('failed with zero diagnostics')
   return json
 }
 const firedOxlintByFile = async ({
@@ -468,4 +469,4 @@ const removeUnusedSuppressions = async ({
   return { diagnostics, files: [...changedFiles], removed }
 }
 export type { RemoveResult, UnusedDirective }
-export { oxlintUnusedArgs, removeUnusedSuppressions }
+export { oxlintUnusedArgs, removeUnusedSuppressions, requireLintAnswer }

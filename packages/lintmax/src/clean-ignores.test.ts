@@ -258,9 +258,7 @@ describe('cleanFileIgnores — multi-file batch', () => {
   test('handles file with multiple ignore types', async () => {
     const { content, removed } = await writeAndClean(
       'mixed.ts',
-      `/* eslint-disable fake-rule */
-const x = 1
-`
+      '/* eslint-disable fake-rule */\n/* oxlint-disable fake/rule */\n/** biome-ignore-all lint/fake/rule: reason */\nconst x = 1\n'
     )
     expect(removed).toBe(3)
     expect(content).toBe('const x = 1\n')
@@ -268,9 +266,7 @@ const x = 1
   test('handles file with mix of active and inactive', async () => {
     const { content, removed } = await writeAndClean(
       'mixed-active.ts',
-      `/* eslint-disable no-console */
-const x = 1
-`
+      '/* eslint-disable no-console */\n/* oxlint-disable fake-rule */\n/** biome-ignore-all lint/style/noProcessEnv: env access */\nconst x = 1\n'
     )
     expect(removed).toBe(1)
     expect(content).toContain('no-console')

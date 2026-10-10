@@ -1,5 +1,6 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential pipeline fix steps mutate files in order */
 import { $, env as bunEnv, file, Glob } from 'bun'
+import { Buffer } from 'node:buffer'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
 import type { ExtraBins } from './extra-coverage.js'
@@ -328,14 +329,30 @@ const captureAndParse = async ({
     label
   })
   if (result.exitCode === 0) return []
-  const diagnostics = parser(result)
+  const byteCount = Buffer.byteLength(result.stdout)
+  const stderrDetail = result.stderr ? `\n${result.stderr.trim()}` : ''
+  let diagnostics: Diagnostic[]
+  try {
+    if (label === 'eslint' || label === 'biome' || label === 'oxlint') readRequiredJson<unknown>(result.stdout)
+    diagnostics = parser(result)
+  } catch (parseError) {
+    const detail = parseError instanceof Error ? parseError.message : String(parseError)
+    failures.push({
+      code: result.exitCode,
+      label,
+      message: `Output parse error (${byteCount} bytes): ${detail}${stderrDetail}`
+    })
+    return []
+  }
   if (diagnostics.length > 0) return diagnostics
   const stderr = result.stderr.trim()
   const stdout = result.stdout.trim()
   const stdoutFirst = stdout.split('\n', 1)[0]?.trimStart() ?? ''
   const stdoutIsJson = stdoutFirst.startsWith('[') || stdoutFirst.startsWith('{')
   const stdoutMessage = stdoutIsJson ? undefined : stdout || undefined
-  const message = stderr.length > 0 ? stderr : stdoutMessage
+  const detail = stderr.length > 0 ? stderr : stdoutMessage
+  const failureDetail = detail ? `\n${detail}` : ''
+  const message = `Output parsed to zero diagnostics (${byteCount} bytes)${failureDetail}`
   failures.push({ code: result.exitCode, label, message })
   return []
 }
@@ -743,4 +760,4 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
   }
   await (human ? runCheckHuman(ctx) : runCheckAgent(ctx))
 }
-export { runLint }
+export { captureAndParse, formatFailureDetails, runLint }

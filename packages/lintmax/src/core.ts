@@ -1,4 +1,6 @@
-import { $, env as bunEnv, file } from 'bun'
+import { $, env as bunEnv, file, spawn } from 'bun'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { isRecord } from './normalize.js'
 import { dirnamePath, fromFileUrl, joinPath } from './path.js'
 interface FailureRecord {
@@ -114,13 +116,46 @@ const run = async ({ args, command, env, label, silent = false }: RunOpts): Prom
 const runCapture = async ({
   args,
   command,
-  env
+  env,
+  label
 }: RunOpts): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
-  const result = await $`${command} ${args}`.cwd(cwd).env(env).quiet().nothrow()
-  return {
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-    stdout: result.stdout.toString()
+  const directory = await mkdtemp(joinPath(tmpdir(), 'lintmax-output-'))
+  try {
+    const stdoutPath = joinPath(directory, 'stdout')
+    const stderrPath = joinPath(directory, 'stderr')
+    const outputPath = joinPath(directory, 'diagnostics')
+    const outputArgs = label === 'eslint' ? ['--output-file', outputPath] : []
+    const nativeOutput = outputArgs.length > 0
+    const captureArgs = [...args, ...outputArgs]
+    if (nativeOutput) await writeFile(outputPath, '')
+    const windows = process.platform === 'win32'
+    const commandArgs = windows
+      ? [command, ...captureArgs]
+      : [
+          '/bin/sh',
+          '-c',
+          'stdout=$1; stderr=$2; shift 2; exec "$@" > "$stdout" 2> "$stderr"',
+          'lintmax-capture',
+          stdoutPath,
+          stderrPath,
+          command,
+          ...captureArgs
+        ]
+    const child = spawn(commandArgs, {
+      cwd,
+      env,
+      stderr: windows ? file(stderrPath) : 'ignore',
+      stdout: windows ? file(stdoutPath) : 'ignore',
+      timeout: 600_000
+    })
+    const exitCode = await child.exited
+    const [stderr, stdout] = await Promise.all([
+      file(stderrPath).text(),
+      file(nativeOutput ? outputPath : stdoutPath).text()
+    ])
+    return { exitCode, stderr, stdout }
+  } finally {
+    await rm(directory, { recursive: true })
   }
 }
 const envValue = (name: string): string => bunEnv[name] ?? ''
