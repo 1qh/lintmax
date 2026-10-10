@@ -1,10 +1,11 @@
-import { file, Glob, write } from 'bun'
+import { file, Glob, spawn, write } from 'bun'
 import { afterAll, describe, expect, it } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fixComments } from './comments.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
-import { readRequiredJson } from './core.js'
+import { readRequiredJson, resolveBin } from './core.js'
 import { sync } from './index.js'
 const tmp = await mkdtemp(join(tmpdir(), 'config-gen-test-'))
 const cacheDir = join(tmp, 'node_modules', '.cache', 'lintmax')
@@ -20,6 +21,42 @@ const setupProject = async () => {
   }
 }
 describe('biome config generation', () => {
+  it('reports negated else conditions at error without an autofix', async () => {
+    await setupProject()
+    const config = readRequiredJson<{
+      overrides?: {
+        includes?: string[]
+        linter?: { rules?: { style?: { noNegationElse?: { fix: string; level: string } } } }
+      }[]
+    }>(await file(join(cacheDir, 'biome.json')).text())
+    const override = config.overrides?.find(o => o.includes?.includes('**') && o.linter?.rules?.style?.noNegationElse)
+    expect(override?.linter?.rules?.style?.noNegationElse).toEqual({ fix: 'none', level: 'error' })
+  })
+  it('keeps a braceless else parseable through the unsafe Biome fix stage and comment stripping', async () => {
+    await setupProject()
+    const sourcePath = join(tmp, 'negation-else.ts')
+    const sourceText = 'if (x !== undefined) {\n  s.a = 1\n} else s.b ??= 2\n'
+    await write(sourcePath, sourceText)
+    const biomeBin = await resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
+    const child = spawn(
+      [biomeBin, 'lint', '--config-path', cacheDir, '--only=style/noNegationElse', '--write', '--unsafe', sourcePath],
+      {
+        cwd: tmp,
+        stderr: 'pipe',
+        stdout: 'pipe',
+        timeout: 10_000
+      }
+    )
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited
+    ])
+    expect(exitCode).toBe(1)
+    expect(await fixComments({ files: [sourcePath] })).toBe(0)
+    expect(await file(sourcePath).text()).toBe(sourceText)
+    expect(`${stdout}\n${stderr}`).toContain('lint/style/noNegationElse')
+  }, 15_000)
   it('requires layered style rules while allowing imports with their own layers', async () => {
     await setupProject()
     const config = readRequiredJson<{

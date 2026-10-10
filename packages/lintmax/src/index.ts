@@ -38,7 +38,10 @@ interface BiomeOverrideConfig {
   css?: { parser: { tailwindDirectives: boolean } }
   includes: string[]
   linter?: {
-    rules?: Record<string, Record<string, 'off'>>
+    rules?: Record<
+      string,
+      Record<string, 'off' | { fix?: 'none'; level: 'error'; options?: Record<string, boolean | string> }>
+    >
   }
 }
 interface ParsedBiomeSyncConfig {
@@ -774,6 +777,9 @@ const createBiomeConfig = async ({
           nursery: {
             useLayeredStyles: { level: 'error', options: { requireImportLayers: false } },
             useReactFunctionComponentDefinition: { level: 'error', options: { namedComponents: 'arrowFunction' } }
+          },
+          style: {
+            noNegationElse: { fix: 'none', level: 'error' }
           }
         }
       }
