@@ -60,6 +60,28 @@ process.stdout.write(JSON.stringify(await scanStaleness(true)))
   expect(result.stderr).toBe('')
   expect(result.stdout).toBe(JSON.stringify([{ ageDays: 200, name: 'eslint' }]))
 }, 15_000)
+test('a cached scan filters excepted dependencies while retaining unlisted stale dependencies', async () => {
+  const result = await runFixture(`
+mock.module(${JSON.stringify(new URL('state.js', import.meta.url).href)}, () => ({
+  loadState: async () => ({
+    lastCheck: now - 1000,
+    lastGreenByCwd: {},
+    staleIssues: [
+      { ageDays: 200, name: 'eslint-plugin-react-hooks' },
+      { ageDays: 200, name: 'eslint' }
+    ],
+    versions: {}
+  }),
+  saveState: async () => { throw new Error('a cache hit must not save state') }
+}))
+spyOn(globalThis, 'fetch').mockImplementation(async () => { throw new Error('a cache hit must not fetch') })
+const { scanStaleness } = await import(${JSON.stringify(new URL('staleness.js', import.meta.url).href)})
+process.stdout.write(JSON.stringify(await scanStaleness()))
+`)
+  expect(result.exitCode).toBe(0)
+  expect(result.stderr).toBe('')
+  expect(result.stdout).toBe(JSON.stringify([{ ageDays: 200, name: 'eslint' }]))
+}, 15_000)
 test('a stale dependency fails the gate without printing the ok success line', async () => {
   const result = await runFixture(`
 const { runGate } = await import(${JSON.stringify(new URL('gate.js', import.meta.url).href)})

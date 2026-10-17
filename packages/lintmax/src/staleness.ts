@@ -73,7 +73,8 @@ const scanStaleness = async (force = false): Promise<StaleIssue[]> => {
   const ci = envValue('CI') === 'true' || envValue('CI') === '1'
   const forced = force || ci || envValue(envForce) === '1'
   const state = await loadState()
-  if (!forced && state.lastCheck > 0 && Date.now() - state.lastCheck < cacheTtlMs) return state.staleIssues
+  if (!forced && state.lastCheck > 0 && Date.now() - state.lastCheck < cacheTtlMs)
+    return state.staleIssues.filter(issue => !Object.hasOwn(staleExceptions, issue.name))
   const names = await trackedPackages()
   const results = await Promise.all(
     names.map(async name => {
