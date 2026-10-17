@@ -43,6 +43,7 @@ const runGate = async ({ command, human, version }: { command: 'check' | 'fix'; 
   await runLint({ command, human })
   await persistGreen(await computeGreenKey(version))
   await stalePromise
+  if (process.exitCode !== undefined && process.exitCode !== 0) return
   process.stdout.write('ok\n')
 }
 export { runGate }

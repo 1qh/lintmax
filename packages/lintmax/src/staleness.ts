@@ -54,6 +54,12 @@ const staleExceptions: Readonly<Record<string, { reason: string; revisitWhen: st
       'it is the sole dep still pinning eslint to ^9, and replacing it COSTS coverage: of its 83 active rules oxlint re-owns 49 and @eslint-react/perfectionist re-own 5, 20 are obsolete under the new JSX transform or the propTypes era, 7 belong to the formatter, and 6 have no home anywhere — destructuring-assignment, no-invalid-html-attribute, no-adjacent-inline-elements, plus the class-only no-arrow-function-lifecycle, static-property-placement and require-optimization. Strictness is monotonic-up, so the gate carries a stale dep rather than drop six enforced rules',
     revisitWhen:
       'a maintained plugin covers those 6 ids, or every class component is gone (retiring the 3 class-only ones) and the other 3 are re-homed — then drop this dep and take eslint 10'
+  },
+  'eslint-plugin-react-hooks': {
+    reason:
+      'its source in facebook/react under packages/eslint-plugin-react-hooks received commits on 2026-10-14 and its npm record changed on 2026-10-15 through prerelease publishes; stable latest 7.1.1 is older than 6 months because stable releases follow React own release cadence — the age means a slow stable cadence, not abandonment',
+    revisitWhen:
+      'a stable eslint-plugin-react-hooks past 7.1.1 is published, or packages/eslint-plugin-react-hooks in facebook/react stops receiving commits for 6 months'
   }
 }
 const toIssue = (name: string, publishedAt: number): null | StaleIssue => {
@@ -82,7 +88,6 @@ const scanStaleness = async (force = false): Promise<StaleIssue[]> => {
 const formatStaleness = (issues: readonly StaleIssue[]): string => {
   if (issues.length === 0) return ''
   const lines = issues.map(issue => `  ${issue.name} latest release ${issue.ageDays}d old (>6mo)`)
-  return `lintmax: stale linter deps (advisory):\n${lines.join('\n')}`
+  return `lintmax: stale linter deps — FAILS the gate:\n${lines.join('\n')}\nClear by bumping the dependency, or adding a staleExceptions entry with a reason and a revisitWhen trigger.`
 }
-export type { StaleIssue }
-export { formatStaleness, scanStaleness, trackedPackages }
+export { formatStaleness, scanStaleness, type StaleIssue, trackedPackages }
