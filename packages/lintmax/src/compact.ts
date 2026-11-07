@@ -43,7 +43,7 @@ const extension = ({ path }: { path: string }): string => {
   const dotIndex = path.lastIndexOf('.')
   return dotIndex > slashIndex ? path.slice(dotIndex) : ''
 }
-const compactContent = ({ content }: { content: string }): string => content.replace(COMPACT_REGEX, '\n')
+const compactContent = ({ content }: { content: string }): string => content.replaceAll(COMPACT_REGEX, '\n')
 const isCompactCandidate = ({ relativePath }: { relativePath: string }): boolean => {
   const fileName = basename({ path: relativePath })
   if (compactBasenames.has(fileName)) return true
@@ -64,6 +64,55 @@ const listCompactFiles = async ({
   const symlinkFlags = await Promise.all(entries.map(async e => isSymlinkSafe(join(root, e))))
   return entries.filter((_e, index) => !symlinkFlags[index])
 }
+interface CompactFileResult {
+  changed: boolean
+  relativePath: string
+  scanned: boolean
+}
+const compactFileContent = async ({
+  absolutePath,
+  bytes,
+  mode,
+  relativePath
+}: {
+  absolutePath: string
+  bytes: Uint8Array
+  mode: 'check' | 'fix'
+  relativePath: string
+}): Promise<CompactFileResult> => {
+  if (isBinary({ bytes })) return { changed: false, relativePath, scanned: true }
+  const content = decodeText(bytes)
+  const compacted = compactContent({ content })
+  if (content === compacted) return { changed: false, relativePath, scanned: true }
+  if (mode === 'fix') await write(absolutePath, compacted)
+  return { changed: true, relativePath, scanned: true }
+}
+const compactFile = async (relativePath: string, root: string, mode: 'check' | 'fix'): Promise<CompactFileResult> => {
+  if (!isCompactCandidate({ relativePath })) return { changed: false, relativePath, scanned: false }
+  const absolutePath = joinPath(root, relativePath)
+  const source = file(absolutePath)
+  if (!(await source.exists())) return { changed: false, relativePath, scanned: false }
+  return compactFileContent({ absolutePath, bytes: new Uint8Array(await source.arrayBuffer()), mode, relativePath })
+}
+const printCompactCounts = (results: CompactFileResult[], changed: string[]) => {
+  const scanned = results.filter(result => result.scanned).length
+  process.stdout.write(`[compact] Scanned ${scanned} files\n`)
+  process.stdout.write(`[compact] Updated ${changed.length} files\n`)
+}
+const reportCompact = (results: CompactFileResult[], mode: 'check' | 'fix', human: boolean) => {
+  const changed = results.filter(result => result.changed).map(result => result.relativePath)
+  if (mode === 'fix') {
+    if (human) printCompactCounts(results, changed)
+    return
+  }
+  if (changed.length === 0) return
+  const shown = changed.slice(0, 10)
+  const suffix = changed.length > shown.length ? `\n...and ${changed.length - shown.length} more` : ''
+  throw new CliExitError({
+    code: 1,
+    message: `[compact]\nFiles requiring compaction:\n${shown.join('\n')}${suffix}\nRun: lintmax fix`
+  })
+}
 const runCompact = async ({
   env,
   human = false,
@@ -79,40 +128,7 @@ const runCompact = async ({
 }) => {
   const listed = await listCompactFiles({ env, root })
   const files = isIgnored === undefined ? listed : listed.filter(one => !isIgnored(one))
-  const results = await Promise.all(
-    files.map(async relativePath => {
-      if (!isCompactCandidate({ relativePath })) return { changed: false, relativePath, scanned: false }
-      const absolutePath = joinPath(root, relativePath)
-      const source = file(absolutePath)
-      if (!(await source.exists())) return { changed: false, relativePath, scanned: false }
-      const bytes = new Uint8Array(await source.arrayBuffer())
-      if (isBinary({ bytes })) return { changed: false, relativePath, scanned: true }
-      const content = decodeText(bytes)
-      const compacted = compactContent({ content })
-      if (content === compacted) return { changed: false, relativePath, scanned: true }
-      if (mode === 'fix') await write(absolutePath, compacted)
-      return { changed: true, relativePath, scanned: true }
-    })
-  )
-  const changed: string[] = []
-  let scanned = 0
-  for (const result of results) {
-    if (result.scanned) scanned += 1
-    if (result.changed) changed.push(result.relativePath)
-  }
-  if (mode === 'fix') {
-    if (human) {
-      process.stdout.write(`[compact] Scanned ${scanned} files\n`)
-      process.stdout.write(`[compact] Updated ${changed.length} files\n`)
-    }
-    return
-  }
-  if (changed.length === 0) return
-  const shown = changed.slice(0, 10)
-  const suffix = changed.length > shown.length ? `\n...and ${changed.length - shown.length} more` : ''
-  throw new CliExitError({
-    code: 1,
-    message: `[compact]\nFiles requiring compaction:\n${shown.join('\n')}${suffix}\nRun: lintmax fix`
-  })
+  const results = await Promise.all(files.map(async relativePath => compactFile(relativePath, root, mode)))
+  reportCompact(results, mode, human)
 }
 export { listCompactFiles, runCompact }

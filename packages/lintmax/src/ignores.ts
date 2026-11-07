@@ -1,12 +1,11 @@
-/* eslint-disable prefer-named-capture-group */
-/** biome-ignore-all lint/nursery/useNamedCaptureGroup: not needed */
 import { file, Glob } from 'bun'
 import { DEFAULT_SHARED_IGNORE_PATTERNS, ESLINT_TEST_FILE_PATTERNS } from './constants.js'
+import { matchesGlob } from './glob.js'
 import { joinPath } from './path.js'
 import { listProjectFiles } from './project-files.js'
-const eslintDisableRe = /eslint-disable(?:-next-line)?\s+([^\n]*)/gv
-const oxlintDisableRe = /oxlint-disable(?:-next-line)?\s+([^\n]*)/gv
-const biomeIgnoreRe = /biome-ignore(?:-all)?\s+([\w/]+)/gu
+const eslintDisableRe = /eslint-disable(?:-next-line)?\s+(?<rules>[^\n]*)/gv
+const oxlintDisableRe = /oxlint-disable(?:-next-line)?\s+(?<rules>[^\n]*)/gv
+const biomeIgnoreRe = /biome-ignore(?:-all)?\s+(?<rules>[\w/]+)/gu
 const tsIgnoreRe = /@ts-(?:expect-error|ignore|nocheck)/gv
 const stripRuleTail = (rule: string): string => {
   const dash = rule.indexOf('--')
@@ -29,13 +28,13 @@ const DANGEROUS_PATTERNS = [
   'noNonNullAssertion'
 ]
 const DANGEROUS_NON_TEST_PATTERNS = ['@ts-expect-error', 'no-explicit-any', 'noExplicitAny']
-const isTestFile = (f: string): boolean => ESLINT_TEST_FILE_PATTERNS.some(p => new Glob(p).match(f))
+const isTestFile = (f: string): boolean => ESLINT_TEST_FILE_PATTERNS.some(p => matchesGlob(new Glob(p), f))
 const parseRules = (line: string, re: RegExp): string[] => {
   const rules: string[] = []
   re.lastIndex = 0
   let match = re.exec(line)
   while (match) {
-    const raw = match[1]
+    const raw = match.groups?.rules ?? match[1]
     if (raw)
       for (const r of raw.split(',')) {
         const trimmed = stripRuleTail(r)
@@ -69,9 +68,9 @@ const rulesFromContent = (content: string): string[] => {
   return rules
 }
 const findDangerousSuppressions = async (cwd: string): Promise<DangerousSuppression[]> => {
-  const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
+  const ignoreGlobs: Glob[] = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
   const files = (await listProjectFiles({ root: cwd })).filter(
-    p => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.d.ts') && !ignoreGlobs.some(g => g.match(p))
+    p => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.d.ts') && ignoreGlobs.every(g => !matchesGlob(g, p))
   )
   const results = await Promise.all(
     files.map(async relativePath => {

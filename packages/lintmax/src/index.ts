@@ -237,7 +237,7 @@ const normalizeSharedOverrides = ({
       value: rawOverride
     })
     for (const key of Object.keys(override))
-      if (!SHARED_OVERRIDE_KEYS.some(k => k === key))
+      if (SHARED_OVERRIDE_KEYS.every(k => k !== key))
         throw new Error(`${label}.${pattern}.${key} is not supported. Use biome, eslint, or oxlint.`)
     entries.push({
       ...override,
@@ -268,41 +268,54 @@ const collectSharedRuleOverrides = ({
   }
   return out
 }
+interface LinterOffOverridesInput {
+  assertKnownRules?: (rules: Record<string, 'off'>) => void
+  fileKey: 'files' | 'includes'
+  label: string
+  requireOff?: boolean
+  value: unknown
+}
+const parseLinterOffOverride = ({
+  assertKnownRules,
+  fileKey,
+  index,
+  label,
+  override,
+  requireOff
+}: Omit<LinterOffOverridesInput, 'value'> & {
+  index: number
+  override: Record<string, unknown>
+}): undefined | { files: string[]; rules: Record<string, 'off'> } => {
+  const itemLabel = requireOff ? `${label}[${index}]` : label
+  if (requireOff && override[fileKey] === undefined) throw new Error(`${label}[${index}].${fileKey} is required`)
+  if (requireOff && override.off === undefined) throw new Error(`${label}[${index}].off is required`)
+  const rules = normalizeRulesOffInput({ label: `${itemLabel}.off`, value: override.off })
+  if (!rules) return
+  assertKnownRules?.(rules)
+  return {
+    files: normalizePathListInput({ label: `${itemLabel}.${fileKey}`, value: override[fileKey] }),
+    rules
+  }
+}
 const parseLinterOffOverrides = ({
   assertKnownRules,
   fileKey,
   label,
   requireOff = false,
   value
-}: {
-  assertKnownRules?: (rules: Record<string, 'off'>) => void
-  fileKey: 'files' | 'includes'
-  label: string
-  requireOff?: boolean
-  value: unknown
-}): { files: string[]; rules: Record<string, 'off'> }[] => {
+}: LinterOffOverridesInput): { files: string[]; rules: Record<string, 'off'> }[] => {
   const out: { files: string[]; rules: Record<string, 'off'> }[] = []
-  for (const [i, override] of normalizeObjectListInput({
-    label,
-    value
-  }).entries()) {
-    const itemLabel = requireOff ? `${label}[${i}]` : label
-    if (requireOff && override[fileKey] === undefined) throw new Error(`${label}[${i}].${fileKey} is required`)
-    if (requireOff && override.off === undefined) throw new Error(`${label}[${i}].off is required`)
-    const normalizedOverrideRules = normalizeRulesOffInput({
-      label: `${itemLabel}.off`,
-      value: override.off
+  const overrides = normalizeObjectListInput({ label, value })
+  for (const [i, override] of overrides.entries()) {
+    const normalizedOverride = parseLinterOffOverride({
+      assertKnownRules,
+      fileKey,
+      index: i,
+      label,
+      override,
+      requireOff
     })
-    if (normalizedOverrideRules) {
-      assertKnownRules?.(normalizedOverrideRules)
-      out.push({
-        files: normalizePathListInput({
-          label: `${itemLabel}.${fileKey}`,
-          value: override[fileKey]
-        }),
-        rules: normalizedOverrideRules
-      })
-    }
+    if (normalizedOverride) out.push(normalizedOverride)
   }
   return out
 }
@@ -604,6 +617,54 @@ const buildEslintIgnorePatterns = ({
           })
     ]
   })
+const resolveAppendEntries = (
+  entries: readonly ParsedSyncEslintAppendEntry[],
+  eslintImportRefs: SyncEslintImportRef[]
+) => {
+  const appendEntries: Linter.Config[] = []
+  for (const entry of entries)
+    if ('config' in entry) appendEntries.push(entry.config)
+    else {
+      const importRefIndex = eslintImportRefs.length
+      eslintImportRefs.push({
+        exportName: entry.name,
+        files: entry.files,
+        ignores: entry.ignores,
+        source: entry.from
+      })
+      appendEntries.push({
+        [ESLINT_IMPORT_MARKER_KEY]: importRefIndex
+        /** biome-ignore lint/nursery/noUnsafeTypeAssertion: marker object requires the external ESLint config type */
+      } as Linter.Config)
+    }
+  return appendEntries
+}
+const assembleEslintOptions = ({
+  eslintIgnores,
+  eslintImportRefs,
+  eslintSource,
+  sharedRuleOverrides,
+  tailwind,
+  tsconfigRootDir
+}: {
+  eslintIgnores: string[]
+  eslintImportRefs: SyncEslintImportRef[]
+  eslintSource?: ParsedEslintSyncConfig
+  sharedRuleOverrides: Linter.Config[]
+  tailwind?: TailwindOption
+  tsconfigRootDir?: string
+}): EslintOptions => {
+  const eslintOptions: EslintOptions = {
+    off: eslintSource?.off,
+    tailwind: normalizeTailwindOption({ label: 'tailwind', value: tailwind }) ?? true,
+    tsconfigRootDir
+  }
+  if (eslintIgnores.length > 0) eslintOptions.ignores = eslintIgnores
+  const appendEntries = resolveAppendEntries(eslintSource?.append ?? [], eslintImportRefs)
+  const mergedAppend: Linter.Config[] = [...sharedRuleOverrides, ...appendEntries]
+  if (mergedAppend.length > 0) eslintOptions.append = mergedAppend
+  return eslintOptions
+}
 const buildEslintOptions = ({
   eslintSource,
   sharedOverrides,
@@ -635,33 +696,14 @@ const buildEslintOptions = ({
   const sharedOverrideAppendIndexes = sharedRuleOverrides.map((_, index) => index)
   const eslintImportRefs: SyncEslintImportRef[] = []
   if (eslintSource || sharedOverrides.length > 0 || tailwind !== undefined || tsconfigRootDir !== undefined) {
-    const eslintOptions: EslintOptions = {
-      off: eslintSource?.off
-    }
-    if (eslintIgnores.length > 0) eslintOptions.ignores = eslintIgnores
-    const appendEntries: Linter.Config[] = []
-    for (const entry of eslintSource?.append ?? [])
-      if ('config' in entry) appendEntries.push(entry.config)
-      else {
-        const importRefIndex = eslintImportRefs.push({
-          exportName: entry.name,
-          files: entry.files,
-          ignores: entry.ignores,
-          source: entry.from
-        })
-        appendEntries.push({
-          [ESLINT_IMPORT_MARKER_KEY]: importRefIndex - 1
-          /** biome-ignore lint/nursery/noUnsafeTypeAssertion: marker object requires the external ESLint config type */
-        } as Linter.Config)
-      }
-    const mergedAppend: Linter.Config[] = [...sharedRuleOverrides, ...appendEntries]
-    if (mergedAppend.length > 0) eslintOptions.append = mergedAppend
-    const mergedTailwind = normalizeTailwindOption({
-      label: 'tailwind',
-      value: tailwind
+    const eslintOptions = assembleEslintOptions({
+      eslintIgnores,
+      eslintImportRefs,
+      eslintSource,
+      sharedRuleOverrides,
+      tailwind,
+      tsconfigRootDir
     })
-    eslintOptions.tailwind = mergedTailwind ?? true
-    eslintOptions.tsconfigRootDir = tsconfigRootDir
     return {
       eslintImportRefs,
       eslintOptions,
@@ -717,16 +759,7 @@ const normalizeKnownOffRules = ({
   assertKnownRules?.(normalizedRules)
   return normalizedRules
 }
-const createBiomeConfig = async ({
-  cwd,
-  options,
-  sharedIgnorePatterns
-}: {
-  cwd: string
-  options?: BiomeOptions
-  sharedIgnorePatterns?: string[]
-}): Promise<Record<string, unknown>> => {
-  const { categories, ruleMap } = await resolveBiomeSchema({ cwd })
+const biomeOffRules = (options: BiomeOptions | undefined, ruleMap: Map<string, string>) => {
   const allRulesOff = [...BIOME_RULES_OFF]
   const normalizedRules = normalizeKnownOffRules({
     assertKnownRules: rules =>
@@ -743,6 +776,9 @@ const createBiomeConfig = async ({
       const ruleName = stripPluginNamespace({ rule: key })
       if (!allRulesOff.includes(ruleName)) allRulesOff.push(ruleName)
     }
+  return allRulesOff
+}
+const biomeIgnorePatterns = (options: BiomeOptions | undefined, sharedIgnorePatterns: string[] | undefined) => {
   const ignorePatterns = [...BIOME_IGNORE_PATTERNS]
   const mergedIgnorePatterns = mergeIgnorePatternGroups({
     groups: [
@@ -759,6 +795,17 @@ const createBiomeConfig = async ({
     const negated = normalizeBiomeIgnorePattern({ pattern })
     if (!ignorePatterns.includes(negated)) ignorePatterns.push(negated)
   }
+  return ignorePatterns
+}
+const biomeOverrides = ({
+  allRulesOff,
+  options,
+  ruleMap
+}: {
+  allRulesOff: string[]
+  options?: BiomeOptions
+  ruleMap: Map<string, string>
+}) => {
   const overrides: BiomeOverrideConfig[] = [
     {
       css: { parser: { tailwindDirectives: true } },
@@ -795,7 +842,7 @@ const createBiomeConfig = async ({
         })
       }
     })
-  for (const override of normalizeLinterOffOverrides({
+  const userOverrides = normalizeLinterOffOverrides({
     assertKnownRules: rules =>
       assertKnownBiomeRuleNames({
         categoryMap: ruleMap,
@@ -805,7 +852,8 @@ const createBiomeConfig = async ({
     fileKey: 'includes',
     label: 'biome.overrides',
     value: options?.overrides
-  }))
+  })
+  for (const override of userOverrides)
     overrides.push({
       includes: override.files,
       linter: {
@@ -815,6 +863,21 @@ const createBiomeConfig = async ({
         })
       }
     })
+  return overrides
+}
+const createBiomeConfig = async ({
+  cwd,
+  options,
+  sharedIgnorePatterns
+}: {
+  cwd: string
+  options?: BiomeOptions
+  sharedIgnorePatterns?: string[]
+}): Promise<Record<string, unknown>> => {
+  const { categories, ruleMap } = await resolveBiomeSchema({ cwd })
+  const allRulesOff = biomeOffRules(options, ruleMap)
+  const ignorePatterns = biomeIgnorePatterns(options, sharedIgnorePatterns)
+  const overrides = biomeOverrides({ allRulesOff, options, ruleMap })
   return {
     $schema: 'https://biomejs.dev/schemas/latest/schema.json',
     assist: { actions: { source: { organizeImports: 'off' } } },
@@ -853,27 +916,48 @@ const createBiomeConfig = async ({
       },
       rules: Object.fromEntries(categories.map(c => [c, 'error']))
     },
-    overrides
+    overrides,
+    yaml: { formatter: { quoteStyle: 'single' } }
   }
 }
-const createOxlintConfig = async ({
-  options,
-  sharedIgnorePatterns
-}: {
-  options?: OxlintOptions
-  sharedIgnorePatterns?: string[]
-}): Promise<Record<string, unknown>> => {
-  const base = readRequiredJson<{
-    [key: string]: unknown
-    ignorePatterns?: string[]
-    overrides?: { files: string[]; rules: Record<string, unknown> }[]
-    rules: Record<string, unknown>
-  }>(await file(joinPath(pkgRoot, 'oxlintrc.json')).text())
-  const knownRules = new Set<string>([
-    ...Object.keys(base.rules),
-    ...(base.overrides ?? []).flatMap(override => Object.keys(override.rules)),
-    ...OXLINT_PATTERN_RULE_OVERRIDES.flatMap(override => Object.keys(override.rules))
-  ])
+const applyOxlintOptions = (
+  base: { overrides?: { files: string[]; rules: Record<string, unknown> }[]; rules: Record<string, unknown> },
+  options: OxlintOptions,
+  knownRules: Set<string>
+) => {
+  const normalizedRules = normalizeKnownOffRules({
+    assertKnownRules: rules =>
+      assertKnownOxlintRuleNames({
+        knownRules,
+        label: 'oxlint.off',
+        rules
+      }),
+    label: 'oxlint.off',
+    value: options.off
+  })
+  if (normalizedRules) for (const [key, value] of Object.entries(normalizedRules)) base.rules[key] = value
+  const userOverrides = normalizeLinterOffOverrides({
+    assertKnownRules: rules =>
+      assertKnownOxlintRuleNames({
+        knownRules,
+        label: 'oxlint.overrides.off',
+        rules
+      }),
+    fileKey: 'files',
+    label: 'oxlint.overrides',
+    value: options.overrides
+  })
+  for (const override of userOverrides)
+    base.overrides?.push({
+      files: override.files,
+      rules: override.rules
+    })
+}
+const applyOxlintDefaults = (
+  base: { ignorePatterns?: string[]; overrides?: { files: string[]; rules: Record<string, unknown> }[] },
+  options: OxlintOptions | undefined,
+  sharedIgnorePatterns: string[] | undefined
+) => {
   const mergedIgnorePatterns = mergeIgnorePatternGroups({
     groups: [
       sharedIgnorePatterns,
@@ -896,33 +980,28 @@ const createOxlintConfig = async ({
     for (const pattern of mergedIgnorePatterns)
       if (!base.ignorePatterns.includes(pattern)) base.ignorePatterns.push(pattern)
   }
+}
+const createOxlintConfig = async ({
+  options,
+  sharedIgnorePatterns
+}: {
+  options?: OxlintOptions
+  sharedIgnorePatterns?: string[]
+}): Promise<Record<string, unknown>> => {
+  const base = readRequiredJson<{
+    [key: string]: unknown
+    ignorePatterns?: string[]
+    overrides?: { files: string[]; rules: Record<string, unknown> }[]
+    rules: Record<string, unknown>
+  }>(await file(joinPath(pkgRoot, 'oxlintrc.json')).text())
+  const knownRules = new Set<string>([
+    ...Object.keys(base.rules),
+    ...(base.overrides ?? []).flatMap(override => Object.keys(override.rules)),
+    ...OXLINT_PATTERN_RULE_OVERRIDES.flatMap(override => Object.keys(override.rules))
+  ])
+  applyOxlintDefaults(base, options, sharedIgnorePatterns)
   if (!options) return base
-  const normalizedRules = normalizeKnownOffRules({
-    assertKnownRules: rules =>
-      assertKnownOxlintRuleNames({
-        knownRules,
-        label: 'oxlint.off',
-        rules
-      }),
-    label: 'oxlint.off',
-    value: options.off
-  })
-  if (normalizedRules) for (const [key, value] of Object.entries(normalizedRules)) base.rules[key] = value
-  for (const override of normalizeLinterOffOverrides({
-    assertKnownRules: rules =>
-      assertKnownOxlintRuleNames({
-        knownRules,
-        label: 'oxlint.overrides.off',
-        rules
-      }),
-    fileKey: 'files',
-    label: 'oxlint.overrides',
-    value: options.overrides
-  }))
-    base.overrides.push({
-      files: override.files,
-      rules: override.rules
-    })
+  applyOxlintOptions(base, options, knownRules)
   return base
 }
 const resolveSyncImportSource = ({ cwd, dir, source }: { cwd: string; dir: string; source: string }) => {
@@ -943,45 +1022,23 @@ const discoverSymlinkPatterns = async ({ root }: { root: string }): Promise<read
     })
   )
   const out: string[] = []
-  for (const [index, entry] of entries.entries()) if (symlinkFlags[index]) out.push(entry)
+  const indexedEntries = entries.entries()
+  for (const [index, entry] of indexedEntries) if (symlinkFlags[index]) out.push(entry)
   return out
 }
-const sync = async (options?: SyncOptions): Promise<void> => {
-  const { biome, eslint, oxlint, sharedOverrides, tailwind, topLevelIgnores, tsconfigRootDir } = validateSyncOptions({
-    options
-  })
-  const cwd = process.cwd()
-  const dir = joinPath(cwd, cacheDir)
-  const userIgnorePatterns = buildUserIgnorePatterns({ topLevelIgnores })
-  const symlinkIgnorePatterns = await discoverSymlinkPatterns({ root: cwd })
-  const sharedIgnorePatterns = mergeIgnorePatternGroups({
-    groups: [DEFAULT_SHARED_IGNORE_PATTERNS, symlinkIgnorePatterns, userIgnorePatterns]
-  })
-  const biomeOptions = buildBiomeOptions({
-    biomeSource: biome,
-    sharedOverrides
-  })
-  const oxlintOptions = buildOxlintOptions({
-    oxlintSource: oxlint,
-    sharedOverrides
-  })
-  const { eslintImportRefs, eslintOptions, sharedOverrideAppendIndexes } = buildEslintOptions({
-    eslintSource: eslint,
-    sharedOverrides,
-    tailwind,
-    tsconfigRootDir,
-    userIgnorePatterns
-  })
-  await ensureDirectory({ directory: dir })
-  const biomeConfig = await createBiomeConfig({
-    cwd,
-    options: biomeOptions,
-    sharedIgnorePatterns
-  })
-  const oxlintConfig = await createOxlintConfig({
-    options: oxlintOptions,
-    sharedIgnorePatterns
-  })
+const buildEslintModule = ({
+  cwd,
+  dir,
+  eslintImportRefs,
+  eslintOptions,
+  sharedOverrideAppendIndexes
+}: {
+  cwd: string
+  dir: string
+  eslintImportRefs: SyncEslintImportRef[]
+  eslintOptions: EslintOptions | undefined
+  sharedOverrideAppendIndexes: number[]
+}) => {
   const normalizedImportRefs = eslintImportRefs.map(importRef => ({
     exportName: importRef.exportName,
     files: importRef.files,
@@ -999,8 +1056,9 @@ const sync = async (options?: SyncOptions): Promise<void> => {
     .map((importRef, index) =>
       [
         `  { exportName: ${JSON.stringify(importRef.exportName)}, `,
-        `files: ${JSON.stringify(importRef.files ?? null)}, `,
-        `ignores: ${JSON.stringify(importRef.ignores ?? null)}, module: __lintmaxAppendImport${index} }`
+        `files: ${importRef.files === undefined ? 'undefined' : JSON.stringify(importRef.files)}, `,
+        `ignores: ${importRef.ignores === undefined ? 'undefined' : JSON.stringify(importRef.ignores)}, `,
+        `module: __lintmaxAppendImport${index} }`
       ].join('')
     )
     .join(',\n')
@@ -1048,11 +1106,92 @@ for (const index of ${JSON.stringify(sharedOverrideAppendIndexes)}) {
 }${importExpansion}export default await eslint(options)
 `
     : "export { default } from 'lintmax/eslint'\n"
-  const runtimeConfig = { comments: options?.comments !== false, compact: options?.compact !== false }
-  await write(joinPath(dir, 'biome.json'), `${JSON.stringify(biomeConfig, null, 2)}\n`)
-  await write(joinPath(dir, '.oxlintrc.json'), `${JSON.stringify(oxlintConfig, null, 2)}\n`)
+  return eslintConfig
+}
+const prepareSyncOptions = async (options: SyncOptions | undefined, cwd: string) => {
+  const { biome, eslint, oxlint, sharedOverrides, tailwind, topLevelIgnores, tsconfigRootDir } = validateSyncOptions({
+    options
+  })
+  const userIgnorePatterns = buildUserIgnorePatterns({ topLevelIgnores })
+  const symlinkIgnorePatterns = await discoverSymlinkPatterns({ root: cwd })
+  const sharedIgnorePatterns = mergeIgnorePatternGroups({
+    groups: [DEFAULT_SHARED_IGNORE_PATTERNS, symlinkIgnorePatterns, userIgnorePatterns]
+  })
+  const biomeOptions = buildBiomeOptions({
+    biomeSource: biome,
+    sharedOverrides
+  })
+  const oxlintOptions = buildOxlintOptions({
+    oxlintSource: oxlint,
+    sharedOverrides
+  })
+  const { eslintImportRefs, eslintOptions, sharedOverrideAppendIndexes } = buildEslintOptions({
+    eslintSource: eslint,
+    sharedOverrides,
+    tailwind,
+    tsconfigRootDir,
+    userIgnorePatterns
+  })
+  return {
+    biomeOptions,
+    eslintImportRefs,
+    eslintOptions,
+    oxlintOptions,
+    sharedIgnorePatterns,
+    sharedOverrideAppendIndexes
+  }
+}
+const writeSyncConfigs = async ({
+  biomeConfig,
+  comments,
+  compact,
+  dir,
+  eslintConfig,
+  oxlintConfig
+}: {
+  biomeConfig: Record<string, unknown>
+  comments: boolean
+  compact: boolean
+  dir: string
+  eslintConfig: string
+  oxlintConfig: Record<string, unknown>
+}) => {
+  const runtimeConfig = { comments, compact }
+  await write(joinPath(dir, 'biome.json'), `${JSON.stringify(biomeConfig, undefined, 2)}\n`)
+  await write(joinPath(dir, '.oxlintrc.json'), `${JSON.stringify(oxlintConfig, undefined, 2)}\n`)
   await write(joinPath(dir, 'eslint.generated.mjs'), eslintConfig)
-  await write(joinPath(dir, 'lintmax.json'), `${JSON.stringify(runtimeConfig, null, 2)}\n`)
+  await write(joinPath(dir, 'lintmax.json'), `${JSON.stringify(runtimeConfig, undefined, 2)}\n`)
+}
+const sync = async (options?: SyncOptions): Promise<void> => {
+  const cwd = process.cwd()
+  const dir = joinPath(cwd, cacheDir)
+  const {
+    biomeOptions,
+    eslintImportRefs,
+    eslintOptions,
+    oxlintOptions,
+    sharedIgnorePatterns,
+    sharedOverrideAppendIndexes
+  } = await prepareSyncOptions(options, cwd)
+  await ensureDirectory({ directory: dir })
+  const biomeConfig = await createBiomeConfig({
+    cwd,
+    options: biomeOptions,
+    sharedIgnorePatterns
+  })
+  const oxlintConfig = await createOxlintConfig({
+    options: oxlintOptions,
+    sharedIgnorePatterns
+  })
+  const eslintConfig = buildEslintModule({ cwd, dir, eslintImportRefs, eslintOptions, sharedOverrideAppendIndexes })
+  await writeSyncConfigs({
+    biomeConfig,
+    comments: options?.comments !== false,
+    compact: options?.compact !== false,
+    dir,
+    eslintConfig,
+    oxlintConfig
+  })
 }
 const eslintImport = ({
   files,

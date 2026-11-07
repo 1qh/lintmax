@@ -18,6 +18,7 @@ interface RunOpts {
   env: Record<string, string | undefined>
   label: string
   silent?: boolean
+  timeoutMs?: number
 }
 interface StepSpec {
   args: string[]
@@ -79,18 +80,18 @@ const ensureDirectory = async ({ directory }: { directory: string }): Promise<vo
     message: stderr.length > 0 ? stderr : `Failed to create directory: ${directory}`
   })
 }
-const resolvePackageJsonPath = async ({ pkg }: { pkg: string }): Promise<null | string> => {
+const resolvePackageJsonPath = async ({ pkg }: { pkg: string }): Promise<string | undefined> => {
   try {
     return fromFileUrl(import.meta.resolve(`${pkg}/package.json`))
   } catch {
     const consumerCandidate = joinPath(cwd, 'node_modules', pkg, 'package.json')
     if (await pathExists({ path: consumerCandidate })) return consumerCandidate
-    return null
+    return undefined
   }
 }
 const resolveBin = async ({ bin, pkg }: { bin: string; pkg: string }): Promise<string> => {
   const packageJsonPath = await resolvePackageJsonPath({ pkg })
-  if (!packageJsonPath)
+  if (packageJsonPath === undefined)
     throw new CliExitError({
       code: 1,
       message: `Cannot find ${pkg} — run: bun add -d ${pkg}`
@@ -113,47 +114,60 @@ const run = async ({ args, command, env, label, silent = false }: RunOpts): Prom
   }
   throw new CliExitError({ code: result.exitCode })
 }
+const STEP_TIMEOUT_MS = 1_800_000
+const prepareCapture = async (directory: string, { args, command, label }: RunOpts) => {
+  const stdoutPath = joinPath(directory, 'stdout')
+  const stderrPath = joinPath(directory, 'stderr')
+  const outputPath = joinPath(directory, 'diagnostics')
+  const outputArgs = label === 'eslint' ? ['--output-file', outputPath] : []
+  const nativeOutput = outputArgs.length > 0
+  const captureArgs = [...args, ...outputArgs]
+  if (nativeOutput) await writeFile(outputPath, '')
+  const windows = process.platform === 'win32'
+  const commandArgs = windows
+    ? [command, ...captureArgs]
+    : [
+        '/bin/sh',
+        '-c',
+        'stdout=$1; stderr=$2; shift 2; exec "$@" > "$stdout" 2> "$stderr"',
+        'lintmax-capture',
+        stdoutPath,
+        stderrPath,
+        command,
+        ...captureArgs
+      ]
+  return { commandArgs, nativeOutput, outputPath, stderrPath, stdoutPath, windows }
+}
+const executeCapture = async (opts: RunOpts, directory: string, timeoutMs: number) => {
+  const { commandArgs, nativeOutput, outputPath, stderrPath, stdoutPath, windows } = await prepareCapture(directory, opts)
+  const child = spawn(commandArgs, {
+    cwd,
+    env: opts.env,
+    stderr: windows ? file(stderrPath) : 'ignore',
+    stdout: windows ? file(stdoutPath) : 'ignore',
+    timeout: timeoutMs
+  })
+  const exitCode = await child.exited
+  const [stderr, stdout] = await Promise.all([
+    file(stderrPath).text(),
+    file(nativeOutput ? outputPath : stdoutPath).text()
+  ])
+  const timedOut = child.signalCode === 'SIGTERM'
+  const note = timedOut
+    ? `lintmax: ${opts.label} timed out after ${Math.round(timeoutMs / 1000)} s and was killed; it reported no findings\n`
+    : ''
+  return { exitCode, stderr: `${stderr}${note}`, stdout }
+}
 const runCapture = async ({
   args,
   command,
   env,
-  label
+  label,
+  timeoutMs = STEP_TIMEOUT_MS
 }: RunOpts): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
   const directory = await mkdtemp(joinPath(tmpdir(), 'lintmax-output-'))
   try {
-    const stdoutPath = joinPath(directory, 'stdout')
-    const stderrPath = joinPath(directory, 'stderr')
-    const outputPath = joinPath(directory, 'diagnostics')
-    const outputArgs = label === 'eslint' ? ['--output-file', outputPath] : []
-    const nativeOutput = outputArgs.length > 0
-    const captureArgs = [...args, ...outputArgs]
-    if (nativeOutput) await writeFile(outputPath, '')
-    const windows = process.platform === 'win32'
-    const commandArgs = windows
-      ? [command, ...captureArgs]
-      : [
-          '/bin/sh',
-          '-c',
-          'stdout=$1; stderr=$2; shift 2; exec "$@" > "$stdout" 2> "$stderr"',
-          'lintmax-capture',
-          stdoutPath,
-          stderrPath,
-          command,
-          ...captureArgs
-        ]
-    const child = spawn(commandArgs, {
-      cwd,
-      env,
-      stderr: windows ? file(stderrPath) : 'ignore',
-      stdout: windows ? file(stdoutPath) : 'ignore',
-      timeout: 600_000
-    })
-    const exitCode = await child.exited
-    const [stderr, stdout] = await Promise.all([
-      file(stderrPath).text(),
-      file(nativeOutput ? outputPath : stdoutPath).text()
-    ])
-    return { exitCode, stderr, stdout }
+    return await executeCapture({ args, command, env, label }, directory, timeoutMs)
   } finally {
     await rm(directory, { recursive: true })
   }

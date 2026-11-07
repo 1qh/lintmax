@@ -6,7 +6,12 @@ interface OxlintOverrideConfig {
   files: readonly string[]
   rules: Readonly<Record<string, 'off'>>
 }
+const BIOME_POLICY_RULES_OFF = {
+  usePackageJsonCpu: 'CPU support is project policy; portable packages need no architecture restriction.',
+  usePackageJsonEngines: 'Runtime support is project policy; every project need not declare an engines constraint.'
+}
 const BIOME_RULES_OFF: readonly string[] = [
+  ...Object.keys(BIOME_POLICY_RULES_OFF),
   'noBarrelFile',
   'noConditionalExpect',
   'noConsole',

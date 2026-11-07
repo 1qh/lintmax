@@ -2,10 +2,10 @@
 /** biome-ignore-all lint/suspicious/noTemplateCurlyInString: test fixtures contain JSX template literal strings */
 import { describe, expect, test } from 'bun:test'
 import { findClassNameViolations } from './class-name.js'
-const check = (code: string) => findClassNameViolations({ sourceText: code })
+const check = async (code: string) => findClassNameViolations({ sourceText: code })
 describe('unparseable source', () => {
-  test('throws on unreadable source so a check cannot silently report zero violations', () => {
-    expect(() => check('<div className={`a-${x}`} />\n<span className={`b-${y}`} />')).toThrow(/cannot parse/v)
+  test('throws on unreadable source so a check cannot silently report zero violations', async () => {
+    await expect(check('<div className={`a-${x}`} />\n<span className={`b-${y}`} />')).rejects.toThrow(/cannot parse/v)
   })
 })
 describe('cn/no-template-literal', () => {
@@ -18,42 +18,42 @@ describe('cn/no-template-literal', () => {
       \${active ? 'font-bold' : ''}
     \`} />`
     ]
-  ] as const)('%s', (_title, source) => {
-    const violations = check(source)
+  ] as const)('%s', async (_title, source) => {
+    const violations = await check(source)
     expect(violations).toHaveLength(1)
     expect(violations[0]?.rule).toBe('cn/no-template-literal')
   })
   test.each([
     ['allows static string className', '<div className="text-red-500" />'],
     ['allows cn() with template-like args', '<div className={cn("base", active && "bold")} />']
-  ] as const)('%s', (_title, source) => {
-    expect(check(source)).toHaveLength(0)
+  ] as const)('%s', async (_title, source) => {
+    expect(await check(source)).toHaveLength(0)
   })
 })
 describe('cn/no-ternary', () => {
-  test('catches bare ternary className', () => {
-    const violations = check('<div className={active ? "text-red" : "text-blue"} />')
+  test('catches bare ternary className', async () => {
+    const violations = await check('<div className={active ? "text-red" : "text-blue"} />')
     expect(violations).toHaveLength(1)
     expect(violations[0]?.rule).toBe('cn/no-ternary')
   })
   test.each([
     ['allows ternary inside cn()', '<div className={cn(active ? "text-red" : "text-blue")} />'],
     ['allows ternary inside cn() with base classes', '<div className={cn("base", active ? "a" : "b")} />']
-  ] as const)('%s', (_title, source) => {
-    expect(check(source)).toHaveLength(0)
+  ] as const)('%s', async (_title, source) => {
+    expect(await check(source)).toHaveLength(0)
   })
 })
 describe('cn/no-concatenation', () => {
   test.each([
     ['catches string concatenation className', '<div className={"base " + extraClass} />'],
     ['catches variable + string concat', '<div className={a + " " + b} />']
-  ] as const)('%s', (_title, source) => {
-    const violations = check(source)
+  ] as const)('%s', async (_title, source) => {
+    const violations = await check(source)
     expect(violations).toHaveLength(1)
     expect(violations[0]?.rule).toBe('cn/no-concatenation')
   })
-  test('allows cn() with multiple args', () => {
-    expect(check('<div className={cn("base", extraClass)} />')).toHaveLength(0)
+  test('allows cn() with multiple args', async () => {
+    expect(await check('<div className={cn("base", extraClass)} />')).toHaveLength(0)
   })
 })
 describe('cn/no-banned-callee', () => {
@@ -63,17 +63,17 @@ describe('cn/no-banned-callee', () => {
     ['catches twMerge() in className', '<div className={twMerge("px-2", "px-4")} />'],
     ['catches cx() in className', '<div className={cx("a", "b")} />'],
     ['catches clsx() outside className too', 'const cls = clsx("a", condition && "b")']
-  ] as const)('%s', (_title, source) => {
-    const violations = check(source)
+  ] as const)('%s', async (_title, source) => {
+    const violations = await check(source)
     expect(violations).toHaveLength(1)
     expect(violations[0]?.rule).toBe('cn/no-banned-callee')
   })
-  test('catches classnames() as standalone call', () => {
-    const violations = check('const x = classnames("a", { b: true })')
+  test('catches classnames() as standalone call', async () => {
+    const violations = await check('const x = classnames("a", { b: true })')
     expect(violations).toHaveLength(1)
   })
-  test('allows cn() in className', () => {
-    expect(check('<div className={cn("base", active && "bold")} />')).toHaveLength(0)
+  test('allows cn() in className', async () => {
+    expect(await check('<div className={cn("base", active && "bold")} />')).toHaveLength(0)
   })
 })
 describe('valid patterns (no violations)', () => {
@@ -91,13 +91,13 @@ describe('valid patterns (no violations)', () => {
     ['className in non-JSX context', 'const className = "test"'],
     ['empty file', ''],
     ['no JSX at all', 'const x = 1 + 2']
-  ] as const)('%s', (_title, source) => {
-    expect(check(source)).toHaveLength(0)
+  ] as const)('%s', async (_title, source) => {
+    expect(await check(source)).toHaveLength(0)
   })
 })
 describe('edge cases', () => {
-  test('nested components with mixed patterns', () => {
-    const violations = check(`
+  test('nested components with mixed patterns', async () => {
+    const violations = await check(`
       <div className={cn("outer")}>
         <span className={\`inner-\${x}\`} />
       </div>
@@ -105,8 +105,8 @@ describe('edge cases', () => {
     expect(violations).toHaveLength(1)
     expect(violations[0]?.rule).toBe('cn/no-template-literal')
   })
-  test('multiple violations in one file', () => {
-    const violations = check(`<>
+  test('multiple violations in one file', async () => {
+    const violations = await check(`<>
       <div className={\`a-\${x}\`} />
       <span className={active ? "x" : "y"} />
       <p className={"a " + b} />
@@ -126,33 +126,33 @@ describe('edge cases', () => {
     ['deeply nested ternary in cn() is allowed', '<div className={cn(a ? b ? "x" : "y" : "z")} />'],
     ['object access className is fine', '<div className={styles.container} />'],
     ['function call that is not banned is fine', '<div className={getClassName()} />']
-  ] as const)('%s', (_title, source) => {
-    expect(check(source)).toHaveLength(0)
+  ] as const)('%s', async (_title, source) => {
+    expect(await check(source)).toHaveLength(0)
   })
-  test('className on custom component', () => {
-    const violations = check('<MyComponent className={`text-${color}`} />')
+  test('className on custom component', async () => {
+    const violations = await check('<MyComponent className={`text-${color}`} />')
     expect(violations).toHaveLength(1)
   })
   test.each([
     ['component className prop', '<Button className={active ? "primary" : "secondary"} />', 'cn/no-ternary'],
     ['catches array join pattern', '<div className={["a", "b"].join(" ")} />', 'cn/no-join'],
     ['catches variable.join() in className', '<div className={classes.join(" ")} />', 'cn/no-join']
-  ] as const)('%s', (_title, source, rule) => {
-    const violations = check(source)
+  ] as const)('%s', async (_title, source, rule) => {
+    const violations = await check(source)
     expect(violations).toHaveLength(1)
     expect(violations[0]?.rule).toBe(rule)
   })
 })
 describe('line numbers', () => {
-  test('reports correct line number', () => {
-    const violations = check(`const x = 1
+  test('reports correct line number', async () => {
+    const violations = await check(`const x = 1
 const y = 2
 const z = <div className={\`test-\${x}\`} />`)
     expect(violations).toHaveLength(1)
     expect(violations[0]?.line).toBe(3)
   })
-  test('reports correct lines for multiple violations', () => {
-    const violations = check(`<><div className={clsx("a")} />
+  test('reports correct lines for multiple violations', async () => {
+    const violations = await check(`<><div className={clsx("a")} />
 <span className="ok" />
 <p className={\`b-\${x}\`} /></>`)
     expect(violations).toHaveLength(2)

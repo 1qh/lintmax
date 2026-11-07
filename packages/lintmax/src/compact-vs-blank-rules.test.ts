@@ -3,22 +3,26 @@ import { tmpdir } from 'node:os'
 import { runCompact } from './compact.js'
 import { isRecord } from './normalize.js'
 import { fromFileUrl, joinPath } from './path.js'
+const setupBlankLineFixture = async () => {
+  const root = joinPath(tmpdir(), `lintmax-compact-blank-${Date.now()}`)
+  await Bun.$`mkdir -p ${root}`.quiet()
+  await Bun.$`git -C ${root} init -q`.quiet()
+  const subject = joinPath(root, 'subject.ts')
+  const before = "import { a } from 'b'\n\nconst x = 1\n"
+  await Bun.write(subject, before)
+  await Bun.$`git -C ${root} add -A`.quiet()
+  return { before, root, subject }
+}
 describe('a lint rule that requires a blank line cannot coexist with the compact stage', () => {
   test('compact deletes the blank line after an import block, so any rule demanding one is unsatisfiable', async () => {
-    const root = joinPath(tmpdir(), `lintmax-compact-blank-${Date.now()}`)
-    await Bun.$`mkdir -p ${root}`.quiet()
-    await Bun.$`git -C ${root} init -q`.quiet()
-    const subject = joinPath(root, 'subject.ts')
-    const before = "import { a } from 'b'\n\nconst x = 1\n"
-    await Bun.write(subject, before)
-    await Bun.$`git -C ${root} add -A`.quiet()
+    const { before, root, subject } = await setupBlankLineFixture()
     await runCompact({ env: process.env, isIgnored: () => false, mode: 'fix', root })
     const after = await Bun.file(subject).text()
     expect(after, 'this guard judges nothing: compaction did not run on the file it was meant to compact').not.toBe(before)
     expect(
-      after.includes('\n\n'),
+      after,
       'compact left a blank line, so the premise behind disabling every blank-line rule no longer holds — re-derive which rules are safe to enable before trusting this'
-    ).toBe(false)
+    ).not.toContain('\n\n')
   })
   test('the shipped oxlint config disables the import rule that demands that exact blank line', async () => {
     const configPath = fromFileUrl(import.meta.resolve('../oxlintrc.json'))

@@ -57,7 +57,7 @@ Execution discipline for an agent working this codebase. Engineering posture liv
 
 ### MUST
 
-##### Autonomy and decisions
+#### Autonomy and decisions
 
 - Continue to the next task while autonomous-feasible work remains; identify it and start. Why: idle and handoff are the costliest parts of the loop.
 - Lock the full surfaced scope into the project doc repo the moment it rounds out and ship every item in one pass; the locked set is the immovable target. Why: a “this round / next round” split is where items go to die.
@@ -65,14 +65,14 @@ Execution discipline for an agent working this codebase. Engineering posture liv
 - Self-decide reversible, config-only, or rule-settled choices; surface only a genuine fork as one question + options (each with pros/cons) + recommendation + reasoning. Why: most “decisions” are already settled by the rules, and a stacked or unreasoned MCQ drops answer quality.
 - Exhaust code, docs, git history, and memory before asking; ask only what cannot be discovered. Why: the discovery cost is already paid.
 
-##### Action and verification
+#### Action and verification
 
 - Run the action yourself; never ask the user to run a command the agent can run. Why: handing work upward breaks the loop.
 - State an expected outcome and deadline before any observable action (build, navigate, poll); flag stuck the moment it deviates. Why: no criterion means silent stuck loops.
 - Scan vendor issue trackers and changelogs before declaring a third-party blocker. Why: the training cutoff lags the ecosystem by months.
 - Commit the moment a bug is found and again when fixed during any verification loop. Why: a per-bug trail maps failure to fix.
 
-##### Concurrency and dispatch
+#### Concurrency and dispatch
 
 - Foreground any command under ~2 min; background only with concurrent work in flight, never background-then-poll. Why: background-then-poll is an idle pattern.
 - Dispatch concurrent subagents sliced by file/dir/rule boundary, packed in one message; restrict edit-only subagents to read/edit/write/grep/glob; verify build-green on the shared branch first; audit their self-reports before any destructive cleanup. Why: throughput without thrash, and agents misreport.
@@ -80,7 +80,7 @@ Execution discipline for an agent working this codebase. Engineering posture liv
 - Use a write-capable subagent type (`general-purpose` or a custom edit agent) for any wave that produces edits; never `Explore` (read-only by construction). Why: read-only agents return plans, zero edits — the whole wave is wasted.
 - Run dependent subagent waves sequentially after the sibling lands; never brief a subagent to wait on a notification. Why: the subagent runtime has no wait-for-event — it terminates without work.
 
-##### Output and destructive-op safety
+#### Output and destructive-op safety
 
 - Keep command output terse — a single `ok` or silence on success, full detail only on failure. Why: every line spends the context budget.
 - Wrap streaming-CLI chatter (`bun install`, `docker`, `gh`, `wrangler`, `convex deploy`) with redirection — `… >/dev/null 2>&1 && echo ok || cat err`. Why: progress text burns the context budget.
@@ -157,14 +157,14 @@ Code quality bans, single-source-of-truth, canonical-state, bounded waits, codeg
 
 ### MUST
 
-##### SSOT and reuse
+#### SSOT and reuse
 
 - One definition per piece of data — shared constant defined once, imported everywhere; extract any value appearing in 2+ files. Why: drift surface.
 - Check existing utilities/components FIRST before writing inline logic. Why: avoid duplication.
 - Land any reusable script/helper/harness/probe as a tracked file (`scripts/*.ts`, a test, a `package.json` script), never throwaway `/tmp` scratch. Why: a `/tmp` probe is re-discovered next session; in-repo evidence re-runs.
 - Extract a shared util/component/factory on its second use, never a speculative first. Why: a one-call abstraction guesses the wrong shape and rots as unmaintained surface.
 
-##### Correctness and change management
+#### Correctness and change management
 
 - Fix every known bug the moment it surfaces — lint, type error, audit, review, or your own reading — regardless of severity, blast radius, or whether it fires on current data. Why: a latent bug is one input from a live one; the discovery cost is already paid, so the same pass that found it fixes it.
 - Name things for what they ARE, not their lineage. Why: code reads as the single intended design, authored fully-formed.
@@ -172,7 +172,7 @@ Code quality bans, single-source-of-truth, canonical-state, bounded waits, codeg
 - One declarative present-tense schema definition. Why: a numbered migration chain (`001_*`) encodes history in the repo.
 - Land a breaking change expand-contract — add the new shape, dual-write/backfill, drop the old in a later release; applies to DB schema, wire format, Convex tables, exported types, and public API signatures. Why: no destructive change ships in the same release as the code still depending on the old shape.
 
-##### Timeouts, types, and fail-fast
+#### Timeouts, types, and fail-fast
 
 - `AbortSignal.timeout(ms)` (or SDK timeout) on every `await` on network/IPC/subprocess. Why: bare `await` on external state can hang silently.
 - Bounded polling — compute a deadline once, exit with a specific stderr reason on timeout (`"api healthz timeout 60s"`). Why: `while(!ready){}` hangs with no clue.
@@ -522,7 +522,7 @@ TypeScript code style + formatting.
 
 ### MUST
 
-##### Functions, exports, and control flow
+#### Functions, exports, and control flow
 
 - Arrow functions only. Why: one function form.
 - All exports in a single block at end of file. Why: lint-enforced, scan-once.
@@ -531,7 +531,7 @@ TypeScript code style + formatting.
 - `for` loops over `reduce()`/`forEach()`. Why: readability + perf.
 - Exhaustive `switch` with `default: never`. Why: compile-time case coverage.
 
-##### Naming and imports
+#### Naming and imports
 
 - Descriptive `catch (error)` state-var names (`chatError`, `formError`). Why: oxlint shadow rule.
 - Short map callback names (`t`, `m`, `i`). Why: convention.
@@ -539,7 +539,7 @@ TypeScript code style + formatting.
 - Co-locate components with their page; move to `~/components` only when reused. Why: locality.
 - Explicit imports from exact file paths; no barrel `index.ts` in app code (library packages use barrels for public API). Why: avoids barrel cycle + bloat.
 
-##### Dependencies and types
+#### Dependencies and types
 
 - Prefer existing libraries over new dependencies. Why: minimize surface.
 - `node:` prefix for Node builtins (`import { join } from 'node:path'`). Why: explicit builtin.

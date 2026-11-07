@@ -20,6 +20,24 @@ const setupProject = async () => {
     process.chdir(origCwd)
   }
 }
+const runNegationElseFix = async (sourcePath: string) => {
+  const biomeBin = await resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
+  const child = spawn(
+    [biomeBin, 'lint', '--config-path', cacheDir, '--only=style/noNegationElse', '--write', '--unsafe', sourcePath],
+    {
+      cwd: tmp,
+      stderr: 'pipe',
+      stdout: 'pipe',
+      timeout: 10_000
+    }
+  )
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited
+  ])
+  return { exitCode, stderr, stdout }
+}
 describe('biome config generation', () => {
   it('reports negated else conditions at error without an autofix', async () => {
     await setupProject()
@@ -37,21 +55,7 @@ describe('biome config generation', () => {
     const sourcePath = join(tmp, 'negation-else.ts')
     const sourceText = 'if (x !== undefined) {\n  s.a = 1\n} else s.b ??= 2\n'
     await write(sourcePath, sourceText)
-    const biomeBin = await resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
-    const child = spawn(
-      [biomeBin, 'lint', '--config-path', cacheDir, '--only=style/noNegationElse', '--write', '--unsafe', sourcePath],
-      {
-        cwd: tmp,
-        stderr: 'pipe',
-        stdout: 'pipe',
-        timeout: 10_000
-      }
-    )
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited
-    ])
+    const { exitCode, stderr, stdout } = await runNegationElseFix(sourcePath)
     expect(exitCode).toBe(1)
     expect(await fixComments({ files: [sourcePath] })).toBe(0)
     expect(await file(sourcePath).text()).toBe(sourceText)
@@ -107,9 +111,9 @@ describe('biome config generation', () => {
     expect(config.files).not.toHaveProperty('ignore')
   })
 })
-describe('Glob-based isIgnored matching', () => {
-  const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
-  const isIgnored = (p: string): boolean => ignoreGlobs.some(g => g.match(p))
+const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
+const isIgnored = (p: string): boolean => ignoreGlobs.some(g => g.match(p))
+const registerIgnoredPaths = () => {
   it('matches readonly/ui/src/components/foo.tsx', () => {
     expect(isIgnored('readonly/ui/src/components/foo.tsx')).toBe(true)
   })
@@ -134,6 +138,8 @@ describe('Glob-based isIgnored matching', () => {
   it('matches module_bindings', () => {
     expect(isIgnored('backend/spacetimedb/module_bindings/index.ts')).toBe(true)
   })
+}
+const registerIncludedPaths = () => {
   it('does NOT match lib/shared/src/constants.ts', () => {
     expect(isIgnored('lib/shared/src/constants.ts')).toBe(false)
   })
@@ -143,4 +149,8 @@ describe('Glob-based isIgnored matching', () => {
   it('does NOT match src/index.ts', () => {
     expect(isIgnored('src/index.ts')).toBe(false)
   })
+}
+describe('glob-based isIgnored matching', () => {
+  registerIgnoredPaths()
+  registerIncludedPaths()
 })

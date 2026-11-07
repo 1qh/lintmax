@@ -3,8 +3,11 @@ import { lstat, realpath } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { CliExitError } from './core.js'
-const fixedIgnoreGlobs = ['**/node_modules/**', ...DEFAULT_SHARED_IGNORE_PATTERNS].map(pattern => new Glob(pattern))
-const isIncludedProjectFile = (path: string): boolean => !fixedIgnoreGlobs.some(glob => glob.match(path))
+import { matchesGlob } from './glob.js'
+const fixedIgnoreGlobs: Glob[] = ['**/node_modules/**', ...DEFAULT_SHARED_IGNORE_PATTERNS].map(
+  pattern => new Glob(pattern)
+)
+const isIncludedProjectFile = (path: string): boolean => fixedIgnoreGlobs.every(glob => !matchesGlob(glob, path))
 const hasGitDirectory = async (directory: string): Promise<boolean> => {
   try {
     await lstat(join(directory, '.git'))
@@ -23,8 +26,8 @@ const listVersionControlFiles = async ({
 }: {
   env?: Record<string, string | undefined>
   root: string
-}): Promise<null | string[]> => {
-  if (!(await hasGitDirectory(await realpath(resolve(root))))) return null
+}): Promise<string[] | undefined> => {
+  if (!(await hasGitDirectory(await realpath(resolve(root))))) return
   const subprocess = spawn({
     cmd: ['git', '-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     env,
@@ -52,7 +55,7 @@ const listProjectFiles = async ({
   root: string
 }): Promise<string[]> => {
   const entries = await listVersionControlFiles({ env, root })
-  if (entries !== null) {
+  if (entries !== undefined) {
     const present = await Promise.all(
       entries.map(async entry => {
         try {
@@ -67,8 +70,8 @@ const listProjectFiles = async ({
     return entries.filter((_entry, index) => present[index]).filter(isIncludedProjectFile)
   }
   const files: string[] = []
-  for await (const path of new Glob('**/*').scan({ cwd: root, dot: true, followSymlinks: false, onlyFiles: true }))
-    files.push(path)
+  const entriesOnDisk = new Glob('**/*').scan({ cwd: root, dot: true, followSymlinks: false, onlyFiles: true })
+  for await (const path of entriesOnDisk) files.push(path)
   return files.filter(isIncludedProjectFile)
 }
 export { escapeGlobPath, listProjectFiles, listVersionControlFiles }

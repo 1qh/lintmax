@@ -5,6 +5,16 @@ const normalizeIgnorePattern = ({ pattern }: { pattern: string }): string => {
   if (trimmed.length === 0) return ''
   return trimmed.startsWith('./') ? trimmed.slice(2) : trimmed
 }
+const normalizePathItem = (item: unknown, label: string): string => {
+  if (typeof item !== 'string') throw new TypeError(`${label} must be a string`)
+  const normalized = normalizeIgnorePattern({ pattern: item })
+  if (normalized.length === 0) throw new Error(`${label} must not be empty`)
+  return normalized
+}
+const appendNormalizedPath = (out: string[], item: unknown, label: string) => {
+  const normalized = normalizePathItem(item, label)
+  if (!out.includes(normalized)) out.push(normalized)
+}
 const normalizePathListInput = ({
   allowUndefined = false,
   label,
@@ -15,21 +25,14 @@ const normalizePathListInput = ({
   value: unknown
 }): string[] => {
   if (value === undefined && allowUndefined) return []
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array of strings`)
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array of strings`)
   const out: string[] = []
   const arr: unknown[] = value
-  for (let i = 0; i < arr.length; i += 1) {
-    const item = arr[i]
-    if (typeof item !== 'string') throw new Error(`${label}[${i}] must be a string`)
-    const normalized = normalizeIgnorePattern({ pattern: item })
-    if (normalized.length === 0) throw new Error(`${label}[${i}] must not be empty`)
-    if (!out.includes(normalized)) out.push(normalized)
-  }
+  for (let i = 0; i < arr.length; i += 1) appendNormalizedPath(out, arr[i], `${label}[${i}]`)
   return out
 }
 const hasPlainObjectPrototype = ({ value }: { value: object }): boolean => {
-  /** biome-ignore lint/nursery/noUnsafeTypeAssertion: Object.getPrototypeOf returns an untyped external object boundary */
-  const prototype: null | object = Object.getPrototypeOf(value) as null | object
+  const prototype: unknown = Object.getPrototypeOf(value)
   return prototype === null || prototype === Object.prototype
 }
 const isObjectLike = (value: unknown): value is Record<string, unknown> =>
@@ -62,38 +65,53 @@ const findUnknownRules = ({
   }
   return unknown
 }
-const assertJsonSerializable = ({ label, seen, value }: { label: string; seen?: WeakSet<object>; value: unknown }) => {
-  if (value === null) return
-  if (typeof value === 'string' || typeof value === 'boolean') return
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error(`${label} must be JSON-serializable`)
+interface JsonObjectInput extends JsonValueInput {
+  value: object
+  visit: (input: JsonValueInput) => void
+}
+interface JsonValueInput {
+  label: string
+  seen?: WeakSet<object>
+  value: unknown
+}
+const assertJsonChildren = ({ label, seen, value, visit }: JsonObjectInput) => {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i += 1) visit({ label: `${label}[${i}]`, seen, value: value[i] })
     return
   }
-  if (typeof value !== 'object') throw new Error(`${label} must be JSON-serializable`)
-  const objectValue = value
+  if (!isRecord(value)) throw new Error(`${label} must be JSON-serializable`)
+  for (const [key, nested] of Object.entries(value)) visit({ label: `${label}.${key}`, seen, value: nested })
+}
+const assertJsonObject = ({ label, seen, value, visit }: JsonObjectInput) => {
   const objectSeen = seen ?? new WeakSet<object>()
-  if (objectSeen.has(objectValue)) throw new Error(`${label} must be JSON-serializable`)
-  objectSeen.add(objectValue)
+  if (objectSeen.has(value)) throw new Error(`${label} must be JSON-serializable`)
+  objectSeen.add(value)
   try {
-    if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i += 1)
-        assertJsonSerializable({
-          label: `${label}[${i}]`,
-          seen: objectSeen,
-          value: value[i]
-        })
-      return
-    }
-    if (!isRecord(value)) throw new Error(`${label} must be JSON-serializable`)
-    for (const [key, nested] of Object.entries(value))
-      assertJsonSerializable({
-        label: `${label}.${key}`,
-        seen: objectSeen,
-        value: nested
-      })
+    assertJsonChildren({ label, seen: objectSeen, value, visit })
   } finally {
-    objectSeen.delete(objectValue)
+    objectSeen.delete(value)
   }
+}
+const assertJsonSerializable = ({ label, seen, value }: JsonValueInput) => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError(`${label} must be JSON-serializable`)
+    return
+  }
+  if (typeof value !== 'object') throw new TypeError(`${label} must be JSON-serializable`)
+  assertJsonObject({ label, seen, value, visit: assertJsonSerializable })
+}
+const normalizeObjectItem = ({
+  allowNonPlain,
+  label,
+  value
+}: {
+  allowNonPlain: boolean
+  label: string
+  value: unknown
+}): Record<string, unknown> => {
+  if (isObjectLike(value) && (allowNonPlain || hasPlainObjectPrototype({ value }))) return value
+  throw new Error(`${label} must be an object`)
 }
 const normalizeObjectListInput = ({
   allowNonPlain = false,
@@ -105,19 +123,26 @@ const normalizeObjectListInput = ({
   value: unknown
 }): Record<string, unknown>[] => {
   if (value === undefined) return []
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array of objects`)
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array of objects`)
   const out: Record<string, unknown>[] = []
   const arr: unknown[] = value
   for (let i = 0; i < arr.length; i += 1) {
-    const item = arr[i]
-    let normalizedItem: Record<string, unknown> | undefined
-    if (allowNonPlain) {
-      if (isObjectLike(item)) normalizedItem = item
-    } else if (isRecord(item)) normalizedItem = item
-    if (!normalizedItem) throw new Error(`${label}[${i}] must be an object`)
+    const normalizedItem = normalizeObjectItem({ allowNonPlain, label: `${label}[${i}]`, value: arr[i] })
     out.push(normalizedItem)
   }
   return out
+}
+const normalizeRuleName = (value: unknown, label: string): string => {
+  if (typeof value !== 'string') throw new TypeError(`${label} must be a string rule name`)
+  const ruleName = value.trim()
+  if (ruleName.length === 0) throw new Error(`${label} must not be empty`)
+  return ruleName
+}
+const sortOffRules = (rules: Record<string, 'off'>): Record<string, 'off'> => {
+  const sorted: Record<string, 'off'> = {}
+  const keys = Object.keys(rules).toSorted((a, b) => a.localeCompare(b))
+  for (const key of keys) sorted[key] = 'off'
+  return sorted
 }
 const normalizeRulesOffInput = ({
   label,
@@ -127,19 +152,14 @@ const normalizeRulesOffInput = ({
   value: unknown
 }): Record<string, 'off'> | undefined => {
   if (value === undefined) return
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array of rule names`)
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array of rule names`)
   const out: Record<string, 'off'> = {}
   const arr: unknown[] = value
   for (let i = 0; i < arr.length; i += 1) {
-    const item = arr[i]
-    if (typeof item !== 'string') throw new Error(`${label}[${i}] must be a string rule name`)
-    const ruleName = item.trim()
-    if (ruleName.length === 0) throw new Error(`${label}[${i}] must not be empty`)
+    const ruleName = normalizeRuleName(arr[i], `${label}[${i}]`)
     out[ruleName] = 'off'
   }
-  const sorted: Record<string, 'off'> = {}
-  for (const key of Object.keys(out).toSorted((a, b) => a.localeCompare(b))) sorted[key] = 'off'
-  return sorted
+  return sortOffRules(out)
 }
 const normalizeTailwindOption = ({ label, value }: { label: string; value: unknown }): TailwindOption | undefined => {
   if (value === undefined) return

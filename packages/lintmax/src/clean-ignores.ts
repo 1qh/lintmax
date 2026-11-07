@@ -39,7 +39,6 @@ const OXLINT_PREFIXES = [
   '@eslint-react'
 ]
 const OXLINT_SEPARATORS = ['(', '/', '\\']
-/** The prefix+separator a rule id starts with, or undefined — a plain-string scan replacing a 27-branch alternation. Order-independent: the separator requirement disambiguates a short prefix from a longer one (`react-hooks/x` never matches `react` because `-` is not a separator). */
 const oxlintPrefixMatch = (rule: string): string | undefined => {
   for (const prefix of OXLINT_PREFIXES)
     for (const sep of OXLINT_SEPARATORS) if (rule.startsWith(`${prefix}${sep}`)) return `${prefix}${sep}`
@@ -47,22 +46,23 @@ const oxlintPrefixMatch = (rule: string): string | undefined => {
 const trailingParenRe = /\)$/v
 const trailingSepRe = /[(/\\]$/u
 const eslintPluginPrefixRe = /^eslint-plugin-/v
-/** The oxlint-prefixed variants for a rule whose id starts with `oxMatch` (prefix+separator) — bare id plus canonical/short-plugin spellings. */
-const buildOxlintVariants = (rule: string, oxMatch: string): string[] => {
-  const variants: string[] = []
-  const bare = rule.slice(oxMatch.length).replace(trailingParenRe, '')
-  variants.push(bare)
-  const prefix = oxMatch.replace(trailingSepRe, '')
-  variants.push(`${prefix}/${bare}`, `${prefix}(${bare})`)
+const appendPluginVariants = ({ bare, prefix, variants }: { bare: string; prefix: string; variants: string[] }) => {
   if (prefix === 'eslint') variants.push(bare)
   if (prefix === 'typescript-eslint') variants.push(`@typescript-eslint/${bare}`)
   if (prefix.startsWith('eslint-plugin-')) {
     const short = prefix.replace(eslintPluginPrefixRe, '')
     variants.push(`${short}/${bare}`, `${short}(${bare})`)
   }
+}
+const buildOxlintVariants = (rule: string, oxMatch: string): string[] => {
+  const variants: string[] = []
+  const bare = rule.slice(oxMatch.length).replace(trailingParenRe, '')
+  variants.push(bare)
+  const prefix = oxMatch.replace(trailingSepRe, '')
+  variants.push(`${prefix}/${bare}`, `${prefix}(${bare})`)
+  appendPluginVariants({ bare, prefix, variants })
   return variants
 }
-/** The underscore↔dash spelling twins of each variant — a `_` id also spelled with `-` and vice versa. */
 const expandUnderscoreDash = (variants: string[]): string[] => {
   const extra: string[] = []
   for (const v of variants) {
@@ -71,17 +71,21 @@ const expandUnderscoreDash = (variants: string[]): string[] => {
   }
   return extra
 }
+const appendNamespaceVariants = (rule: string, variants: string[]) => {
+  if (rule.startsWith('@typescript-eslint/')) variants.push(`typescript-eslint(${rule.slice(19)})`)
+  if (rule.startsWith('@next/next/')) variants.push(`nextjs(${rule.slice(11)})`)
+  if (rule.startsWith('@eslint-react/')) variants.push(`react(${rule.slice(14)})`)
+}
 const normalizeRule = (rule: string): string[] => {
   const variants = [rule]
   const oxMatch = oxlintPrefixMatch(rule)
   if (oxMatch !== undefined) variants.push(...buildOxlintVariants(rule, oxMatch))
-  if (rule.startsWith('@typescript-eslint/')) variants.push(`typescript-eslint(${rule.slice(19)})`)
-  if (rule.startsWith('@next/next/')) variants.push(`nextjs(${rule.slice(11)})`)
-  if (rule.startsWith('@eslint-react/')) variants.push(`react(${rule.slice(14)})`)
-  for (const e of expandUnderscoreDash(variants)) variants.push(e)
+  appendNamespaceVariants(rule, variants)
+  const expandedVariants = expandUnderscoreDash(variants)
+  for (const e of expandedVariants) variants.push(e)
   return variants
 }
-const loadOxlintOffRules = async (): Promise<Set<string>> => {
+const readOxlintConfig = async () => {
   const configPath = joinPath(process.cwd(), cacheDir, '.oxlintrc.json')
   if (!(await file(configPath).exists()))
     throw new Error(
@@ -96,24 +100,31 @@ const loadOxlintOffRules = async (): Promise<Set<string>> => {
       { cause: error }
     )
   }
-  const off = new Set<string>()
-  for (const [rule, val] of Object.entries(config.rules ?? {})) {
+  return config
+}
+const addRuleVariants = (rule: string, target: Set<string>) => {
+  const variants = normalizeRule(rule)
+  for (const variant of variants) target.add(variant)
+}
+const loadOxlintOffRules = async (): Promise<Set<string>> => {
+  const config = await readOxlintConfig()
+  const off = new Set<string>(OXLINT_CLI_ALLOW)
+  const configuredRules = Object.entries(config.rules ?? {})
+  for (const [rule, val] of configuredRules) {
     const severity = Array.isArray(val) ? String(val[0]) : val
     if (severity === 'off') {
       off.add(rule)
-      for (const v of normalizeRule(rule)) off.add(v)
+      addRuleVariants(rule, off)
     }
   }
-  for (const rule of OXLINT_CLI_ALLOW) {
-    off.add(rule)
-    for (const v of normalizeRule(rule)) off.add(v)
-  }
+  for (const rule of OXLINT_CLI_ALLOW) addRuleVariants(rule, off)
   return off
 }
 const buildActiveRuleSet = async ({ excludeEslint = false }: { excludeEslint?: boolean } = {}): Promise<Set<string>> => {
   const rules = await extractAllRules()
   const active = new Set<string>()
-  for (const r of rules.filter(rule => !excludeEslint || rule.linter !== 'eslint')) {
+  const includedRules = rules.filter(rule => !excludeEslint || rule.linter !== 'eslint')
+  for (const r of includedRules) {
     active.add(r.rule)
     for (const v of normalizeRule(r.rule)) active.add(v)
   }
@@ -124,8 +135,7 @@ const isRuleActive = (rule: string, active: Set<string>, oxlintOff?: Set<string>
   if (oxlintOff) for (const v of normalizeRule(rule)) if (oxlintOff.has(v)) return false
   if (active.has(rule)) return true
   for (const v of normalizeRule(rule)) if (active.has(v)) return true
-  if (!oxlintOff) return false
-  return true
+  return Boolean(oxlintOff)
 }
 const splitCsvRules = (ruleList: string): string[] =>
   ruleList
@@ -160,14 +170,11 @@ const processMultiRuleLine = ({
   oxlintOff?: Set<string>
   result: string[]
 }): number => {
-  const prefix = match.prefix ?? ''
-  const rulesStr = match.rules ?? ''
-  const suffix = match.suffix ?? ''
-  const { reason, rules } = splitDirective(rulesStr)
+  const { reason, rules } = splitDirective(match.rules ?? '')
   const kept = rules.filter(r => isRuleActive(r, active, isOxlint ? oxlintOff : undefined))
   if (kept.length === 0) return rules.length
   if (kept.length < rules.length) {
-    result.push(`${prefix}${kept.join(', ')}${reason}${suffix}`)
+    result.push(`${match.prefix ?? ''}${kept.join(', ')}${reason}${match.suffix ?? ''}`)
     return rules.length - kept.length
   }
   result.push(line)
@@ -177,27 +184,12 @@ interface CleanResult {
   cleaned: number
   files: string[]
 }
-/** Process one source line: keep-or-rewrite it into `result` and return how many disabled rules were removed. */
-const processIgnoreLine = ({
-  active,
-  eslintActive,
-  line,
-  oxlintOff,
-  result
-}: {
-  active: Set<string>
-  eslintActive?: Set<string>
-  line: string
-  oxlintOff?: Set<string>
-  result: string[]
-}): number => {
+const processEslintLine = ({ active, line, result }: { active: Set<string>; line: string; result: string[] }) => {
   eslintLineRe.lastIndex = 0
-  oxlintLineRe.lastIndex = 0
-  biomeLineRe.lastIndex = 0
   const eslintMatch = eslintLineRe.exec(line)
   if (eslintMatch)
     return processMultiRuleLine({
-      active: eslintActive ?? active,
+      active,
       line,
       match: {
         prefix: eslintMatch.groups?.prefix,
@@ -206,6 +198,18 @@ const processIgnoreLine = ({
       },
       result
     })
+}
+const processOxlintLine = ({
+  active,
+  line,
+  oxlintOff,
+  result
+}: {
+  active: Set<string>
+  line: string
+  oxlintOff?: Set<string>
+  result: string[]
+}) => {
   const oxlintMatch = oxlintLineRe.exec(line)
   if (oxlintMatch)
     return processMultiRuleLine({
@@ -220,6 +224,24 @@ const processIgnoreLine = ({
       oxlintOff,
       result
     })
+}
+const processIgnoreLine = ({
+  active,
+  eslintActive,
+  line,
+  oxlintOff,
+  result
+}: {
+  active: Set<string>
+  eslintActive?: Set<string>
+  line: string
+  oxlintOff?: Set<string>
+  result: string[]
+}): number => {
+  const matchedResult =
+    processEslintLine({ active: eslintActive ?? active, line, result }) ??
+    processOxlintLine({ active, line, oxlintOff, result })
+  if (matchedResult !== undefined) return matchedResult
   const biomeMatch = biomeLineRe.exec(line)
   if (biomeMatch && !isRuleActive(biomeMatch.groups?.rule ?? '', active)) return 1
   result.push(line)
@@ -252,7 +274,6 @@ const cleanFileIgnores = async (
   return removed
 }
 const buildEslintActiveRuleSet = (config: unknown, active: Set<string>): Set<string> => {
-  // Oxlint also honors eslint-disable, so retain its active rules alongside this file's ESLint rules.
   const eslintActive = new Set(active)
   if (typeof config !== 'object' || config === null || !('rules' in config)) return eslintActive
   const rules: unknown = config.rules

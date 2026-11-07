@@ -9,14 +9,17 @@ const runGit = async (args: string[]): Promise<void> => {
   const [exitCode, stderr] = await Promise.all([subprocess.exited, new Response(subprocess.stderr).text()])
   if (exitCode !== 0) throw new Error(`Git fixture setup failed: ${stderr.trim()}`)
 }
+const setupTrackedFiles = async (root: string) => {
+  await runGit(['init', '-q', root])
+  await write(join(root, 'tracked.ts'), 'const tracked = 1\n')
+  await write(join(root, 'ignored.ts'), 'const ignored = 1\n')
+  await write(join(root, '.gitignore'), 'ignored.ts\n.gitignore\n')
+  await runGit(['-C', root, 'add', 'tracked.ts'])
+}
 test('project files exclude Git-ignored files and retain tracked files', async () => {
   const root = await mkdtemp(join(tmpdir(), 'lintmax-project-files-'))
   try {
-    await runGit(['init', '-q', root])
-    await write(join(root, 'tracked.ts'), 'const tracked = 1\n')
-    await write(join(root, 'ignored.ts'), 'const ignored = 1\n')
-    await write(join(root, '.gitignore'), 'ignored.ts\n.gitignore\n')
-    await runGit(['-C', root, 'add', 'tracked.ts'])
+    await setupTrackedFiles(root)
     expect(await listProjectFiles({ root })).toEqual(['tracked.ts'])
     await write(join(root, 'untracked.ts'), 'const untracked = 1\n')
     expect((await listProjectFiles({ root })).toSorted((a, b) => a.localeCompare(b))).toEqual([

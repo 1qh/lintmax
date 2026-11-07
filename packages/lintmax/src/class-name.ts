@@ -15,8 +15,8 @@ interface Node {
   type: string
   value?: Node
 }
-const asNode = (v: unknown): Node | null => {
-  if (!v || typeof v !== 'object' || !('type' in v) || typeof v.type !== 'string') return null
+const asNode = (v: unknown): Node | undefined => {
+  if (!v || typeof v !== 'object' || !('type' in v) || typeof v.type !== 'string') return
   /** biome-ignore lint/nursery/noUnsafeTypeAssertion: external parser AST node is narrowed only at this boundary */
   return v as Node
 }
@@ -26,7 +26,7 @@ const lineAt = (sourceText: string, offset: number): number => {
   for (let i = 0; i < offset && i < sourceText.length; i += 1) if (sourceText[i] === '\n') line += 1
   return line
 }
-const isClassNameAttr = (n: Node | null): boolean => {
+const isClassNameAttr = (n: Node | undefined): boolean => {
   const name = asNode(n?.name)
   return n?.type === 'JSXAttribute' && name?.type === 'JSXIdentifier' && strName(name) === 'className'
 }
@@ -50,14 +50,13 @@ interface Violation {
   line: number
   rule: string
 }
-const classNameExprRule = (expr: Node): null | string => {
-  if (isStringLiteral(expr) || isCallToCn(expr)) return null
+const classNameExprRule = (expr: Node): string | undefined => {
+  if (isStringLiteral(expr) || isCallToCn(expr)) return
   if (expr.type === 'TemplateLiteral') return 'cn/no-template-literal'
   if (expr.type === 'ConditionalExpression') return 'cn/no-ternary'
   if (expr.type === 'BinaryExpression' && expr.operator === '+') return 'cn/no-concatenation'
   if (isBannedCallee(expr)) return 'cn/no-banned-callee'
   if (isJoinCall(expr)) return 'cn/no-join'
-  return null
 }
 const collectClassNameAttrViolation = (node: Node, sourceText: string, violations: Violation[]): void => {
   const container = node.value
@@ -73,19 +72,19 @@ const collectBannedCalleeViolation = ({
   sourceText,
   violations
 }: {
-  grand: Node | null
+  grand: Node | undefined
   node: Node
-  parent: Node | null
+  parent: Node | undefined
   sourceText: string
   violations: Violation[]
 }): void => {
   if (isBannedCallee(node) && (parent?.type !== 'JSXExpressionContainer' || !isClassNameAttr(grand)))
     violations.push({ line: lineAt(sourceText, node.start), rule: 'cn/no-banned-callee' })
 }
-const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violation[] => {
-  const { program } = parseAnyDialect({ label: 'className check', sourceText })
+const findClassNameViolations = async ({ sourceText }: { sourceText: string }): Promise<Violation[]> => {
+  const { program } = await parseAnyDialect({ label: 'className check', sourceText })
   const violations: Violation[] = []
-  const visit = (raw: unknown, parent: Node | null, grand: Node | null) => {
+  const visit = (raw: unknown, parent: Node | undefined, grand: Node | undefined) => {
     if (Array.isArray(raw)) {
       for (const child of raw) visit(child, parent, grand)
       return
@@ -99,7 +98,7 @@ const findClassNameViolations = ({ sourceText }: { sourceText: string }): Violat
     collectBannedCalleeViolation({ grand, node, parent, sourceText, violations })
     for (const key of Object.keys(node)) if (key !== 'type') visit(node[key], node, parent)
   }
-  visit(program, null, null)
+  visit(program, undefined, undefined)
   return violations
 }
 const TSX_EXTENSIONS = new Set(['.tsx'])
@@ -112,7 +111,7 @@ const checkClassNameFile = async (filePath: string): Promise<Diagnostic[]> => {
   const f = file(filePath)
   if (!(await f.exists())) return []
   const sourceText = await f.text()
-  const violations = findClassNameViolations({ sourceText })
+  const violations = await findClassNameViolations({ sourceText })
   return violations.map(v => ({
     file: filePath,
     line: v.line,

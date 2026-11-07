@@ -24,6 +24,28 @@ interface GroupedRule {
   lines: number[]
   rule: string
 }
+const biomeEntries = (
+  diagnostics: {
+    category?: string
+    location?: { path?: string; start?: { line?: number } }
+  }[]
+): Diagnostic[] => {
+  const results: Diagnostic[] = []
+  for (const d of diagnostics) {
+    const filePath = d.location?.path
+    const { category } = d
+    if (filePath && category) {
+      const line = d.location?.start?.line ?? 0
+      results.push({
+        file: normalizePath(filePath),
+        line,
+        linter: 'biome',
+        rule: category
+      })
+    }
+  }
+  return results
+}
 const parseBiomeDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] => {
   let parsed: {
     diagnostics?: {
@@ -38,17 +60,26 @@ const parseBiomeDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] => 
     return []
   }
   if (!Array.isArray(parsed.diagnostics)) return []
+  return biomeEntries(parsed.diagnostics)
+}
+const oxlintEntries = (
+  diagnostics: {
+    code?: string
+    filename?: string
+    labels?: { span?: { line?: number } }[]
+  }[]
+): Diagnostic[] => {
   const results: Diagnostic[] = []
-  for (const d of parsed.diagnostics) {
-    const filePath = d.location?.path
-    const { category } = d
-    if (filePath && category) {
-      const line = d.location?.start?.line ?? 0
+  for (const d of diagnostics) {
+    const filePath = d.filename ?? ''
+    const rule = d.code
+    if (rule) {
+      const line = d.labels?.[0]?.span?.line ?? 0
       results.push({
-        file: normalizePath(filePath),
+        file: filePath.length > 0 ? normalizePath(filePath) : '<unknown>',
         line,
-        linter: 'biome',
-        rule: category
+        linter: 'oxlint',
+        rule
       })
     }
   }
@@ -68,21 +99,7 @@ const parseOxlintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] =>
     return []
   }
   if (!Array.isArray(parsed.diagnostics)) return []
-  const results: Diagnostic[] = []
-  for (const d of parsed.diagnostics) {
-    const filePath = d.filename ?? ''
-    const rule = d.code
-    if (rule) {
-      const line = d.labels?.[0]?.span?.line ?? 0
-      results.push({
-        file: filePath.length > 0 ? normalizePath(filePath) : '<unknown>',
-        line,
-        linter: 'oxlint',
-        rule
-      })
-    }
-  }
-  return results
+  return oxlintEntries(parsed.diagnostics)
 }
 interface EslintFileEntry {
   filePath?: string
@@ -95,8 +112,8 @@ interface EslintMessage {
   ruleId?: null | string
   severity?: number
 }
-const eslintRuleOf = (msg: EslintMessage): null | string =>
-  msg.ruleId ?? (msg.severity === 2 || msg.fatal ? `parse-error: ${msg.message?.slice(0, 80) ?? 'unknown'}` : null)
+const eslintRuleOf = (msg: EslintMessage): string | undefined =>
+  msg.ruleId ?? (msg.severity === 2 || msg.fatal ? `parse-error: ${msg.message?.slice(0, 80) ?? 'unknown'}` : undefined)
 const eslintDiagnosticsForFile = (fileEntry: EslintFileEntry): Diagnostic[] => {
   const { filePath } = fileEntry
   if (!(filePath && Array.isArray(fileEntry.messages))) return []
@@ -171,44 +188,51 @@ const dedup = (diagnostics: Diagnostic[]): Diagnostic[] => {
   return [...seen.values()]
 }
 const linterSort = (a: string, b: string): number => (LINTER_PRIORITY[a] ?? 99) - (LINTER_PRIORITY[b] ?? 99)
-const aggregate = ({ diagnostics }: { diagnostics: Diagnostic[] }): GroupedFile[] => {
+const getOrCreate = <T>(map: Map<string, T>, key: string, create: () => T): T => {
+  const existing = map.get(key)
+  if (existing !== undefined) return existing
+  const value = create()
+  map.set(key, value)
+  return value
+}
+const appendDiagnostic = (fileMap: Map<string, Map<string, Map<string, number[]>>>, d: Diagnostic) => {
+  const linterMap = getOrCreate(fileMap, d.file, () => new Map<string, Map<string, number[]>>())
+  const ruleMap = getOrCreate(linterMap, d.linter, () => new Map<string, number[]>())
+  const lines = getOrCreate<number[]>(ruleMap, d.rule, () => [])
+  if (d.line > 0) lines.push(d.line)
+}
+const groupDiagnostics = (diagnostics: Diagnostic[]) => {
   const deduped = dedup(diagnostics)
   const fileMap = new Map<string, Map<string, Map<string, number[]>>>()
-  for (const d of deduped) {
-    let linterMap = fileMap.get(d.file)
-    if (!linterMap) {
-      linterMap = new Map()
-      fileMap.set(d.file, linterMap)
-    }
-    let ruleMap = linterMap.get(d.linter)
-    if (!ruleMap) {
-      ruleMap = new Map()
-      linterMap.set(d.linter, ruleMap)
-    }
-    let lines = ruleMap.get(d.rule)
-    if (!lines) {
-      lines = []
-      ruleMap.set(d.rule, lines)
-    }
-    if (d.line > 0) lines.push(d.line)
+  for (const d of deduped) appendDiagnostic(fileMap, d)
+  return fileMap
+}
+const sortedGroupedRules = (ruleMap: Map<string, number[]>): GroupedRule[] => {
+  const rules: GroupedRule[] = []
+  const sortedRules = [...ruleMap.keys()].toSorted((a, b) => a.localeCompare(b))
+  for (const ruleName of sortedRules) {
+    const lines = ruleMap.get(ruleName) ?? []
+    const uniqueLines = [...new Set(lines)].toSorted((a, b) => a - b)
+    rules.push({ lines: uniqueLines, rule: ruleName })
   }
+  return rules
+}
+const sortedGroupedLinters = (linterMap: Map<string, Map<string, number[]>>): GroupedLinter[] => {
+  const linters: GroupedLinter[] = []
+  const sortedLinters = [...linterMap.keys()].toSorted(linterSort)
+  for (const linterName of sortedLinters) {
+    const ruleMap = linterMap.get(linterName) ?? new Map<string, number[]>()
+    const rules = sortedGroupedRules(ruleMap)
+    linters.push({ linter: linterName, rules })
+  }
+  return linters
+}
+const aggregate = ({ diagnostics }: { diagnostics: Diagnostic[] }): GroupedFile[] => {
+  const fileMap = groupDiagnostics(diagnostics)
   const files: GroupedFile[] = []
   const sortedFiles = [...fileMap.keys()].toSorted((a, b) => a.localeCompare(b))
   for (const filePath of sortedFiles) {
-    const linterMap = fileMap.get(filePath) ?? new Map<string, Map<string, number[]>>()
-    const linters: GroupedLinter[] = []
-    const sortedLinters = [...linterMap.keys()].toSorted(linterSort)
-    for (const linterName of sortedLinters) {
-      const ruleMap = linterMap.get(linterName) ?? new Map<string, number[]>()
-      const rules: GroupedRule[] = []
-      const sortedRules = [...ruleMap.keys()].toSorted((a, b) => a.localeCompare(b))
-      for (const ruleName of sortedRules) {
-        const lines = ruleMap.get(ruleName) ?? []
-        const uniqueLines = [...new Set(lines)].toSorted((a, b) => a - b)
-        rules.push({ lines: uniqueLines, rule: ruleName })
-      }
-      linters.push({ linter: linterName, rules })
-    }
+    const linters = sortedGroupedLinters(fileMap.get(filePath) ?? new Map<string, Map<string, number[]>>())
     files.push({ file: filePath, linters })
   }
   return files

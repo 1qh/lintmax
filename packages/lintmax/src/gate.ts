@@ -4,25 +4,24 @@ import { listProjectFiles } from './project-files.js'
 import { formatStaleness, scanStaleness } from './staleness.js'
 import { hashTree, loadState, saveState } from './state.js'
 const envNoCache = 'LINTMAX_NO_CACHE'
-const computeGreenKey = async (version: string): Promise<null | string> => {
-  if (envValue(envNoCache) === '1') return null
+const computeGreenKey = async (version: string): Promise<string | undefined> => {
+  if (envValue(envNoCache) === '1') return
   const files = await listProjectFiles({ root: cwd })
   return hashTree({ files, root: cwd, version })
 }
-const tryCached = async (greenKey: null | string): Promise<boolean> => {
-  if (greenKey === null) return false
+const tryCached = async (greenKey: string | undefined): Promise<boolean> => {
+  if (greenKey === undefined) return false
   const state = await loadState()
   if (state.lastGreenByCwd[cwd] !== greenKey) return false
   process.stdout.write('ok (cached)\n')
   return true
 }
-const persistGreen = async (greenKey: null | string): Promise<void> => {
-  if (greenKey === null) return
+const persistGreen = async (greenKey: string | undefined): Promise<void> => {
+  if (greenKey === undefined) return
   const state = await loadState()
   state.lastGreenByCwd[cwd] = greenKey
   await saveState(state)
 }
-/** A stale dep FAILS the gate: the baseline is clean, so every finding here is a new one, and a warning nobody has to act on is how the check sat broken for its whole life while printing nothing. A dep leaves the gate through `staleExceptions` with its reason and trigger, never by being tolerated in the output. A scan that cannot reach the registry is reported and does NOT fail — an offline developer is never blocked by it, but the silence that once read as clean is gone. */
 const emitStaleness = async (): Promise<void> => {
   try {
     const issues = await scanStaleness()

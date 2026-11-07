@@ -62,6 +62,39 @@ const captureOutput = async (input: OutputInput): Promise<{ diagnostics: Diagnos
   })
   return result
 }
+const createBiomeFixture = async (directory: string) => {
+  const configPath = joinPath(directory, 'biome.json')
+  const sourcePath = joinPath(directory, 'debug.ts')
+  await write(configPath, JSON.stringify({ linter: { rules: { recommended: true } }, root: true }))
+  await write(sourcePath, 'debugger\n')
+  const biomeBin = await resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
+  return { biomeBin, configPath, sourcePath }
+}
+const captureBiomeDebugger = async ({
+  biomeBin,
+  configPath,
+  label,
+  sourcePath
+}: {
+  biomeBin: string
+  configPath: string
+  label: string
+  sourcePath: string
+}) => {
+  const operation = label === 'biome' ? 'check' : 'lint'
+  const result = await runCapture({
+    args: [biomeBin, operation, '--reporter=json', '--config-path', configPath, sourcePath],
+    command: process.execPath,
+    env: bunEnv,
+    label
+  })
+  const parsed = readRequiredJson<{ diagnostics: { category: string }[] }>(result.stdout)
+  return {
+    categories: parsed.diagnostics.map(d => d.category),
+    exitCode: result.exitCode,
+    rules: parseBiomeDiagnostics(result).map(d => d.rule)
+  }
+}
 describe('file-backed linter output', () => {
   test('refuses malformed and empty failed suppression scans while accepting clean JSON', () => {
     for (const label of ['biome-unused', 'oxlint-unused']) {
@@ -76,23 +109,12 @@ describe('file-backed linter output', () => {
   test('captures installed Biome JSON for check and unused suppression scans', async () => {
     const directory = await mkdtemp(joinPath(tmpdir(), 'lintmax-biome-test-'))
     try {
-      const configPath = joinPath(directory, 'biome.json')
-      const sourcePath = joinPath(directory, 'debug.ts')
-      await write(configPath, JSON.stringify({ linter: { rules: { recommended: true } }, root: true }))
-      await write(sourcePath, 'debugger\n')
-      const biomeBin = await resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
+      const fixture = await createBiomeFixture(directory)
       for (const label of ['biome', 'biome-unused']) {
-        const operation = label === 'biome' ? 'check' : 'lint'
-        const result = await runCapture({
-          args: [biomeBin, operation, '--reporter=json', '--config-path', configPath, sourcePath],
-          command: process.execPath,
-          env: bunEnv,
-          label
-        })
-        const parsed = readRequiredJson<{ diagnostics: { category: string }[] }>(result.stdout)
-        expect(result.exitCode).toBe(1)
-        expect(parsed.diagnostics.some(d => d.category === 'lint/suspicious/noDebugger')).toBe(true)
-        expect(parseBiomeDiagnostics(result).some(d => d.rule === 'lint/suspicious/noDebugger')).toBe(true)
+        const captured = await captureBiomeDebugger({ ...fixture, label })
+        expect(captured.exitCode).toBe(1)
+        expect(captured.categories).toContain('lint/suspicious/noDebugger')
+        expect(captured.rules).toContain('lint/suspicious/noDebugger')
       }
     } finally {
       await rm(directory, { recursive: true })
@@ -190,3 +212,19 @@ describe('file-backed linter output', () => {
     expect(formatFailureDetails(failures)).toContain('Output parse error (10 bytes): Invalid text report')
   })
 })
+test('a step killed at its time limit says it timed out rather than reading as a lint failure', async () => {
+  const result = await runCapture({
+    args: ['-e', 'await Bun.sleep(5000)'],
+    command: process.execPath,
+    env: bunEnv,
+    label: 'slow-step',
+    timeoutMs: 300
+  })
+  expect(result.exitCode).not.toBe(0)
+  expect(result.stderr).toContain('lintmax: slow-step timed out after 0 s and was killed; it reported no findings')
+}, 15_000)
+test('a step that finishes inside its limit carries no timeout note', async () => {
+  const result = await runCapture({ args: ['-e', '0'], command: process.execPath, env: bunEnv, label: 'fast-step' })
+  expect(result.exitCode).toBe(0)
+  expect(result.stderr).not.toContain('timed out')
+}, 15_000)

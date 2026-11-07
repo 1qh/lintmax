@@ -14,7 +14,7 @@ Designed for coding agents, not humans
 
 > Just copy & paste to your coding agent
 
-```
+```text
 Read https://lintmax.noboil.dev/llms-full.txt then set up lintmax for this project
 ```
 

@@ -18,20 +18,24 @@ const fromFileUrl = (value: string) => {
   if (DRIVE_PATH_REGEX.test(normalized.slice(1))) return normalized.slice(1)
   return normalized
 }
-const joinPath = (...parts: string[]) => {
-  if (parts.length === 0) return ''
+const nonemptyPathParts = (parts: string[]): string[] => {
   const normalizedParts: string[] = []
   for (const part of parts) {
     const normalized = normalizeSlashes(part)
     if (normalized.length > 0) normalizedParts.push(normalized)
   }
+  return normalizedParts
+}
+const joinPath = (...parts: string[]) => {
+  if (parts.length === 0) return ''
+  const normalizedParts = nonemptyPathParts(parts)
   if (normalizedParts.length === 0) return ''
   const first = normalizedParts[0] ?? ''
   const isAbsolute = first.startsWith('/') || DRIVE_PATH_REGEX.test(first)
   const [head, ...tail] = normalizedParts
   const segments = [trimTrailingSlash(head ?? '')]
   for (const segment of tail) segments.push(trimLeadingSlash(trimTrailingSlash(segment)))
-  const joined = segments.join('/').replace(MULTI_SLASH_REGEX, '/')
+  const joined = segments.join('/').replaceAll(MULTI_SLASH_REGEX, '/')
   return isAbsolute && !joined.startsWith('/') && !DRIVE_PATH_REGEX.test(joined) ? `/${joined}` : joined
 }
 const dirnamePath = (value: string) => {

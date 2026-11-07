@@ -28,8 +28,13 @@ const isBlockOnlyComment = (
   while (after < sourceText.length && (WS_CHAR.test(sourceText[after] ?? '') || inComment(after))) after += 1
   return sourceText[before] === '{' && sourceText[after] === '}'
 }
-const findDeletableComments = ({ sourceText }: { sourceText: string }): { end: number; line: number; start: number }[] => {
-  const parsed = parseAnyDialect({ label: 'comment strip', sourceText })
+interface DeletableComment {
+  end: number
+  line: number
+  start: number
+}
+const findDeletableComments = async ({ sourceText }: { sourceText: string }): Promise<DeletableComment[]> => {
+  const parsed = await parseAnyDialect({ label: 'comment strip', sourceText })
   const { comments } = parsed
   const deletable: { end: number; line: number; start: number }[] = []
   for (const c of comments) {
@@ -45,26 +50,39 @@ const findDeletableComments = ({ sourceText }: { sourceText: string }): { end: n
   deletable.sort((a, b) => a.start - b.start)
   return deletable
 }
-const deleteComments = ({ sourceText }: { sourceText: string }): string => {
-  const comments = findDeletableComments({ sourceText })
+const skipLineEnding = (sourceText: string, end: number): number => {
+  if (sourceText[end] === '\n') return end + 1
+  if (sourceText[end] === '\r' && sourceText[end + 1] === '\n') return end + 2
+  return end
+}
+const appendWithoutComment = ({
+  comment,
+  cursor,
+  parts,
+  sourceText
+}: {
+  comment: DeletableComment
+  cursor: number
+  parts: string[]
+  sourceText: string
+}): number => {
+  const beforeChunk = sourceText.slice(cursor, comment.start)
+  const lineStart = beforeChunk.lastIndexOf('\n') + 1
+  const indent = beforeChunk.slice(lineStart)
+  const afterEnd = skipLineEnding(sourceText, comment.end)
+  if (WHITESPACE_ONLY.test(indent) && afterEnd <= sourceText.length) {
+    parts.push(beforeChunk.slice(0, lineStart))
+    return afterEnd
+  }
+  parts.push(beforeChunk)
+  return comment.end
+}
+const deleteComments = async ({ sourceText }: { sourceText: string }): Promise<string> => {
+  const comments = await findDeletableComments({ sourceText })
   if (comments.length === 0) return sourceText
   const parts: string[] = []
   let cursor = 0
-  for (const c of comments) {
-    const beforeChunk = sourceText.slice(cursor, c.start)
-    const lineStart = beforeChunk.lastIndexOf('\n') + 1
-    const indent = beforeChunk.slice(lineStart)
-    let afterEnd = c.end
-    if (sourceText[afterEnd] === '\n') afterEnd += 1
-    else if (sourceText[afterEnd] === '\r' && sourceText[afterEnd + 1] === '\n') afterEnd += 2
-    if (WHITESPACE_ONLY.test(indent) && afterEnd <= sourceText.length) {
-      parts.push(beforeChunk.slice(0, lineStart))
-      cursor = afterEnd
-    } else {
-      parts.push(beforeChunk)
-      cursor = c.end
-    }
-  }
+  for (const c of comments) cursor = appendWithoutComment({ comment: c, cursor, parts, sourceText })
   parts.push(sourceText.slice(cursor))
   return parts.join('')
 }
@@ -73,7 +91,7 @@ const processFile = async (filePath: string): Promise<{ diagnostics: Diagnostic[
   const f = file(filePath)
   if (!(await f.exists())) return { diagnostics: [], modified: false }
   const sourceText = await f.text()
-  const comments = findDeletableComments({ sourceText })
+  const comments = await findDeletableComments({ sourceText })
   const diagnostics: Diagnostic[] = []
   for (const c of comments)
     diagnostics.push({
@@ -89,7 +107,7 @@ const processFileForFix = async (filePath: string): Promise<boolean> => {
   const f = file(filePath)
   if (!(await f.exists())) return false
   const sourceText = await f.text()
-  const result = deleteComments({ sourceText })
+  const result = await deleteComments({ sourceText })
   if (result !== sourceText) {
     await write(filePath, result)
     return true

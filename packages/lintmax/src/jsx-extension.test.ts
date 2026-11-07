@@ -11,7 +11,7 @@ const check = async () => {
   const d = await checkJsxExtension({ root: tmp })
   return new Set(d.map(x => x.file.split('/').pop()))
 }
-describe('jsx-requires-tsx-extension', () => {
+const registerJsxExtensionCases = () => {
   test('catches JSX element in .ts', async () => {
     await write('elem.ts', 'const X = () => <div>hi</div>')
     const found = await check()
@@ -45,6 +45,8 @@ describe('jsx-requires-tsx-extension', () => {
     const found = await check()
     expect(found.has('typeimport.ts')).toBe(true)
   })
+}
+const registerNonJsxExtensionCases = () => {
   test('ignores generics in .ts', async () => {
     await write('generic.ts', 'const f = <T>(x: T): T => x')
     const found = await check()
@@ -89,20 +91,31 @@ describe('jsx-requires-tsx-extension', () => {
     expect(match?.linter).toBe('lintmax')
     expect(match?.line).toBe(1)
   })
+}
+describe('jsx-requires-tsx-extension', () => {
+  registerJsxExtensionCases()
+  registerNonJsxExtensionCases()
 })
+const registerJsxParsingCases = () => {
+  test('true for JSX element', async () => expect(await hasJsx('const X = () => <div>hi</div>')).toBe(true))
+  test('true for JSX fragment', async () => expect(await hasJsx('const X = () => <>hi</>')).toBe(true))
+  test('true for self-closing', async () => expect(await hasJsx('const X = () => <br />')).toBe(true))
+  test('true for nested JSX', async () => expect(await hasJsx('const X = () => <div><span>a</span></div>')).toBe(true))
+  test('true for JSX in return', async () => expect(await hasJsx('const X = () => { return <p>hi</p> }')).toBe(true))
+}
+const registerNonJsxParsingCases = () => {
+  test('false for generic fn', async () => expect(await hasJsx('const f = <T>(x: T): T => x')).toBe(false))
+  test('false for generic interface', async () => expect(await hasJsx('interface Box<T> { value: T }')).toBe(false))
+  test('false for comparison', async () => expect(await hasJsx('const x = a < b && c > d')).toBe(false))
+  test('false for type assertion', async () => expect(await hasJsx('const x = value as string')).toBe(false))
+  test('false for empty file', async () => expect(await hasJsx('')).toBe(false))
+  test('false for plain code', async () => expect(await hasJsx('const x = 1\nconst y = 2')).toBe(false))
+  test('false for async generic', async () =>
+    expect(await hasJsx('const f = async <T>(x: T): Promise<T> => x')).toBe(false))
+  test('true for Context.Provider', async () =>
+    expect(await hasJsx('<MyContext.Provider value={1}>{children}</MyContext.Provider>')).toBe(true))
+}
 describe('hasJsx — direct unit tests', () => {
-  test('true for JSX element', () => expect(hasJsx('const X = () => <div>hi</div>')).toBe(true))
-  test('true for JSX fragment', () => expect(hasJsx('const X = () => <>hi</>')).toBe(true))
-  test('true for self-closing', () => expect(hasJsx('const X = () => <br />')).toBe(true))
-  test('true for nested JSX', () => expect(hasJsx('const X = () => <div><span>a</span></div>')).toBe(true))
-  test('true for JSX in return', () => expect(hasJsx('const X = () => { return <p>hi</p> }')).toBe(true))
-  test('false for generic fn', () => expect(hasJsx('const f = <T>(x: T): T => x')).toBe(false))
-  test('false for generic interface', () => expect(hasJsx('interface Box<T> { value: T }')).toBe(false))
-  test('false for comparison', () => expect(hasJsx('const x = a < b && c > d')).toBe(false))
-  test('false for type assertion', () => expect(hasJsx('const x = value as string')).toBe(false))
-  test('false for empty file', () => expect(hasJsx('')).toBe(false))
-  test('false for plain code', () => expect(hasJsx('const x = 1\nconst y = 2')).toBe(false))
-  test('false for async generic', () => expect(hasJsx('const f = async <T>(x: T): Promise<T> => x')).toBe(false))
-  test('true for Context.Provider', () =>
-    expect(hasJsx('<MyContext.Provider value={1}>{children}</MyContext.Provider>')).toBe(true))
+  registerJsxParsingCases()
+  registerNonJsxParsingCases()
 })

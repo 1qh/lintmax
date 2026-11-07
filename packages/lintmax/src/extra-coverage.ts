@@ -17,18 +17,18 @@ const collectExtraTargets = (gitFiles: readonly string[]): ExtraTargets => ({
   shell: gitFiles.filter(isShell),
   toml: gitFiles.filter(isToml)
 })
-const resolveDprintPluginPath = (): null | string => {
+const resolveDprintPluginPath = (): string | undefined => {
   try {
     return import.meta.resolve('@dprint/dockerfile/plugin.wasm').replace('file://', '')
   } catch {
-    return null
+    return undefined
   }
 }
-const whichTool = async (env: Record<string, string | undefined>, tool: string): Promise<null | string> => {
+const whichTool = async (env: Record<string, string | undefined>, tool: string): Promise<string | undefined> => {
   const result = await $`which ${tool}`.env(env).quiet().nothrow()
-  if (result.exitCode !== 0) return null
+  if (result.exitCode !== 0) return
   const path = result.stdout.toString().trim()
-  return path.length > 0 ? path : null
+  return path.length > 0 ? path : undefined
 }
 interface StepResult {
   diagnostics: Diagnostic[]
@@ -55,11 +55,10 @@ interface ShfmtStepInput {
   env: Record<string, string | undefined>
   files: readonly string[]
 }
-const parseShellcheckLine = (line: string): Diagnostic | null => {
+const parseShellcheckLine = (line: string): Diagnostic | undefined => {
   const groups = SHELLCHECK_LINE_RE.exec(line)?.groups
   if (groups?.file && groups.line && groups.rule)
     return { file: groups.file, line: Number(groups.line), linter: 'shellcheck', rule: groups.rule }
-  return null
 }
 const SHFMT_FLAGS = ['-s', '-ci', '-bn', '-sr', '-i', '2']
 const SHELLCHECK_FLAGS = ['--enable=all', '--severity=style', '--external-sources', '--exclude=SC2312']
@@ -79,7 +78,7 @@ const runShellcheckStep = async ({ bin, env, files }: ShellcheckStepInput): Prom
   const diagnostics: Diagnostic[] = []
   for (const line of result.stdout.split('\n')) {
     const diagnostic = parseShellcheckLine(line)
-    if (diagnostic !== null) diagnostics.push(diagnostic)
+    if (diagnostic !== undefined) diagnostics.push(diagnostic)
   }
   if (result.exitCode !== 0 && diagnostics.length === 0) diagnostics.push(failureDiagnostic('shellcheck', files))
   return diagnostics
@@ -97,11 +96,11 @@ const runShell = async ({
   const shellcheck = await whichTool(env, 'shellcheck')
   const shfmt = await whichTool(env, 'shfmt')
   const notes: string[] = []
-  if (shellcheck === null || shfmt === null)
+  if (shellcheck === undefined || shfmt === undefined)
     notes.push('shellcheck/shfmt not on PATH — shell files unchecked (install: brew install shellcheck shfmt)')
   const diagnostics: Diagnostic[] = []
-  if (shfmt !== null) diagnostics.push(...(await runShfmtStep({ bin: shfmt, command, env, files })))
-  if (shellcheck !== null) diagnostics.push(...(await runShellcheckStep({ bin: shellcheck, env, files })))
+  if (shfmt !== undefined) diagnostics.push(...(await runShfmtStep({ bin: shfmt, command, env, files })))
+  if (shellcheck !== undefined) diagnostics.push(...(await runShellcheckStep({ bin: shellcheck, env, files })))
   return { diagnostics, notes }
 }
 const runTombi = async ({
@@ -133,9 +132,9 @@ const runDprintDockerfile = async ({
   command: 'check' | 'fix'
   env: Record<string, string | undefined>
   files: readonly string[]
-  pluginPath: null | string
+  pluginPath: string | undefined
 }): Promise<Diagnostic[]> => {
-  if (files.length === 0 || pluginPath === null) return []
+  if (files.length === 0 || pluginPath === undefined) return []
   const configArgs = ['--plugins', pluginPath, '--config', '/dev/null']
   if (command === 'fix') await runCapture({ args: ['fmt', ...configArgs, ...files], command: bin, env, label: 'dprint' })
   const check = await runCapture({ args: ['check', ...configArgs, ...files], command: bin, env, label: 'dprint' })

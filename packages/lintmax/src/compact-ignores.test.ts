@@ -1,17 +1,21 @@
 import { describe, expect, test } from 'bun:test'
 import { tmpdir } from 'node:os'
 import { runCompact } from './compact.js'
+const setupCompactFixture = async () => {
+  const root = `${tmpdir()}/lintmax-compact-${Bun.randomUUIDv7()}`
+  await Bun.$`mkdir -p ${root}/readonly ${root}/src`.quiet()
+  await Bun.$`git init -q ${root}`.quiet()
+  const vendored = `${root}/readonly/keep.ts`
+  const mine = `${root}/src/mine.ts`
+  const before = 'const a = 1\n\n\n\nconst b = 2\n'
+  await Bun.write(vendored, before)
+  await Bun.write(mine, before)
+  await Bun.$`git -C ${root} add -A`.quiet()
+  return { before, mine, root, vendored }
+}
 describe('the compact stage honours the ignore list', () => {
   test('a file the config ignores is not rewritten, while one it does not is', async () => {
-    const root = `${tmpdir()}/lintmax-compact-${Bun.randomUUIDv7()}`
-    await Bun.$`mkdir -p ${root}/readonly ${root}/src`.quiet()
-    await Bun.$`git init -q ${root}`.quiet()
-    const vendored = `${root}/readonly/keep.ts`
-    const mine = `${root}/src/mine.ts`
-    const before = 'const a = 1\n\n\n\nconst b = 2\n'
-    await Bun.write(vendored, before)
-    await Bun.write(mine, before)
-    await Bun.$`git -C ${root} add -A`.quiet()
+    const { before, mine, root, vendored } = await setupCompactFixture()
     await runCompact({
       env: process.env,
       isIgnored: (one: string) => one.startsWith('readonly/'),

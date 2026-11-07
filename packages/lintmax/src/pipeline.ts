@@ -287,8 +287,9 @@ const createFixSteps = ({
       silent: true
     }
   ]
+  const markdownFiles = prettierMarkdownTargets.filter(p => p.endsWith('.md'))
   if (hasFlowmark)
-    for (const target of prettierMarkdownTargets.filter(p => p.endsWith('.md')))
+    for (const target of markdownFiles)
       steps.push({
         args: ['-w', '0', '--auto', target],
         command: 'flowmark',
@@ -308,6 +309,86 @@ const createFixSteps = ({
     if (step.label === 'eslint') return targets.eslint.length > 0
     return true
   })
+}
+const recordEmptyCapture = ({
+  byteCount,
+  failures,
+  label,
+  result
+}: {
+  byteCount: number
+  failures: FailureRecord[]
+  label: string
+  result: Awaited<ReturnType<typeof runCapture>>
+}) => {
+  const stderr = result.stderr.trim()
+  const stdout = result.stdout.trim()
+  const stdoutFirst = stdout.split('\n', 1)[0]?.trimStart() ?? ''
+  const stdoutIsJson = stdoutFirst.startsWith('[') || stdoutFirst.startsWith('{')
+  const stdoutMessage = stdoutIsJson ? undefined : stdout || undefined
+  const detail = stderr.length > 0 ? stderr : stdoutMessage
+  const failureDetail = detail ? `\n${detail}` : ''
+  const message = `Output parsed to zero diagnostics (${byteCount} bytes)${failureDetail}`
+  failures.push({ code: result.exitCode, label, message })
+}
+const recordCaptureParseFailure = ({
+  failures,
+  label,
+  parseError,
+  result
+}: {
+  failures: FailureRecord[]
+  label: string
+  parseError: unknown
+  result: Awaited<ReturnType<typeof runCapture>>
+}) => {
+  const byteCount = Buffer.byteLength(result.stdout)
+  const stderrDetail = result.stderr ? `\n${result.stderr.trim()}` : ''
+  const detail = parseError instanceof Error ? parseError.message : String(parseError)
+  failures.push({
+    code: result.exitCode,
+    label,
+    message: `Output parse error (${byteCount} bytes): ${detail}${stderrDetail}`
+  })
+}
+const parseCaptureDiagnostics = ({
+  failures,
+  label,
+  parser,
+  result
+}: {
+  failures: FailureRecord[]
+  label: string
+  parser: (result: { exitCode: number; stdout: string }) => Diagnostic[]
+  result: Awaited<ReturnType<typeof runCapture>>
+}): Diagnostic[] | undefined => {
+  let diagnostics: Diagnostic[]
+  try {
+    if (label === 'eslint' || label === 'biome' || label === 'oxlint') readRequiredJson<unknown>(result.stdout)
+    diagnostics = parser(result)
+  } catch (parseError) {
+    recordCaptureParseFailure({ failures, label, parseError, result })
+    return
+  }
+  return diagnostics
+}
+const parseCaptureResult = ({
+  failures,
+  label,
+  parser,
+  result
+}: {
+  failures: FailureRecord[]
+  label: string
+  parser: (result: { exitCode: number; stdout: string }) => Diagnostic[]
+  result: Awaited<ReturnType<typeof runCapture>>
+}): Diagnostic[] => {
+  const byteCount = Buffer.byteLength(result.stdout)
+  const diagnostics = parseCaptureDiagnostics({ failures, label, parser, result })
+  if (diagnostics === undefined) return []
+  if (diagnostics.length > 0) return diagnostics
+  recordEmptyCapture({ byteCount, failures, label, result })
+  return []
 }
 const captureAndParse = async ({
   env,
@@ -329,32 +410,7 @@ const captureAndParse = async ({
     label
   })
   if (result.exitCode === 0) return []
-  const byteCount = Buffer.byteLength(result.stdout)
-  const stderrDetail = result.stderr ? `\n${result.stderr.trim()}` : ''
-  let diagnostics: Diagnostic[]
-  try {
-    if (label === 'eslint' || label === 'biome' || label === 'oxlint') readRequiredJson<unknown>(result.stdout)
-    diagnostics = parser(result)
-  } catch (parseError) {
-    const detail = parseError instanceof Error ? parseError.message : String(parseError)
-    failures.push({
-      code: result.exitCode,
-      label,
-      message: `Output parse error (${byteCount} bytes): ${detail}${stderrDetail}`
-    })
-    return []
-  }
-  if (diagnostics.length > 0) return diagnostics
-  const stderr = result.stderr.trim()
-  const stdout = result.stdout.trim()
-  const stdoutFirst = stdout.split('\n', 1)[0]?.trimStart() ?? ''
-  const stdoutIsJson = stdoutFirst.startsWith('[') || stdoutFirst.startsWith('{')
-  const stdoutMessage = stdoutIsJson ? undefined : stdout || undefined
-  const detail = stderr.length > 0 ? stderr : stdoutMessage
-  const failureDetail = detail ? `\n${detail}` : ''
-  const message = `Output parsed to zero diagnostics (${byteCount} bytes)${failureDetail}`
-  failures.push({ code: result.exitCode, label, message })
-  return []
+  return parseCaptureResult({ failures, label, parser, result })
 }
 const runAgentCheck = async ({
   biomeBin,
@@ -502,7 +558,6 @@ const createLintTargets = (files: string[]): LintTargets => ({
   eslint: files.map(p => joinPath(cwd, p)),
   packages: files
     .filter(p => p === 'package.json' || p.endsWith('/package.json'))
-    /** sort-package-json treats even explicit file arguments as globs. */
     .map(p => escapeGlobPath(joinPath(cwd, p))),
   source: files.filter(p => hasExtension(p, SOURCE_EXTENSIONS)).map(p => joinPath(cwd, p))
 })
@@ -563,8 +618,7 @@ const runFixAgent = async (ctx: BranchContext): Promise<void> => {
   )
   throwAgentResults({ diagnostics: allDiagnostics, failures: ctx.failures })
 }
-const runCheckHuman = async (ctx: BranchContext): Promise<void> => {
-  await ctx.runSteps({ steps: ctx.checkSteps })
+const collectHumanCustomDiagnostics = async (ctx: BranchContext) => {
   const cnDiagsHuman = await checkClassName({ root: cwd })
   const jsxDiagsHuman = await checkJsxExtension({ root: cwd })
   const unusedHuman =
@@ -580,6 +634,11 @@ const runCheckHuman = async (ctx: BranchContext): Promise<void> => {
       await runExtraCoverage({ bins: ctx.extraBins, command: 'check', env: ctx.env, gitFiles: ctx.allGitFiles })
     )
   ]
+  return humanCustomDiags
+}
+const runCheckHuman = async (ctx: BranchContext): Promise<void> => {
+  await ctx.runSteps({ steps: ctx.checkSteps })
+  const humanCustomDiags = await collectHumanCustomDiagnostics(ctx)
   if (humanCustomDiags.length > 0) {
     const grouped = aggregate({ diagnostics: humanCustomDiags })
     const output = formatGrouped({ files: grouped })
@@ -604,13 +663,7 @@ const runCheckAgent = async (ctx: BranchContext): Promise<void> => {
       await runExtraCoverage({ bins: ctx.extraBins, command: 'check', env: ctx.env, gitFiles: ctx.allGitFiles })
     )
   )
-  if (allDiagnostics.length > 0 || ctx.failures.length > 0) {
-    const grouped = aggregate({ diagnostics: allDiagnostics })
-    const output = formatGrouped({ files: grouped })
-    if (output.length > 0) process.stdout.write(`${output}\n`)
-    if (ctx.failures.length > 0) process.stderr.write(`${formatFailureDetails(ctx.failures)}\n`)
-    throw new CliExitError({ code: 1 })
-  }
+  throwAgentResults({ diagnostics: allDiagnostics, failures: ctx.failures })
 }
 const buildLintEnv = (): Record<string, string | undefined> => {
   const bundledBinA = joinPath(lintmaxRoot, 'node_modules', '.bin')
@@ -672,7 +725,7 @@ const runFixCommand = async ({
     await removeUnusedSuppressions({ filePaths: ctx.sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
   await (human ? runFixHuman(ctx) : runFixAgent(ctx))
 }
-const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; human?: boolean }) => {
+const prepareLintRuntime = async () => {
   const dir = joinPath(cwd, cacheDir)
   await ensureDirectory({ directory: dir })
   const configPath = joinPath(cwd, 'lintmax.config.ts')
@@ -684,51 +737,94 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     compact?: boolean
   }>(await file(runtimePath).text())
   const failures: FailureRecord[] = []
-  const { clearFailures, runCompactContinue, runSteps, runStepsSilent, throwIfFailures } = createStepExecutor({
+  const executor = createStepExecutor({
     env,
     failures,
     root: cwd
   })
+  return { dir, env, executor, failures, runtime }
+}
+const prepareLintFiles = async ({
+  command,
+  dir,
+  env,
+  human,
+  runCompactContinue,
+  runtime
+}: {
+  command: 'check' | 'fix'
+  dir: string
+  env: Record<string, string | undefined>
+  human: boolean
+  runCompactContinue: ReturnType<typeof createStepExecutor>['runCompactContinue']
+  runtime: { compact?: boolean }
+}) => {
   const oxlintIgnorePatternsEarly = await readOxlintIgnorePatterns({ dir })
   const ignoreGlobsEarly = oxlintIgnorePatternsEarly.map(p => new Glob(p))
   const isIgnored = (filePath: string): boolean => ignoreGlobsEarly.some(g => g.match(filePath))
   if (command === 'fix' && runtime.compact === true) await runCompactContinue({ human, isIgnored, mode: 'fix' })
   const allGitFiles = (await listCompactFiles({ env, root: cwd })).filter(one => !isIgnored(one))
-  const targets = createLintTargets(allGitFiles)
+  return { allGitFiles, isIgnored, oxlintIgnorePatternsEarly }
+}
+const prepareLintCommands = async ({
+  allGitFiles,
+  dir,
+  env,
+  failures,
+  oxlintIgnorePatternsEarly,
+  targets
+}: {
+  allGitFiles: string[]
+  dir: string
+  env: Record<string, string | undefined>
+  failures: FailureRecord[]
+  oxlintIgnorePatternsEarly: string[]
+  targets: LintTargets
+}) => {
   const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs'), '--no-warn-ignored', ...targets.eslint]
   const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await resolveAllBins()
   const extraBins: ExtraBins = { dprint: dprintBin, tombi: tombiBin }
   const hasFlowmark = (await $`which flowmark`.env(env).quiet().nothrow()).exitCode === 0
-  const oxlintIgnorePatterns = oxlintIgnorePatternsEarly
   const prettierMarkdownTargets = allGitFiles.filter(p => hasExtension(p, PRETTIER_EXTENSIONS)).map(p => joinPath(cwd, p))
-  const checkSteps = createCheckSteps({
+  const commandParams = {
     biomeBin,
     dir,
     eslintArgs,
     eslintBin,
     oxlintBin,
-    oxlintIgnorePatterns,
-    prettierBin,
-    prettierMarkdownTargets,
-    sortPkgJson,
-    targets
-  })
-  const shouldComments = runtime.comments !== false
-  const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
-  const agentParams = {
-    biomeBin,
-    dir,
-    env,
-    eslintArgs,
-    eslintBin,
-    failures,
-    oxlintBin,
-    oxlintIgnorePatterns,
+    oxlintIgnorePatterns: oxlintIgnorePatternsEarly,
     prettierBin,
     prettierMarkdownTargets,
     sortPkgJson,
     targets
   }
+  const checkSteps = createCheckSteps(commandParams)
+  const fixSteps = createFixSteps({ ...commandParams, hasFlowmark })
+  const agentParams = { ...commandParams, env, failures }
+  return { agentParams, checkSteps, extraBins, fixSteps }
+}
+const prepareLintContext = async (command: 'check' | 'fix', human: boolean) => {
+  const { dir, env, executor, failures, runtime } = await prepareLintRuntime()
+  const { clearFailures, runCompactContinue, runSteps, runStepsSilent, throwIfFailures } = executor
+  const { allGitFiles, isIgnored, oxlintIgnorePatternsEarly } = await prepareLintFiles({
+    command,
+    dir,
+    env,
+    human,
+    runCompactContinue,
+    runtime
+  })
+  const targets = createLintTargets(allGitFiles)
+  const { agentParams, checkSteps, extraBins, fixSteps } = await prepareLintCommands({
+    allGitFiles,
+    dir,
+    env,
+    failures,
+    oxlintIgnorePatternsEarly,
+    targets
+  })
+  const shouldComments = runtime.comments !== false
+  const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
   const ctx: BranchContext = {
     agentParams,
     allGitFiles,
@@ -741,20 +837,11 @@ const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; h
     sourceFiles,
     throwIfFailures
   }
+  return { clearFailures, ctx, fixSteps, runStepsSilent }
+}
+const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; human?: boolean }) => {
+  const { clearFailures, ctx, fixSteps, runStepsSilent } = await prepareLintContext(command, human)
   if (command === 'fix') {
-    const fixSteps = createFixSteps({
-      biomeBin,
-      dir,
-      eslintArgs,
-      eslintBin,
-      hasFlowmark,
-      oxlintBin,
-      oxlintIgnorePatterns,
-      prettierBin,
-      prettierMarkdownTargets,
-      sortPkgJson,
-      targets
-    })
     await runFixCommand({ clearFailures, ctx, fixSteps, human, runStepsSilent })
     return
   }

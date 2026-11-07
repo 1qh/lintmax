@@ -9,7 +9,7 @@ const fonts = [sans.variable, mono.variable, 'font-sans', 'tracking-[-0.02em]'].
 const Layout = ({ children }: LayoutProps<'/'>) => (
   <html className={fonts} lang='en' suppressHydrationWarning>
     {/* biome-ignore lint/nursery/noUndeclaredClasses: standard tailwind v4 utilities biome cannot resolve */}
-    <body className='flex flex-col min-h-screen antialiased'>
+    <body className='flex min-h-screen flex-col antialiased'>
       <Providers>{children}</Providers>
     </body>
   </html>

@@ -22,7 +22,6 @@ const oxlintDisableRe = /^(?<prefix>\s*\/\*\s*oxlint-disable\s+)(?<rules>\S(?:[^
 const oxlintDisablePresentRe = /\/\*\s*oxlint-disable\s/v
 const biomeIgnoreAllRe = /^\s*\/\*\*\s*biome-ignore-all\s+(?<first>[\w\/]+)(?<rest>(?:[^\w\/*][^*]*)?)\*\/\s*$/v
 const biomeIgnoreAllLineRe = /^\s*\/\/\s*biome-ignore-all\s+(?<first>[\w\/]+)(?<rest>(?:[^\w\/].*)?)$/v
-/** Both scan for a fixed delimiter, which a regex does by retrying at every start position — super-linear on a long line for a job `indexOf` does in one pass. */
 const stripTrailingComment = (str: string): string => {
   const at = str.indexOf('--')
   return at === -1 ? str : str.slice(0, at).trimEnd()
@@ -48,25 +47,30 @@ interface FileData {
   stripped: string
 }
 const absFile = (p: string): string => (p.startsWith('/') ? p : joinPath(cwd, p))
+const buildFileData = (
+  filePath: string,
+  orig: string,
+  parseDirectives: (lines: string[]) => FileData['directiveLines']
+): FileData | undefined => {
+  const lines = orig.split('\n')
+  const directiveLines = parseDirectives(lines)
+  if (directiveLines.length === 0) return
+  const directiveIndexes = new Set(directiveLines.map(d => d.index))
+  const stripped = lines.filter((_, index) => !directiveIndexes.has(index)).join('\n')
+  return { directiveLines, filePath, lines, orig, stripped }
+}
 const collectFileData = async (
   files: string[],
-  parseDirectives: (lines: string[]) => { index: number; rules: string[] }[]
+  parseDirectives: (lines: string[]) => FileData['directiveLines']
 ): Promise<FileData[]> => {
-  const out: FileData[] = []
-  for (const filePath of files) {
-    const f = file(filePath)
-    if (await f.exists()) {
-      const orig = await f.text()
-      const lines = orig.split('\n')
-      const directiveLines = parseDirectives(lines)
-      if (directiveLines.length > 0) {
-        const directiveIndexes = new Set(directiveLines.map(d => d.index))
-        const stripped = lines.filter((_, index) => !directiveIndexes.has(index)).join('\n')
-        out.push({ directiveLines, filePath, lines, orig, stripped })
-      }
-    }
-  }
-  return out
+  const results = await Promise.all(
+    files.map(async filePath => {
+      const source = file(filePath)
+      if (!(await source.exists())) return
+      return buildFileData(filePath, await source.text(), parseDirectives)
+    })
+  )
+  return results.filter((result): result is FileData => result !== undefined)
 }
 const batchStripRestore = async ({
   data,
@@ -100,13 +104,6 @@ const rebuildBiomeLine = ({ line, rules }: { line: string; rules: string[] }): s
   const indent = indentMatch?.[0] ?? ''
   return `${indent}/** biome-ignore-all ${rules.join(', ')}: ${reason} */`
 }
-/**
- * A lint run that could not ANSWER must refuse, never resolve to an empty fired set. An empty map reads as
- * `no rule fired anywhere`, which marks EVERY directive in the tree unused — MEASURED on one CI lane, 35 of 35
- * directives reported while each one was genuinely needed. A clean run is not this shape: both linters emit
- * `{"diagnostics": []}` and exit 0 when they find nothing, so requiring a parsed diagnostics array refuses a
- * crash without ever refusing a clean tree.
- */
 const oxlintUnusedArgs = ({
   configPath,
   files,
@@ -156,6 +153,17 @@ const requireLintAnswer = ({
   if (exitCode !== 0 && parsed.diagnostics.length === 0) refuse('failed with zero diagnostics')
   return json
 }
+const groupOxlintDiagnostics = (diagnostics: ReturnType<typeof parseOxlintDiagnostics>) => {
+  const byFile = new Map<string, Set<string>>()
+  for (const d of diagnostics) {
+    const key = absFile(d.file)
+    const set = byFile.get(key) ?? new Set<string>()
+    set.add(d.rule)
+    for (const v of normalizeRule(d.rule)) set.add(v)
+    byFile.set(key, set)
+  }
+  return byFile
+}
 const firedOxlintByFile = async ({
   configPath,
   files,
@@ -183,15 +191,7 @@ const firedOxlintByFile = async ({
       stdout: result.stdout
     })
   })
-  const byFile = new Map<string, Set<string>>()
-  for (const d of diagnostics) {
-    const key = absFile(d.file)
-    const set = byFile.get(key) ?? new Set<string>()
-    set.add(d.rule)
-    for (const v of normalizeRule(d.rule)) set.add(v)
-    byFile.set(key, set)
-  }
-  return byFile
+  return groupOxlintDiagnostics(diagnostics)
 }
 const isOxlintRuleFired = (rule: string, fired: Set<string>): boolean => {
   if (fired.has(rule)) return true
@@ -256,31 +256,34 @@ const rebuildOxlintDirectiveLine = ({
   if (kept.length > 0) return { diagnostics, emitted: [`${prefix}${kept.join(', ')}${suffix}`] }
   return { diagnostics, emitted: [] }
 }
-const rebuildOxlintFile = async ({
-  data,
-  dryRun,
-  fired
-}: {
+interface RebuildFileInput {
   data: FileData
   dryRun: boolean
   fired: Set<string>
-}): Promise<{ diagnostics: UnusedDirective[]; removed: number }> => {
-  const result: string[] = []
-  const diagnostics: UnusedDirective[] = []
-  let removed = 0
-  for (let index = 0; index < data.lines.length; index += 1) {
-    const line = data.lines[index] ?? ''
-    const directive = data.directiveLines.find(d => d.index === index)
-    if (directive) {
-      const outcome = rebuildOxlintDirectiveLine({ directive, filePath: data.filePath, fired, index, line })
-      removed += outcome.diagnostics.length
-      diagnostics.push(...outcome.diagnostics)
-      result.push(...outcome.emitted)
-    } else result.push(line)
-  }
-  if (removed > 0 && !dryRun) await write(data.filePath, result.join('\n'))
-  return { diagnostics, removed }
 }
+interface RebuildLineInput {
+  directive: { index: number; rules: string[] }
+  filePath: string
+  fired: Set<string>
+  index: number
+  line: string
+}
+const rebuildFile = async (
+  { data, dryRun, fired }: RebuildFileInput,
+  rebuildLine: (input: RebuildLineInput) => RebuiltDirective
+): Promise<{ diagnostics: UnusedDirective[]; removed: number }> => {
+  const outcomes = data.lines.map((line, index) => {
+    const directive = data.directiveLines.find(d => d.index === index)
+    return directive
+      ? rebuildLine({ directive, filePath: data.filePath, fired, index, line })
+      : { diagnostics: [], emitted: [line] }
+  })
+  const diagnostics = outcomes.flatMap(outcome => outcome.diagnostics)
+  if (diagnostics.length > 0 && !dryRun)
+    await write(data.filePath, outcomes.flatMap(outcome => outcome.emitted).join('\n'))
+  return { diagnostics, removed: diagnostics.length }
+}
+const rebuildOxlintFile = async (input: RebuildFileInput) => rebuildFile(input, rebuildOxlintDirectiveLine)
 const findOxlintDisableFiles = async (filePaths: string[]): Promise<string[]> => {
   const out: string[] = []
   for (const fp of filePaths) {
@@ -335,13 +338,15 @@ const firedBiomeByFile = async ({
   }
   return byFile
 }
+const matchBiomeDirective = (line: string) => {
+  biomeIgnoreAllRe.lastIndex = 0
+  biomeIgnoreAllLineRe.lastIndex = 0
+  return biomeIgnoreAllRe.exec(line) ?? biomeIgnoreAllLineRe.exec(line)
+}
 const parseBiomeDirectiveLines = (lines: string[]): { index: number; rules: string[] }[] => {
   const directiveLines: { index: number; rules: string[] }[] = []
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? ''
-    biomeIgnoreAllRe.lastIndex = 0
-    biomeIgnoreAllLineRe.lastIndex = 0
-    const match = biomeIgnoreAllRe.exec(line) ?? biomeIgnoreAllLineRe.exec(line)
+    const match = matchBiomeDirective(lines[index] ?? '')
     if (match) {
       const first = match.groups?.first ?? ''
       const rest = match.groups?.rest ?? ''
@@ -386,30 +391,73 @@ const rebuildBiomeDirectiveLine = ({
   if (kept.length > 0) return { diagnostics, emitted: [rebuildBiomeLine({ line, rules: kept })] }
   return { diagnostics, emitted: [] }
 }
-const rebuildBiomeFile = async ({
-  data,
+const rebuildBiomeFile = async (input: RebuildFileInput) => rebuildFile(input, rebuildBiomeDirectiveLine)
+const rebuildBatch = async ({
   dryRun,
-  fired
+  files,
+  firedByFile,
+  rebuild
 }: {
-  data: FileData
   dryRun: boolean
-  fired: Set<string>
-}): Promise<{ diagnostics: UnusedDirective[]; removed: number }> => {
-  const result: string[] = []
-  const diagnostics: UnusedDirective[] = []
-  let removed = 0
-  for (let index = 0; index < data.lines.length; index += 1) {
-    const line = data.lines[index] ?? ''
-    const directive = data.directiveLines.find(d => d.index === index)
-    if (directive) {
-      const outcome = rebuildBiomeDirectiveLine({ directive, filePath: data.filePath, fired, index, line })
-      removed += outcome.diagnostics.length
-      diagnostics.push(...outcome.diagnostics)
-      result.push(...outcome.emitted)
-    } else result.push(line)
+  files: FileData[]
+  firedByFile: Map<string, Set<string>>
+  rebuild: (input: RebuildFileInput) => Promise<{ diagnostics: UnusedDirective[]; removed: number }>
+}): Promise<RemoveResult> => {
+  const outcomes = await Promise.all(
+    files.map(async data => ({
+      filePath: data.filePath,
+      outcome: await rebuild({ data, dryRun, fired: firedByFile.get(absFile(data.filePath)) ?? new Set() })
+    }))
+  )
+  const diagnostics = outcomes.flatMap(result => result.outcome.diagnostics)
+  return {
+    diagnostics,
+    files: outcomes.filter(result => result.outcome.removed > 0).map(result => result.filePath),
+    removed: diagnostics.length
   }
-  if (removed > 0 && !dryRun) await write(data.filePath, result.join('\n'))
-  return { diagnostics, removed }
+}
+const removeOxlintSuppressions = async ({
+  dryRun,
+  oxlintBin,
+  oxlintConfigPath,
+  targets
+}: {
+  dryRun: boolean
+  oxlintBin: string
+  oxlintConfigPath: string
+  targets: string[]
+}): Promise<RemoveResult> => {
+  const oxlintData = await collectFileData(await findOxlintDisableFiles(targets), parseOxlintDirectiveLines)
+  if (oxlintData.length > 0) {
+    const firedByFile = await batchStripRestore({
+      data: oxlintData,
+      lint: async () =>
+        firedOxlintByFile({ configPath: oxlintConfigPath, files: oxlintData.map(d => d.filePath), oxlintBin })
+    })
+    return rebuildBatch({ dryRun, files: oxlintData, firedByFile, rebuild: rebuildOxlintFile })
+  }
+  return { diagnostics: [], files: [], removed: 0 }
+}
+const removeBiomeSuppressions = async ({
+  biomeBin,
+  configDir,
+  dryRun,
+  targets
+}: {
+  biomeBin: string
+  configDir: string
+  dryRun: boolean
+  targets: string[]
+}): Promise<RemoveResult> => {
+  const biomeData = await collectFileData(await findBiomeIgnoreAllFiles(targets), parseBiomeDirectiveLines)
+  if (biomeData.length > 0) {
+    const firedByFile = await batchStripRestore({
+      data: biomeData,
+      lint: async () => firedBiomeByFile({ biomeBin, configDir, files: biomeData.map(d => d.filePath) })
+    })
+    return rebuildBatch({ dryRun, files: biomeData, firedByFile, rebuild: rebuildBiomeFile })
+  }
+  return { diagnostics: [], files: [], removed: 0 }
 }
 const removeUnusedSuppressions = async ({
   dryRun = false,
@@ -428,45 +476,13 @@ const removeUnusedSuppressions = async ({
     resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
     resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
   ])
-  const changedFiles = new Set<string>()
-  const diagnostics: UnusedDirective[] = []
-  let removed = 0
-  const oxlintData = await collectFileData(await findOxlintDisableFiles(targets), parseOxlintDirectiveLines)
-  if (oxlintData.length > 0) {
-    const firedByFile = await batchStripRestore({
-      data: oxlintData,
-      lint: async () =>
-        firedOxlintByFile({ configPath: oxlintConfigPath, files: oxlintData.map(d => d.filePath), oxlintBin })
-    })
-    for (const data of oxlintData) {
-      const outcome = await rebuildOxlintFile({
-        data,
-        dryRun,
-        fired: firedByFile.get(absFile(data.filePath)) ?? new Set()
-      })
-      if (outcome.removed > 0) {
-        removed += outcome.removed
-        changedFiles.add(data.filePath)
-      }
-      diagnostics.push(...outcome.diagnostics)
-    }
+  const oxlint = await removeOxlintSuppressions({ dryRun, oxlintBin, oxlintConfigPath, targets })
+  const biome = await removeBiomeSuppressions({ biomeBin, configDir, dryRun, targets })
+  return {
+    diagnostics: [...oxlint.diagnostics, ...biome.diagnostics],
+    files: [...new Set([...oxlint.files, ...biome.files])],
+    removed: oxlint.removed + biome.removed
   }
-  const biomeData = await collectFileData(await findBiomeIgnoreAllFiles(targets), parseBiomeDirectiveLines)
-  if (biomeData.length > 0) {
-    const firedByFile = await batchStripRestore({
-      data: biomeData,
-      lint: async () => firedBiomeByFile({ biomeBin, configDir, files: biomeData.map(d => d.filePath) })
-    })
-    for (const data of biomeData) {
-      const outcome = await rebuildBiomeFile({ data, dryRun, fired: firedByFile.get(absFile(data.filePath)) ?? new Set() })
-      if (outcome.removed > 0) {
-        removed += outcome.removed
-        changedFiles.add(data.filePath)
-      }
-      diagnostics.push(...outcome.diagnostics)
-    }
-  }
-  return { diagnostics, files: [...changedFiles], removed }
 }
 export type { RemoveResult, UnusedDirective }
 export { oxlintUnusedArgs, removeUnusedSuppressions, requireLintAnswer }

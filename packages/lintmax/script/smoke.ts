@@ -61,7 +61,7 @@ try {
   if (!ownTs) throw new Error('this package declares no typescript dependency to pin the fixture to')
   const peers = pkg.peerDependencies
   pkg.peerDependencies = { ...(typeof peers === 'object' && peers !== null ? peers : {}), typescript: ownTs }
-  await write(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
+  await write(pkgPath, `${JSON.stringify(pkg, undefined, 2)}\n`)
   await write(join(dir, 'index.ts'), "const ok = 'lintmax-smoke'\nexport { ok }\n")
   await $`bun add ${join(root, tarball)}`.cwd(dir).quiet()
   const checks = await Promise.all(required.map(async f => ({ exists: await has(f), f })))

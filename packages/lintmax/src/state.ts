@@ -10,7 +10,6 @@ interface StaleEntry {
 interface StateShape {
   lastCheck: number
   lastGreenByCwd: Record<string, string>
-  /** The last staleness verdict, kept so a cached run repeats it. Storing only the timestamp meant every run inside the window reported clean regardless of what the last real scan found. */
   staleIssues: StaleEntry[]
   versions: Record<string, string>
 }
@@ -63,7 +62,7 @@ const loadState = async (): Promise<StateShape> => {
 const saveState = async (state: StateShape): Promise<void> => {
   const path = statePath()
   try {
-    await write(path, `${JSON.stringify(state, null, 2)}\n`)
+    await write(path, `${JSON.stringify(state, undefined, 2)}\n`)
   } catch {
     process.exitCode ??= 0
   }

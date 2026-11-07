@@ -1,5 +1,3 @@
-/* eslint-disable prefer-named-capture-group */
-/** biome-ignore-all lint/nursery/useNamedCaptureGroup: test fixtures */
 import { file, write } from 'bun'
 import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -307,9 +305,9 @@ describe('splitRules', () => {
   })
 })
 describe('parseRules (ignores.ts)', () => {
-  const eslintRe = /eslint-disable(?:-next-line)?\s+([^\n]*)/gv
-  const oxlintRe = /oxlint-disable(?:-next-line)?\s+([^\n]*)/gv
-  const biomeRe = /biome-ignore(?:-all)?\s+([\w/]+)/gu
+  const eslintRe = /eslint-disable(?:-next-line)?\s+(?<rules>[^\n]*)/gv
+  const oxlintRe = /oxlint-disable(?:-next-line)?\s+(?<rules>[^\n]*)/gv
+  const biomeRe = /biome-ignore(?:-all)?\s+(?<rules>[\w/]+)/gu
   test('parses eslint-disable single rule', () => {
     expect(parseRules('/* eslint-disable no-console */', eslintRe)).toEqual(['no-console'])
   })

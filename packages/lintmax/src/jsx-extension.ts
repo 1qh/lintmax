@@ -1,5 +1,5 @@
 import { file, Glob } from 'bun'
-import { parseSync } from 'oxc-parser'
+import { parse } from 'oxc-parser'
 import type { Diagnostic } from './aggregate.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { listProjectFiles } from './project-files.js'
@@ -20,12 +20,10 @@ const containsJsxNode = (program: unknown): boolean => {
   visit(program)
   return found
 }
-const hasJsx = (sourceText: string): boolean => {
-  // oxlint-disable-next-line node/no-sync
-  const asTs = parseSync('file.ts', sourceText)
+const hasJsx = async (sourceText: string): Promise<boolean> => {
+  const asTs = await parse('file.ts', sourceText)
   if (asTs.errors.length === 0) return false
-  // oxlint-disable-next-line node/no-sync
-  const asTsx = parseSync('file.tsx', sourceText)
+  const asTsx = await parse('file.tsx', sourceText)
   return containsJsxNode(asTsx.program)
 }
 const checkJsxExtension = async ({ root }: { root: string }): Promise<Diagnostic[]> => {
@@ -36,7 +34,7 @@ const checkJsxExtension = async ({ root }: { root: string }): Promise<Diagnostic
   const diagnostics = await Promise.all(
     paths.map(async (path): Promise<Diagnostic[]> => {
       const content = await file(`${root}/${path}`).text()
-      if (!hasJsx(content)) return []
+      if (!(await hasJsx(content))) return []
       return [
         {
           file: `${root}/${path}`,

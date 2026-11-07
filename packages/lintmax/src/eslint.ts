@@ -43,12 +43,29 @@ interface SharedOverrideAppendConfig {
 const sharedOverrideMarker = Symbol.for(SHARED_OVERRIDE_SYMBOL_KEY)
 const normalizeAppendInput = ({ append }: { append: EslintOptions['append'] }): Linter.Config[] => {
   const out: Linter.Config[] = []
-  for (const value of normalizeObjectListInput({ allowNonPlain: true, label: 'eslint.append', value: append }))
-    out.push(value)
+  const values = normalizeObjectListInput({ allowNonPlain: true, label: 'eslint.append', value: append })
+  for (const value of values) out.push(value)
   return out
 }
-const validateEslintOptions = async ({ options }: { options?: EslintOptions }): Promise<void> => {
-  if (!options) return
+const validateTailwindEntry = async ({
+  tailwind,
+  tsconfigRootDir
+}: {
+  tailwind: boolean | string | undefined
+  tsconfigRootDir?: string
+}) => {
+  const tailwindEntrySetting = tailwind
+  if (typeof tailwindEntrySetting === 'string') {
+    const root = tsconfigRootDir ?? process.cwd()
+    const resolved = isAbsolutePath(tailwindEntrySetting) ? tailwindEntrySetting : joinPath(root, tailwindEntrySetting)
+    const resolvedExists = await file(resolved).exists()
+    if (!resolvedExists)
+      throw new Error(
+        `eslint.tailwind file not found: ${resolved}. Use an existing path, set eslint.tailwind to false, or remove eslint.tailwind to use auto-detection.`
+      )
+  }
+}
+const validateEslintLists = (options: EslintOptions) => {
   if (options.ignores !== undefined)
     normalizePathListInput({
       allowUndefined: true,
@@ -61,20 +78,15 @@ const validateEslintOptions = async ({ options }: { options?: EslintOptions }): 
       value: options.off
     })
   if (options.append !== undefined) normalizeAppendInput({ append: options.append })
+}
+const validateEslintOptions = async ({ options }: { options?: EslintOptions }): Promise<void> => {
+  if (!options) return
+  validateEslintLists(options)
   const tailwind = normalizeTailwindOption({
     label: 'eslint.tailwind',
     value: options.tailwind
   })
-  const tailwindEntrySetting = tailwind
-  if (typeof tailwindEntrySetting === 'string') {
-    const root = options.tsconfigRootDir ?? process.cwd()
-    const resolved = isAbsolutePath(tailwindEntrySetting) ? tailwindEntrySetting : joinPath(root, tailwindEntrySetting)
-    const resolvedExists = await file(resolved).exists()
-    if (!resolvedExists)
-      throw new Error(
-        `eslint.tailwind file not found: ${resolved}. Use an existing path, set eslint.tailwind to false, or remove eslint.tailwind to use auto-detection.`
-      )
-  }
+  await validateTailwindEntry({ tailwind, tsconfigRootDir: options.tsconfigRootDir })
   if (options.tsconfigRootDir !== undefined && typeof options.tsconfigRootDir !== 'string')
     throw new Error('eslint.tsconfigRootDir must be a string')
 }
@@ -111,8 +123,8 @@ const collectKnownEslintRuleNames = ({
   for (const config of appendConfigs) collectFromConfig({ config, includeRules: false })
   return knownRuleNames
 }
-const getSharedAppendConfig = ({ config }: { config: Linter.Config }): null | SharedOverrideAppendConfig => {
-  if (Reflect.get(config, sharedOverrideMarker) !== true) return null
+const getSharedAppendConfig = ({ config }: { config: Linter.Config }): SharedOverrideAppendConfig | undefined => {
+  if (Reflect.get(config, sharedOverrideMarker) !== true) return
   /** biome-ignore lint/nursery/noUnsafeTypeAssertion: internal marker identifies this external config as the shared append shape */
   return config as SharedOverrideAppendConfig
 }
@@ -145,17 +157,14 @@ const resolveTailwindEntry = async ({
     `Multiple Tailwind entry files found: ${relMatches.join(', ')}. Set eslint.tailwind to an explicit path.`
   )
 }
-/** The files whose rules need a JavaScript AST. A config that carries JS rules and NO `files` matches every path eslint is handed — harmless while the gate only ever linted JS/TS, and a hard crash the moment a non-JS file type joins the target set, because a type-aware rule then runs against (say) the JSON parser's tree. Every such config is scoped to these. */
 const SOURCE_FILE_PATTERNS = ['**/*.js', '**/*.jsx', '**/*.mjs', '**/*.cjs', '**/*.ts', '**/*.tsx']
 const tailwindRules = (entryPoint?: string): Record<string, Linter.RuleEntry> =>
   entryPoint ? eslintPluginBetterTailwindcss.configs['recommended-error'].rules : {}
-/** regexp's `flat/recommended` is the curated set: it keeps every correctness rule (no-super-linear-backtracking — the real ReDoS — plus no-misleading-capturing-group, no-dupe-disjunctions, no-unused-capturing-group) and drops the pure-style ones `flat/all` adds (prefer-named-capture-group, require-unicode-sets-regexp, sort-character-class-elements) and the author-excluded advisory no-super-linear-move. Its rules ship at warn, and a warn enforces nothing because the gate's `warnToError` covers consumer overrides, not a config reached through `extends`, so they are lifted to error here. */
 const regexpRecommendedAtError = (): Linter.Config => {
   /** biome-ignore lint/nursery/noUnsafeTypeAssertion: external regexp plugin config is structurally compatible with ESLint's config boundary */
   const rec = regexpConfigs['flat/recommended'] as Linter.Config
   return { ...rec, rules: warnToError(rec.rules ?? {}) }
 }
-/** package.json is a file type the gate would otherwise never lint. The plugin ships its own `files` glob and JSON parser, so it stands alone rather than riding the TypeScript block. Its `recommended` + `stylistic` are the curated set; the `require-*` family stays out because those demand OPT-IN metadata (`bin`, `browser`, `cpu`, `gypfile`, `libc`, `man`, `os`) that no ordinary package declares. `require-type` is disabled with cause: its autofix stamps `"type": "commonjs"` onto any manifest missing `type`, which silently BREAKS an ESM package (a Next/MDX app relying on extension-based resolution) — a rule that guesses a load-bearing field and defaults it wrong is harm, not strictness. */
 const packageJsonConfig = (): Linter.Config => {
   /** biome-ignore lint/nursery/noUnsafeTypeAssertion: external package-json plugin config is structurally compatible with ESLint's config boundary */
   const recommended = packageJsonConfigs.recommended as Linter.Config
@@ -410,8 +419,7 @@ const buildOffOverrideConfigs = ({ knownRuleNames, normalizedRules }: OffOverrid
     rules: normalizedRules
   })
   if (unknownRules.length > 0) throw new Error(`eslint.off contains unknown eslint rules: ${unknownRules.join(', ')}`)
-  const overrideRules: Linter.RulesRecord = {}
-  for (const [key, value] of Object.entries(normalizedRules)) overrideRules[key] = value
+  const overrideRules: Linter.RulesRecord = Object.fromEntries(Object.entries(normalizedRules))
   return [{ rules: overrideRules }]
 }
 const buildAppendOverrideConfigs = ({ appendConfigs, knownRuleNames }: AppendOverrideParams): Linter.Config[] => {
@@ -428,7 +436,7 @@ const buildAppendOverrideConfigs = ({ appendConfigs, knownRuleNames }: AppendOve
     if (unknownRules.length > 0)
       throw new Error(`overrides.eslint contains unknown eslint rules: ${unknownRules.join(', ')}`)
     const sanitized: Linter.Config =
-      shared === null
+      shared === undefined
         ? config
         : (() => {
             const sanitizedShared: Record<string, unknown> = {}
@@ -452,43 +460,40 @@ const buildParserOptionsConfigs = ({ root }: { root: string }): Linter.Config[] 
   },
   { linterOptions: { reportUnusedDisableDirectives: true } }
 ]
-const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> => {
-  await validateEslintOptions({ options })
-  const opts = options ?? {}
-  const root = opts.tsconfigRootDir ?? process.cwd()
-  const configs: Parameters<typeof defineConfig> = []
-  const gitignorePath = joinPath(root, '.gitignore')
-  const normalizedIgnores = normalizePathListInput({
-    allowUndefined: true,
-    label: 'eslint.ignores',
-    value: opts.ignores
-  })
-  const tailwindEntry = await resolveTailwindEntry({
-    root,
-    tailwind: opts.tailwind
-  })
-  const tailwindSettings: Record<string, unknown> = {}
-  if (tailwindEntry) tailwindSettings['better-tailwindcss'] = { entryPoint: tailwindEntry }
-  configs.push(globalIgnores([...DEFAULT_SHARED_IGNORE_PATTERNS, ...normalizedIgnores]))
+const projectIgnoreConfig = (gitignorePath: string) => {
   try {
     // eslint-disable-next-line sonarjs/deprecation -- reason: replacement not yet exported (see import)
-    configs.push(includeIgnoreFile(gitignorePath))
+    return includeIgnoreFile(gitignorePath)
   } catch (error) {
     if (error instanceof Error) {
       const message = error.message.toLowerCase()
       if (!(message.includes('enoent') || message.includes('no such file'))) throw error
     } else throw error
   }
-  configs.push(
-    packageJsonConfig(),
-    ...buildBaseTypescriptConfigs(),
-    ...buildReactConfigs({ tailwindEntry, tailwindSettings }),
-    ...buildNextConfigs(),
-    ...buildTestFileConfigs(),
-    ...buildConvexTestConfigs(),
-    ...buildScriptFileConfigs(),
-    ...buildAuthConfigConfigs()
-  )
+}
+const buildIgnoreConfigs = ({ options, root }: { options: EslintOptions; root: string }) => {
+  const configs: Linter.Config[] = []
+  const gitignorePath = joinPath(root, '.gitignore')
+  const normalizedIgnores = normalizePathListInput({
+    allowUndefined: true,
+    label: 'eslint.ignores',
+    value: options.ignores
+  })
+  configs.push(globalIgnores([...DEFAULT_SHARED_IGNORE_PATTERNS, ...normalizedIgnores]))
+  const gitignoreConfig = projectIgnoreConfig(gitignorePath)
+  if (gitignoreConfig) configs.push(gitignoreConfig)
+  return configs
+}
+const buildTailwindSettings = async (root: string, tailwind: EslintOptions['tailwind']) => {
+  const tailwindEntry = await resolveTailwindEntry({
+    root,
+    tailwind
+  })
+  const tailwindSettings: Record<string, unknown> = {}
+  if (tailwindEntry) tailwindSettings['better-tailwindcss'] = { entryPoint: tailwindEntry }
+  return { tailwindEntry, tailwindSettings }
+}
+const appendEslintOverrides = (configs: Parameters<typeof defineConfig>, opts: EslintOptions, root: string) => {
   const appendConfigs = normalizeAppendInput({ append: opts.append })
   const knownRuleNames = collectKnownEslintRuleNames({
     appendConfigs,
@@ -503,6 +508,25 @@ const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> 
     ...buildAppendOverrideConfigs({ appendConfigs, knownRuleNames }),
     ...buildParserOptionsConfigs({ root })
   )
+}
+const eslintFactory = async (options?: EslintOptions): Promise<Linter.Config[]> => {
+  await validateEslintOptions({ options })
+  const opts = options ?? {}
+  const root = opts.tsconfigRootDir ?? process.cwd()
+  const configs: Parameters<typeof defineConfig> = []
+  const { tailwindEntry, tailwindSettings } = await buildTailwindSettings(root, opts.tailwind)
+  configs.push(
+    ...buildIgnoreConfigs({ options: opts, root }),
+    packageJsonConfig(),
+    ...buildBaseTypescriptConfigs(),
+    ...buildReactConfigs({ tailwindEntry, tailwindSettings }),
+    ...buildNextConfigs(),
+    ...buildTestFileConfigs(),
+    ...buildConvexTestConfigs(),
+    ...buildScriptFileConfigs(),
+    ...buildAuthConfigConfigs()
+  )
+  appendEslintOverrides(configs, opts, root)
   return defineConfig(...configs)
 }
 const defaultConfig: Linter.Config[] = await eslintFactory()
