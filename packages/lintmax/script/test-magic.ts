@@ -50,7 +50,7 @@ const isPositive = function(n: number) {
 }
 // Get absolute value
 const abs = function(n: number) {
-  return n < 0 ? -n : n
+  return Math.abs(n)
 }
 // Unused type
 type StringOrNumber = string | number

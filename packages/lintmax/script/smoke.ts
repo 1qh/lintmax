@@ -53,6 +53,9 @@ try {
     })
   process.stdout.write(`smoke dir: ${dir}\n`)
   await $`bun init -y`.cwd(dir).quiet()
+  const agentDocPath = join(dir, 'CLAUDE.md')
+  const agentDoc = file(agentDocPath)
+  if (await agentDoc.exists()) await write(agentDocPath, `# lintmax smoke fixture\n\n${await agentDoc.text()}`)
   const pkgPath = join(dir, 'package.json')
   const pkg = readRequiredJson<Record<string, unknown>>(await file(pkgPath).text())
   pkg.description = 'lintmax smoke fixture'
