@@ -1,5 +1,5 @@
 import { file, write } from 'bun'
-import { afterAll, describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,8 +13,6 @@ import {
 } from './clean-ignores.js'
 import { cacheDir } from './core.js'
 import { parseRules } from './ignores.js'
-const tmp = await mkdtemp(join(tmpdir(), 'clean-ignores-test-'))
-afterAll(async () => rm(tmp, { recursive: true }))
 const active = new Set([
   '@typescript-eslint/no-unsafe-call',
   'complexity',
@@ -25,10 +23,15 @@ const active = new Set([
   'react_perf/jsx-no-new-object-as-prop'
 ])
 const writeAndClean = async (name: string, content: string) => {
-  const path = join(tmp, name)
-  await write(path, content)
-  const removed = await cleanFileIgnores(path, active)
-  return { content: await file(path).text(), removed }
+  const tmp = await mkdtemp(join(tmpdir(), 'clean-ignores-test-'))
+  try {
+    const path = join(tmp, name)
+    await write(path, content)
+    const removed = await cleanFileIgnores(path, active)
+    return { content: await file(path).text(), removed }
+  } finally {
+    await rm(tmp, { force: true, recursive: true })
+  }
 }
 describe('cleanFileIgnores — eslint', () => {
   test('keeps eslint-disable for active rule', async () => {
@@ -215,7 +218,7 @@ describe('normalizeRule', () => {
   })
   test('plain rule without hyphen returns itself only', () => {
     const v = normalizeRule('eqeqeq')
-    expect(v).toEqual(['eqeqeq'])
+    expect(v).toStrictEqual(['eqeqeq'])
   })
   test('@next/next/rule → nextjs(rule)', () => {
     const v = normalizeRule('@next/next/no-img-element')
@@ -274,34 +277,34 @@ describe('cleanFileIgnores — multi-file batch', () => {
 })
 describe('splitRules', () => {
   test('single rule', () => {
-    expect(splitRules('no-console')).toEqual(['no-console'])
+    expect(splitRules('no-console')).toStrictEqual(['no-console'])
   })
   test('comma-separated', () => {
-    expect(splitRules('no-console, complexity')).toEqual(['no-console', 'complexity'])
+    expect(splitRules('no-console, complexity')).toStrictEqual(['no-console', 'complexity'])
   })
   test('strips trailing */', () => {
-    expect(splitRules('no-console */')).toEqual(['no-console'])
+    expect(splitRules('no-console */')).toStrictEqual(['no-console'])
   })
   test('strips trailing --comment', () => {
-    expect(splitRules('no-console -- reason here')).toEqual(['no-console'])
+    expect(splitRules('no-console -- reason here')).toStrictEqual(['no-console'])
   })
   test('a comma inside the reason does not read as another rule', () => {
-    expect(splitRules('no-console -- the index is the identity, so a key adds nothing')).toEqual(['no-console'])
+    expect(splitRules('no-console -- the index is the identity, so a key adds nothing')).toStrictEqual(['no-console'])
   })
   test('keeps the reason so a rewrite can re-attach it', () => {
-    expect(splitDirective('no-console, complexity -- both are intentional, see below')).toEqual({
+    expect(splitDirective('no-console, complexity -- both are intentional, see below')).toStrictEqual({
       reason: ' -- both are intentional, see below',
       rules: ['no-console', 'complexity']
     })
   })
   test('empty string', () => {
-    expect(splitRules('')).toEqual([])
+    expect(splitRules('')).toStrictEqual([])
   })
   test('whitespace only', () => {
-    expect(splitRules('  ,  ')).toEqual([])
+    expect(splitRules('  ,  ')).toStrictEqual([])
   })
   test('mixed with trailing junk', () => {
-    expect(splitRules('no-console, complexity -- note */')).toEqual(['no-console', 'complexity'])
+    expect(splitRules('no-console, complexity -- note */')).toStrictEqual(['no-console', 'complexity'])
   })
 })
 describe('parseRules (ignores.ts)', () => {
@@ -309,27 +312,27 @@ describe('parseRules (ignores.ts)', () => {
   const oxlintRe = /oxlint-disable(?:-next-line)?\s+(?<rules>[^\n]*)/gv
   const biomeRe = /biome-ignore(?:-all)?\s+(?<rules>[\w/]+)/gu
   test('parses eslint-disable single rule', () => {
-    expect(parseRules('/* eslint-disable no-console */', eslintRe)).toEqual(['no-console'])
+    expect(parseRules('/* eslint-disable no-console */', eslintRe)).toStrictEqual(['no-console'])
   })
   test('parses eslint-disable multi rule', () => {
-    expect(parseRules('/* eslint-disable no-console, complexity */', eslintRe)).toEqual(['no-console', 'complexity'])
+    expect(parseRules('/* eslint-disable no-console, complexity */', eslintRe)).toStrictEqual(['no-console', 'complexity'])
   })
   test('parses eslint-disable-next-line', () => {
-    expect(parseRules('// eslint-disable-next-line no-console', eslintRe)).toEqual(['no-console'])
+    expect(parseRules('// eslint-disable-next-line no-console', eslintRe)).toStrictEqual(['no-console'])
   })
   test('parses oxlint-disable', () => {
-    expect(parseRules('/* oxlint-disable react-perf/jsx-no-new-object-as-prop */', oxlintRe)).toEqual([
+    expect(parseRules('/* oxlint-disable react-perf/jsx-no-new-object-as-prop */', oxlintRe)).toStrictEqual([
       'react-perf/jsx-no-new-object-as-prop'
     ])
   })
   test('parses biome-ignore', () => {
-    expect(parseRules('/** biome-ignore lint/style/noProcessEnv: reason */', biomeRe)).toEqual(['lint/style/noProcessEnv'])
+    expect(parseRules('/** biome-ignore lint/style/noProcessEnv: reason */', biomeRe)).toStrictEqual(['lint/style/noProcessEnv'])
   })
   test('parses biome-ignore-all', () => {
-    expect(parseRules('/** biome-ignore-all lint/nursery/noForIn: reason */', biomeRe)).toEqual(['lint/nursery/noForIn'])
+    expect(parseRules('/** biome-ignore-all lint/nursery/noForIn: reason */', biomeRe)).toStrictEqual(['lint/nursery/noForIn'])
   })
   test('returns empty for no match', () => {
-    expect(parseRules('const x = 1', eslintRe)).toEqual([])
+    expect(parseRules('const x = 1', eslintRe)).toStrictEqual([])
   })
 })
 describe('loadOxlintOffRules', () => {

@@ -1,5 +1,5 @@
 import { spawn } from 'bun'
-import { expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { formatStaleness } from './staleness.js'
 const scanFixture = `
 import { mock, spyOn } from 'bun:test'
@@ -42,26 +42,27 @@ const runFixture = async (action: string): Promise<{ exitCode: number; stderr: s
   ])
   return { exitCode, stderr, stdout }
 }
-test('staleness output names the gate failure and both ways to clear it', () => {
-  const output = formatStaleness([{ ageDays: 200, name: 'eslint' }])
-  expect(output).not.toContain('advisory')
-  expect(output).toContain('FAILS the gate')
-  expect(output).toContain('eslint latest release 200d old (>6mo)')
-  expect(output).toContain('bumping the dependency')
-  expect(output).toContain('staleExceptions entry with a reason and a revisitWhen trigger')
-  expect(formatStaleness([])).toBe('')
-})
-test('the scan exempts active react hooks upstream while flagging an unlisted stale dependency', async () => {
-  const result = await runFixture(`
+describe('staleness', () => {
+  test('staleness output names the gate failure and both ways to clear it', () => {
+    const output = formatStaleness([{ ageDays: 200, name: 'eslint' }])
+    expect(output).not.toContain('advisory')
+    expect(output).toContain('FAILS the gate')
+    expect(output).toContain('eslint latest release 200d old (>6mo)')
+    expect(output).toContain('bumping the dependency')
+    expect(output).toContain('staleExceptions entry with a reason and a revisitWhen trigger')
+    expect(formatStaleness([])).toBe('')
+  })
+  test('the scan exempts active react hooks upstream while flagging an unlisted stale dependency', async () => {
+    const result = await runFixture(`
 const { scanStaleness } = await import(${JSON.stringify(new URL('staleness.js', import.meta.url).href)})
 process.stdout.write(JSON.stringify(await scanStaleness(true)))
 `)
-  expect(result.exitCode).toBe(0)
-  expect(result.stderr).toBe('')
-  expect(result.stdout).toBe(JSON.stringify([{ ageDays: 200, name: 'eslint' }]))
-}, 15_000)
-test('a cached scan filters excepted dependencies while retaining unlisted stale dependencies', async () => {
-  const result = await runFixture(`
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe(JSON.stringify([{ ageDays: 200, name: 'eslint' }]))
+  }, 15_000)
+  test('a cached scan filters excepted dependencies while retaining unlisted stale dependencies', async () => {
+    const result = await runFixture(`
 mock.module(${JSON.stringify(new URL('state.js', import.meta.url).href)}, () => ({
   loadState: async () => ({
     lastCheck: now - 1000,
@@ -78,17 +79,18 @@ spyOn(globalThis, 'fetch').mockImplementation(async () => { throw new Error('a c
 const { scanStaleness } = await import(${JSON.stringify(new URL('staleness.js', import.meta.url).href)})
 process.stdout.write(JSON.stringify(await scanStaleness()))
 `)
-  expect(result.exitCode).toBe(0)
-  expect(result.stderr).toBe('')
-  expect(result.stdout).toBe(JSON.stringify([{ ageDays: 200, name: 'eslint' }]))
-}, 15_000)
-test('a stale dependency fails the gate without printing the ok success line', async () => {
-  const result = await runFixture(`
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe(JSON.stringify([{ ageDays: 200, name: 'eslint' }]))
+  }, 15_000)
+  test('a stale dependency fails the gate without printing the ok success line', async () => {
+    const result = await runFixture(`
 const { runGate } = await import(${JSON.stringify(new URL('gate.js', import.meta.url).href)})
 await runGate({ command: 'check', human: false, version: 'test' })
 `)
-  expect(result.exitCode).toBe(1)
-  expect(result.stdout).toBe('')
-  expect(result.stderr).toContain('FAILS the gate')
-  expect(result.stderr).toContain('eslint latest release 200d old (>6mo)')
-}, 15_000)
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('FAILS the gate')
+    expect(result.stderr).toContain('eslint latest release 200d old (>6mo)')
+  }, 15_000)
+})

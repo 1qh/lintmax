@@ -62,8 +62,8 @@ export type { StringOrNumber }
 `
 const run = async (args: string[]) => $`bun ${cli} ${args}`.cwd(root).quiet().nothrow()
 const decoder = new TextDecoder()
-const assert = (condition: boolean, msg: string) => {
-  if (!condition) throw new Error(`FAIL: ${msg}`)
+const assert = (isTrue: boolean, msg: string) => {
+  if (!isTrue) throw new Error(`FAIL: ${msg}`)
 }
 await write(workFile, DIRTY_FIXTURE)
 const checkResult = await run(['check'])

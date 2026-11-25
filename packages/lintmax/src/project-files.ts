@@ -3,11 +3,11 @@ import { lstat, realpath } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { CliExitError } from './core.js'
-import { matchesGlob } from './glob.js'
+import { doesMatchGlob } from './glob.js'
 const fixedIgnoreGlobs: Glob[] = ['**/node_modules/**', ...DEFAULT_SHARED_IGNORE_PATTERNS].map(
   pattern => new Glob(pattern)
 )
-const isIncludedProjectFile = (path: string): boolean => fixedIgnoreGlobs.every(glob => !matchesGlob(glob, path))
+const isIncludedProjectFile = (path: string): boolean => fixedIgnoreGlobs.every(glob => !doesMatchGlob(glob, path))
 const hasGitDirectory = async (directory: string): Promise<boolean> => {
   try {
     await lstat(join(directory, '.git'))

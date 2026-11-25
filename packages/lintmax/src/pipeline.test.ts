@@ -15,7 +15,7 @@ const input = await Bun.file(process.argv[2]).json()
 const outputIndex = process.argv.indexOf('--output-file')
 if (process.argv.some(arg => arg.startsWith('--reporter-file='))) throw new Error('Unsupported reporter file flag')
 const outputPath = outputIndex < 0 ? undefined : process.argv[outputIndex + 1]
-if (input.nativeOutput && !outputPath) throw new Error('Missing native output flag')
+if (input.hasNativeOutput && !outputPath) throw new Error('Missing native output flag')
 await Bun.write(outputPath ?? Bun.stdout, input.stdout)
 await Bun.write(Bun.stderr, input.stderr)
 process.exit(input.exitCode)
@@ -36,7 +36,7 @@ const withOutput = async <T>(input: OutputInput, action: (args: string[]) => Pro
       inputPath,
       JSON.stringify({
         exitCode: 1,
-        nativeOutput: input.label === 'eslint',
+        hasNativeOutput: input.label === 'eslint',
         stderr: '',
         ...input
       })
@@ -136,13 +136,13 @@ describe('file-backed linter output', () => {
     expect(Buffer.byteLength(stdout)).toBeGreaterThan(2 * 1024 * 1024)
     const result = await captureOutput({ label: 'eslint', stdout })
     expect(result.diagnostics).toHaveLength(count)
-    expect(result.diagnostics.at(-1)).toEqual({ file: 'src/large.ts', line: count, linter: 'eslint', rule: 'no-console' })
-    expect(result.failures).toEqual([])
+    expect(result.diagnostics.at(-1)).toStrictEqual({ file: 'src/large.ts', line: count, linter: 'eslint', rule: 'no-console' })
+    expect(result.failures).toStrictEqual([])
   })
   test('reports truncated JSON with its parse error, byte count and stderr', async () => {
     const stdout = '[{"filePath":"é.ts","messages":[{"message":"unfinished'
     const result = await captureOutput({ label: 'eslint', stderr: 'tool failed', stdout })
-    expect(result.diagnostics).toEqual([])
+    expect(result.diagnostics).toStrictEqual([])
     expect(result.failures).toHaveLength(1)
     const report = formatFailureDetails(result.failures)
     expect(report).toContain('- eslint (exit 1)')
@@ -152,15 +152,15 @@ describe('file-backed linter output', () => {
   })
   test('reports exit 1 with valid JSON containing zero diagnostics', async () => {
     const result = await captureOutput({ label: 'eslint', stdout: '[]' })
-    expect(result.diagnostics).toEqual([])
-    expect(result.failures).toEqual([{ code: 1, label: 'eslint', message: 'Output parsed to zero diagnostics (2 bytes)' }])
+    expect(result.diagnostics).toStrictEqual([])
+    expect(result.failures).toStrictEqual([{ code: 1, label: 'eslint', message: 'Output parsed to zero diagnostics (2 bytes)' }])
     expect(formatFailureDetails(result.failures)).toContain('Output parsed to zero diagnostics')
   })
   test('reports malformed and empty failed output for every JSON reporter', async () => {
     for (const label of ['biome', 'oxlint']) {
       for (const stdout of ['{"diagnostics":[', '']) {
         const result = await captureOutput({ label, stdout })
-        expect(result.diagnostics).toEqual([])
+        expect(result.diagnostics).toStrictEqual([])
         expect(formatFailureDetails(result.failures)).toContain(`Output parse error (${Buffer.byteLength(stdout)} bytes)`)
       }
       const result = await captureOutput({ label, stdout: '{"diagnostics":[]}' })
@@ -193,7 +193,7 @@ describe('file-backed linter output', () => {
   })
   test('keeps a successful exit free of failures', async () => {
     const result = await captureOutput({ exitCode: 0, label: 'eslint', stdout: '[]' })
-    expect(result).toEqual({ diagnostics: [], failures: [] })
+    expect(result).toStrictEqual({ diagnostics: [], failures: [] })
   })
   test('reports exceptions raised by a text parser', async () => {
     const failures: FailureRecord[] = []
@@ -207,24 +207,26 @@ describe('file-backed linter output', () => {
           throw new Error('Invalid text report')
         }
       })
-      expect(diagnostics).toEqual([])
+      expect(diagnostics).toStrictEqual([])
     })
     expect(formatFailureDetails(failures)).toContain('Output parse error (10 bytes): Invalid text report')
   })
 })
-test('a step killed at its time limit says it timed out rather than reading as a lint failure', async () => {
-  const result = await runCapture({
-    args: ['-e', 'await Bun.sleep(5000)'],
-    command: process.execPath,
-    env: bunEnv,
-    label: 'slow-step',
-    timeoutMs: 300
-  })
-  expect(result.exitCode).not.toBe(0)
-  expect(result.stderr).toContain('lintmax: slow-step timed out after 0 s and was killed; it reported no findings')
-}, 15_000)
-test('a step that finishes inside its limit carries no timeout note', async () => {
-  const result = await runCapture({ args: ['-e', '0'], command: process.execPath, env: bunEnv, label: 'fast-step' })
-  expect(result.exitCode).toBe(0)
-  expect(result.stderr).not.toContain('timed out')
-}, 15_000)
+describe('runCapture', () => {
+  test('a step killed at its time limit says it timed out rather than reading as a lint failure', async () => {
+    const result = await runCapture({
+      args: ['-e', 'await Bun.sleep(5000)'],
+      command: process.execPath,
+      env: bunEnv,
+      label: 'slow-step',
+      timeoutMs: 300
+    })
+    expect(result.exitCode).not.toBe(0)
+    expect(result.stderr).toContain('lintmax: slow-step timed out after 0 s and was killed; it reported no findings')
+  }, 15_000)
+  test('a step that finishes inside its limit carries no timeout note', async () => {
+    const result = await runCapture({ args: ['-e', '0'], command: process.execPath, env: bunEnv, label: 'fast-step' })
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).not.toContain('timed out')
+  }, 15_000)
+})

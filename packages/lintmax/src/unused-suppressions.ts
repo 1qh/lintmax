@@ -288,10 +288,8 @@ const findOxlintDisableFiles = async (filePaths: string[]): Promise<string[]> =>
   const out: string[] = []
   for (const fp of filePaths) {
     const f = file(fp)
-    if (await f.exists()) {
-      const content = await f.text()
-      if (oxlintDisablePresentRe.test(content)) out.push(fp)
-    }
+    const content = (await f.exists()) ? await f.text() : ''
+    if (oxlintDisablePresentRe.test(content)) out.push(fp)
   }
   return out
 }
@@ -299,10 +297,8 @@ const findBiomeIgnoreAllFiles = async (filePaths: string[]): Promise<string[]> =
   const out: string[] = []
   for (const fp of filePaths) {
     const f = file(fp)
-    if (await f.exists()) {
-      const content = await f.text()
-      if (content.includes('biome-ignore-all')) out.push(fp)
-    }
+    const content = (await f.exists()) ? await f.text() : ''
+    if (content.includes('biome-ignore-all')) out.push(fp)
   }
   return out
 }
@@ -345,13 +341,14 @@ const matchBiomeDirective = (line: string) => {
 }
 const parseBiomeDirectiveLines = (lines: string[]): { index: number; rules: string[] }[] => {
   const directiveLines: { index: number; rules: string[] }[] = []
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = matchBiomeDirective(lines[index] ?? '')
-    if (match) {
-      const first = match.groups?.first ?? ''
-      const rest = match.groups?.rest ?? ''
-      directiveLines.push({ index, rules: [first, ...splitBiomeRest(rest)] })
-    }
+  const matched = lines.flatMap((line, index) => {
+    const match = matchBiomeDirective(line)
+    return match ? [{ index, match }] : []
+  })
+  for (const { index, match } of matched) {
+    const first = match.groups?.first ?? ''
+    const rest = match.groups?.rest ?? ''
+    directiveLines.push({ index, rules: [first, ...splitBiomeRest(rest)] })
   }
   return directiveLines
 }

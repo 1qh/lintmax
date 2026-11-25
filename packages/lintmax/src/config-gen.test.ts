@@ -1,5 +1,5 @@
 import { file, Glob, spawn, write } from 'bun'
-import { afterAll, describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,20 +7,27 @@ import { fixComments } from './comments.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { readRequiredJson, resolveBin } from './core.js'
 import { sync } from './index.js'
-const tmp = await mkdtemp(join(tmpdir(), 'config-gen-test-'))
-const cacheDir = join(tmp, 'node_modules', '.cache', 'lintmax')
-afterAll(async () => rm(tmp, { recursive: true }))
-const setupProject = async () => {
-  await write(join(tmp, 'package.json'), JSON.stringify({ name: 'test', private: true }))
-  const origCwd = process.cwd()
-  process.chdir(tmp)
+interface Project {
+  cacheDir: string
+  tmp: string
+}
+const withProject = async (run: (project: Project) => Promise<void>) => {
+  const tmp = await mkdtemp(join(tmpdir(), 'config-gen-test-'))
   try {
-    await sync()
+    await write(join(tmp, 'package.json'), JSON.stringify({ name: 'test', private: true }))
+    const origCwd = process.cwd()
+    process.chdir(tmp)
+    try {
+      await sync()
+    } finally {
+      process.chdir(origCwd)
+    }
+    await run({ cacheDir: join(tmp, 'node_modules', '.cache', 'lintmax'), tmp })
   } finally {
-    process.chdir(origCwd)
+    await rm(tmp, { force: true, recursive: true })
   }
 }
-const runNegationElseFix = async (sourcePath: string) => {
+const runNegationElseFix = async ({ cacheDir, tmp }: Project, sourcePath: string) => {
   const biomeBin = await resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
   const child = spawn(
     [biomeBin, 'lint', '--config-path', cacheDir, '--only=style/noNegationElse', '--write', '--unsafe', sourcePath],
@@ -40,80 +47,92 @@ const runNegationElseFix = async (sourcePath: string) => {
 }
 describe('biome config generation', () => {
   it('reports negated else conditions at error without an autofix', async () => {
-    await setupProject()
-    const config = readRequiredJson<{
-      overrides?: {
-        includes?: string[]
-        linter?: { rules?: { style?: { noNegationElse?: { fix: string; level: string } } } }
-      }[]
-    }>(await file(join(cacheDir, 'biome.json')).text())
-    const override = config.overrides?.find(o => o.includes?.includes('**') && o.linter?.rules?.style?.noNegationElse)
-    expect(override?.linter?.rules?.style?.noNegationElse).toEqual({ fix: 'none', level: 'error' })
+    await withProject(async ({ cacheDir }) => {
+      const config = readRequiredJson<{
+        overrides?: {
+          includes?: string[]
+          linter?: { rules?: { style?: { noNegationElse?: { fix: string; level: string } } } }
+        }[]
+      }>(await file(join(cacheDir, 'biome.json')).text())
+      const override = config.overrides?.find(o => o.includes?.includes('**') && o.linter?.rules?.style?.noNegationElse)
+      expect(override?.linter?.rules?.style?.noNegationElse).toStrictEqual({ fix: 'none', level: 'error' })
+    })
   })
   it('keeps a braceless else parseable through the unsafe Biome fix stage and comment stripping', async () => {
-    await setupProject()
-    const sourcePath = join(tmp, 'negation-else.ts')
-    const sourceText = 'if (x !== undefined) {\n  s.a = 1\n} else s.b ??= 2\n'
-    await write(sourcePath, sourceText)
-    const { exitCode, stderr, stdout } = await runNegationElseFix(sourcePath)
-    expect(exitCode).toBe(1)
-    expect(await fixComments({ files: [sourcePath] })).toBe(0)
-    expect(await file(sourcePath).text()).toBe(sourceText)
-    expect(`${stdout}\n${stderr}`).toContain('lint/style/noNegationElse')
+    await withProject(async ({ cacheDir, tmp }) => {
+      const sourcePath = join(tmp, 'negation-else.ts')
+      const sourceText = 'if (x !== undefined) {\n  s.a = 1\n} else s.b ??= 2\n'
+      await write(sourcePath, sourceText)
+      const { exitCode, stderr, stdout } = await runNegationElseFix({ cacheDir, tmp }, sourcePath)
+      expect(exitCode).toBe(1)
+      expect(await fixComments({ files: [sourcePath] })).toBe(0)
+      expect(await file(sourcePath).text()).toBe(sourceText)
+      expect(`${stdout}\n${stderr}`).toContain('lint/style/noNegationElse')
+    })
   }, 15_000)
   it('requires layered style rules while allowing imports with their own layers', async () => {
-    await setupProject()
-    const config = readRequiredJson<{
-      overrides?: {
-        includes?: string[]
-        linter?: {
-          rules?: { nursery?: { useLayeredStyles?: { level: string; options: { requireImportLayers: boolean } } } }
-        }
-      }[]
-    }>(await file(join(cacheDir, 'biome.json')).text())
-    const override = config.overrides?.find(o => o.includes?.includes('**') && o.linter?.rules?.nursery?.useLayeredStyles)
-    expect(override?.linter?.rules?.nursery?.useLayeredStyles).toEqual({
-      level: 'error',
-      options: { requireImportLayers: false }
+    await withProject(async ({ cacheDir }) => {
+      const config = readRequiredJson<{
+        overrides?: {
+          includes?: string[]
+          linter?: {
+            rules?: { nursery?: { useLayeredStyles?: { level: string; options: { requireImportLayers: boolean } } } }
+          }
+        }[]
+      }>(await file(join(cacheDir, 'biome.json')).text())
+      const override = config.overrides?.find(o => o.includes?.includes('**') && o.linter?.rules?.nursery?.useLayeredStyles)
+      expect(override?.linter?.rules?.nursery?.useLayeredStyles).toStrictEqual({
+        level: 'error',
+        options: { requireImportLayers: false }
+      })
     })
   })
   it('generates biome.json with experimentalScannerIgnores', async () => {
-    await setupProject()
-    const biomePath = join(cacheDir, 'biome.json')
-    expect(await file(biomePath).exists()).toBe(true)
-    const config = readRequiredJson<{
-      files?: { experimentalScannerIgnores?: string[]; includes?: string[] }
-    }>(await file(biomePath).text())
-    expect(config.files?.experimentalScannerIgnores).toBeDefined()
-    expect(Array.isArray(config.files?.experimentalScannerIgnores)).toBe(true)
+    await withProject(async ({ cacheDir }) => {
+      const biomePath = join(cacheDir, 'biome.json')
+      expect(await file(biomePath).exists()).toBe(true)
+      const config = readRequiredJson<{
+        files?: { experimentalScannerIgnores?: string[]; includes?: string[] }
+      }>(await file(biomePath).text())
+      expect(config.files?.experimentalScannerIgnores).toBeDefined()
+      expect(Array.isArray(config.files?.experimentalScannerIgnores)).toBe(true)
+    })
   })
   it('experimentalScannerIgnores contains node_modules', async () => {
-    const config = readRequiredJson<{ files?: { experimentalScannerIgnores?: string[] } }>(
-      await file(join(cacheDir, 'biome.json')).text()
-    )
-    const scannerIgnores = config.files?.experimentalScannerIgnores ?? []
-    expect(scannerIgnores.some(p => p.includes('node_modules'))).toBe(true)
+    await withProject(async ({ cacheDir }) => {
+      const config = readRequiredJson<{ files?: { experimentalScannerIgnores?: string[] } }>(
+        await file(join(cacheDir, 'biome.json')).text()
+      )
+      const scannerIgnores = config.files?.experimentalScannerIgnores ?? []
+      expect(scannerIgnores.some(p => p.includes('node_modules'))).toBe(true)
+    })
   })
   it('experimentalScannerIgnores contains .next', async () => {
-    const config = readRequiredJson<{ files?: { experimentalScannerIgnores?: string[] } }>(
-      await file(join(cacheDir, 'biome.json')).text()
-    )
-    const scannerIgnores = config.files?.experimentalScannerIgnores ?? []
-    expect(scannerIgnores.some(p => p.includes('.next'))).toBe(true)
+    await withProject(async ({ cacheDir }) => {
+      const config = readRequiredJson<{ files?: { experimentalScannerIgnores?: string[] } }>(
+        await file(join(cacheDir, 'biome.json')).text()
+      )
+      const scannerIgnores = config.files?.experimentalScannerIgnores ?? []
+      expect(scannerIgnores.some(p => p.includes('.next'))).toBe(true)
+    })
   })
   it('includes has !! negation patterns', async () => {
-    const config = readRequiredJson<{ files?: { includes?: string[] } }>(await file(join(cacheDir, 'biome.json')).text())
-    const includes = config.files?.includes ?? []
-    expect(includes.some(p => p.startsWith('!!'))).toBe(true)
+    await withProject(async ({ cacheDir }) => {
+      const config = readRequiredJson<{ files?: { includes?: string[] } }>(await file(join(cacheDir, 'biome.json')).text())
+      const includes = config.files?.includes ?? []
+      expect(includes.some(p => p.startsWith('!!'))).toBe(true)
+    })
   })
   it('no ignore field in files (biome 2.x)', async () => {
-    const config = readRequiredJson<{ files?: Record<string, unknown> }>(await file(join(cacheDir, 'biome.json')).text())
-    expect(config.files).not.toHaveProperty('ignore')
+    await withProject(async ({ cacheDir }) => {
+      const config = readRequiredJson<{ files?: Record<string, unknown> }>(await file(join(cacheDir, 'biome.json')).text())
+      expect(config.files).not.toHaveProperty('ignore')
+    })
   })
 })
 const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
 const isIgnored = (p: string): boolean => ignoreGlobs.some(g => g.match(p))
-const registerIgnoredPaths = () => {
+describe('glob-based isIgnored matching — ignored paths', () => {
   it('matches readonly/ui/src/components/foo.tsx', () => {
     expect(isIgnored('readonly/ui/src/components/foo.tsx')).toBe(true)
   })
@@ -138,8 +157,8 @@ const registerIgnoredPaths = () => {
   it('matches module_bindings', () => {
     expect(isIgnored('backend/spacetimedb/module_bindings/index.ts')).toBe(true)
   })
-}
-const registerIncludedPaths = () => {
+})
+describe('glob-based isIgnored matching — included paths', () => {
   it('does NOT match lib/shared/src/constants.ts', () => {
     expect(isIgnored('lib/shared/src/constants.ts')).toBe(false)
   })
@@ -149,8 +168,4 @@ const registerIncludedPaths = () => {
   it('does NOT match src/index.ts', () => {
     expect(isIgnored('src/index.ts')).toBe(false)
   })
-}
-describe('glob-based isIgnored matching', () => {
-  registerIgnoredPaths()
-  registerIncludedPaths()
 })

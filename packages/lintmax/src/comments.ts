@@ -21,11 +21,11 @@ const isBlockOnlyComment = (
   comments: { end: number; start: number }[],
   c: { end: number; start: number }
 ): boolean => {
-  const inComment = (idx: number): boolean => comments.some(o => idx >= o.start && idx < o.end)
+  const isInComment = (idx: number): boolean => comments.some(o => idx >= o.start && idx < o.end)
   let before = c.start - 1
-  while (before >= 0 && (WS_CHAR.test(sourceText[before] ?? '') || inComment(before))) before -= 1
+  while (before >= 0 && (WS_CHAR.test(sourceText[before] ?? '') || isInComment(before))) before -= 1
   let after = c.end
-  while (after < sourceText.length && (WS_CHAR.test(sourceText[after] ?? '') || inComment(after))) after += 1
+  while (after < sourceText.length && (WS_CHAR.test(sourceText[after] ?? '') || isInComment(after))) after += 1
   return sourceText[before] === '{' && sourceText[after] === '}'
 }
 interface DeletableComment {
@@ -102,7 +102,7 @@ const processFile = async (filePath: string): Promise<{ diagnostics: Diagnostic[
     })
   return { diagnostics, modified: false }
 }
-const processFileForFix = async (filePath: string): Promise<boolean> => {
+const didStripCommentsInFile = async (filePath: string): Promise<boolean> => {
   if (!isCommentCandidate(filePath)) return false
   const f = file(filePath)
   if (!(await f.exists())) return false
@@ -119,7 +119,7 @@ const checkComments = async ({ files }: { files: string[] }): Promise<Diagnostic
   return results.flatMap(r => r.diagnostics)
 }
 const fixComments = async ({ files }: { files: string[] }): Promise<number> => {
-  const results = await Promise.all(files.map(async f => processFileForFix(f)))
+  const results = await Promise.all(files.map(async f => didStripCommentsInFile(f)))
   return results.filter(Boolean).length
 }
 export { checkComments, fixComments }

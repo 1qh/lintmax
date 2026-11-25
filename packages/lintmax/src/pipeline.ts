@@ -25,7 +25,7 @@ import {
   cwd,
   ensureDirectory,
   lintmaxRoot,
-  pathExists,
+  doesPathExist,
   PRETTIER_MD_ARGS,
   readRequiredJson,
   resolveBin,
@@ -324,8 +324,8 @@ const recordEmptyCapture = ({
   const stderr = result.stderr.trim()
   const stdout = result.stdout.trim()
   const stdoutFirst = stdout.split('\n', 1)[0]?.trimStart() ?? ''
-  const stdoutIsJson = stdoutFirst.startsWith('[') || stdoutFirst.startsWith('{')
-  const stdoutMessage = stdoutIsJson ? undefined : stdout || undefined
+  const isStdoutJson = stdoutFirst.startsWith('[') || stdoutFirst.startsWith('{')
+  const stdoutMessage = isStdoutJson ? undefined : stdout || undefined
   const detail = stderr.length > 0 ? stderr : stdoutMessage
   const failureDetail = detail ? `\n${detail}` : ''
   const message = `Output parsed to zero diagnostics (${byteCount} bytes)${failureDetail}`
@@ -678,7 +678,7 @@ const synchronizeConfig = async ({
   configPath: string
   env: Record<string, string | undefined>
 }): Promise<void> => {
-  const hasConfig = await pathExists({ path: configPath })
+  const hasConfig = await doesPathExist({ path: configPath })
   await (hasConfig
     ? run({
         args: [
@@ -803,14 +803,14 @@ const prepareLintCommands = async ({
   const agentParams = { ...commandParams, env, failures }
   return { agentParams, checkSteps, extraBins, fixSteps }
 }
-const prepareLintContext = async (command: 'check' | 'fix', human: boolean) => {
+const prepareLintContext = async (command: 'check' | 'fix', isHuman: boolean) => {
   const { dir, env, executor, failures, runtime } = await prepareLintRuntime()
   const { clearFailures, runCompactContinue, runSteps, runStepsSilent, throwIfFailures } = executor
   const { allGitFiles, isIgnored, oxlintIgnorePatternsEarly } = await prepareLintFiles({
     command,
     dir,
     env,
-    human,
+    human: isHuman,
     runCompactContinue,
     runtime
   })

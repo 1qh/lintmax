@@ -9,7 +9,7 @@ const computeGreenKey = async (version: string): Promise<string | undefined> => 
   const files = await listProjectFiles({ root: cwd })
   return hashTree({ files, root: cwd, version })
 }
-const tryCached = async (greenKey: string | undefined): Promise<boolean> => {
+const didReuseGreenCache = async (greenKey: string | undefined): Promise<boolean> => {
   if (greenKey === undefined) return false
   const state = await loadState()
   if (state.lastGreenByCwd[cwd] !== greenKey) return false
@@ -37,7 +37,7 @@ const emitStaleness = async (): Promise<void> => {
 }
 const runGate = async ({ command, human, version }: { command: 'check' | 'fix'; human: boolean; version: string }) => {
   const startKey = await computeGreenKey(version)
-  if (await tryCached(startKey)) return
+  if (await didReuseGreenCache(startKey)) return
   const stalePromise = emitStaleness()
   await runLint({ command, human })
   await persistGreen(await computeGreenKey(version))

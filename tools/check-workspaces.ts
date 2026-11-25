@@ -29,8 +29,8 @@ try {
       if (!(stats.isDirectory() || stats.isSymbolicLink())) return []
       const manifest = `${path}/package.json`
       const hasManifest = await file(join(root, manifest)).exists()
-      const ignored = hasManifest ? !candidates.has(manifest) : files.every(entry => !entry.startsWith(`${path}/`))
-      return ignored ? ['--ignore-package', escapeGlobPath(`./${path}`)] : []
+      const isIgnored = hasManifest ? !candidates.has(manifest) : files.every(entry => !entry.startsWith(`${path}/`))
+      return isIgnored ? ['--ignore-package', escapeGlobPath(`./${path}`)] : []
     })
   )
   const subprocess = spawn({

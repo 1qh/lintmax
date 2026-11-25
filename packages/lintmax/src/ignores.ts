@@ -1,6 +1,6 @@
 import { file, Glob } from 'bun'
 import { DEFAULT_SHARED_IGNORE_PATTERNS, ESLINT_TEST_FILE_PATTERNS } from './constants.js'
-import { matchesGlob } from './glob.js'
+import { doesMatchGlob } from './glob.js'
 import { joinPath } from './path.js'
 import { listProjectFiles } from './project-files.js'
 const eslintDisableRe = /eslint-disable(?:-next-line)?\s+(?<rules>[^\n]*)/gv
@@ -28,7 +28,7 @@ const DANGEROUS_PATTERNS = [
   'noNonNullAssertion'
 ]
 const DANGEROUS_NON_TEST_PATTERNS = ['@ts-expect-error', 'no-explicit-any', 'noExplicitAny']
-const isTestFile = (f: string): boolean => ESLINT_TEST_FILE_PATTERNS.some(p => matchesGlob(new Glob(p), f))
+const isTestFile = (f: string): boolean => ESLINT_TEST_FILE_PATTERNS.some(p => doesMatchGlob(new Glob(p), f))
 const parseRules = (line: string, re: RegExp): string[] => {
   const rules: string[] = []
   re.lastIndex = 0
@@ -70,7 +70,7 @@ const rulesFromContent = (content: string): string[] => {
 const findDangerousSuppressions = async (cwd: string): Promise<DangerousSuppression[]> => {
   const ignoreGlobs: Glob[] = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
   const files = (await listProjectFiles({ root: cwd })).filter(
-    p => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.d.ts') && ignoreGlobs.every(g => !matchesGlob(g, p))
+    p => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.d.ts') && ignoreGlobs.every(g => !doesMatchGlob(g, p))
   )
   const results = await Promise.all(
     files.map(async relativePath => {

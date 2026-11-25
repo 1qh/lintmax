@@ -3,28 +3,28 @@ import { parse } from 'oxc-parser'
 import type { Diagnostic } from './aggregate.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS } from './constants.js'
 import { listProjectFiles } from './project-files.js'
-const containsJsxNode = (program: unknown): boolean => {
-  let found = false
+const hasJsxNode = (program: unknown): boolean => {
+  let isFound = false
   const visit = (node: unknown) => {
-    if (found || !node || typeof node !== 'object') return
+    if (isFound || !node || typeof node !== 'object') return
     if (Array.isArray(node)) {
       for (const child of node) visit(child)
       return
     }
     if ('type' in node && (node.type === 'JSXElement' || node.type === 'JSXFragment')) {
-      found = true
+      isFound = true
       return
     }
     for (const [key, child] of Object.entries(node)) if (key !== 'type') visit(child)
   }
   visit(program)
-  return found
+  return isFound
 }
 const hasJsx = async (sourceText: string): Promise<boolean> => {
   const asTs = await parse('file.ts', sourceText)
   if (asTs.errors.length === 0) return false
   const asTsx = await parse('file.tsx', sourceText)
-  return containsJsxNode(asTsx.program)
+  return hasJsxNode(asTsx.program)
 }
 const checkJsxExtension = async ({ root }: { root: string }): Promise<Diagnostic[]> => {
   const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))

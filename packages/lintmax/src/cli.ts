@@ -4,9 +4,9 @@ import { runGate } from './gate.js'
 import { extractAllRules, formatRulesCompact, formatRulesHuman } from './rules.js'
 const command = process.argv[2]
 const printRules = async () => {
-  const human = process.argv.includes('--human')
+  const isHuman = process.argv.includes('--human')
   const rules = await extractAllRules()
-  const output = human ? formatRulesHuman(rules) : formatRulesCompact(rules)
+  const output = isHuman ? formatRulesHuman(rules) : formatRulesCompact(rules)
   process.stdout.write(`${output}\n`)
 }
 const runLintCommand = async (version: string) => {
@@ -15,8 +15,8 @@ const runLintCommand = async (version: string) => {
     if (command === '--help' || command === '-h') return
     throw new CliExitError({ code: 1 })
   }
-  const human = process.argv.includes('--human')
-  await runGate({ command, human, version })
+  const isHuman = process.argv.includes('--human')
+  await runGate({ command, human: isHuman, version })
 }
 const main = async () => {
   const version = await readVersion()

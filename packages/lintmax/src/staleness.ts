@@ -81,12 +81,12 @@ const toIssue = (name: string, publishedAt: number): StaleIssue | undefined => {
   if (age < sixMonthsMs) return
   return { ageDays: Math.floor(age / (24 * 60 * 60 * 1000)), name }
 }
-const scanStaleness = async (force = false): Promise<StaleIssue[]> => {
+const scanStaleness = async (shouldForce = false): Promise<StaleIssue[]> => {
   if (envValue(envSkip) === '1') return []
-  const ci = envValue('CI') === 'true' || envValue('CI') === '1'
-  const forced = force || ci || envValue(envForce) === '1'
+  const isCi = envValue('CI') === 'true' || envValue('CI') === '1'
+  const isForced = shouldForce || isCi || envValue(envForce) === '1'
   const state = await loadState()
-  if (!forced && state.lastCheck > 0 && Date.now() - state.lastCheck < cacheTtlMs)
+  if (!isForced && state.lastCheck > 0 && Date.now() - state.lastCheck < cacheTtlMs)
     return state.staleIssues.filter(issue => !Object.hasOwn(staleExceptions, issue.name))
   const names = await trackedPackages()
   const results = await Promise.all(

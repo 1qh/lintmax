@@ -17,10 +17,10 @@ describe('runExtraCoverage shell tooling', () => {
   test('no shell files means no shell tooling note', async () => {
     const env = await emptyPathEnv()
     const result = await runExtraCoverage({ bins, command: 'check', env, gitFiles: ['src/index.ts'] })
-    expect(result.notes).toEqual([])
+    expect(result.notes).toStrictEqual([])
   })
   test('collectExtraTargets routes shell files by extension', () => {
     const targets = collectExtraTargets(['a.sh', 'b.bash', 'c.ts', 'd.toml', 'Dockerfile'])
-    expect(targets.shell).toEqual(['a.sh', 'b.bash'])
+    expect(targets.shell).toStrictEqual(['a.sh', 'b.bash'])
   })
 })

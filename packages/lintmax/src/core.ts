@@ -57,9 +57,9 @@ const parseJsonObject = ({ text }: { text: string }): Record<string, unknown> =>
   return isRecord(parsed) ? parsed : {}
 }
 const decodeText = (bytes: Uint8Array | undefined) => decoder.decode(bytes ?? new Uint8Array())
-const pathExists = async ({ path }: { path: string }): Promise<boolean> => file(path).exists()
+const doesPathExist = async ({ path }: { path: string }): Promise<boolean> => file(path).exists()
 const readJson = async ({ path }: { path: string }): Promise<Record<string, unknown>> => {
-  if (!(await pathExists({ path }))) return {}
+  if (!(await doesPathExist({ path }))) return {}
   try {
     const text = await file(path).text()
     return parseJsonObject({ text })
@@ -85,7 +85,7 @@ const resolvePackageJsonPath = async ({ pkg }: { pkg: string }): Promise<string 
     return fromFileUrl(import.meta.resolve(`${pkg}/package.json`))
   } catch {
     const consumerCandidate = joinPath(cwd, 'node_modules', pkg, 'package.json')
-    if (await pathExists({ path: consumerCandidate })) return consumerCandidate
+    if (await doesPathExist({ path: consumerCandidate })) return consumerCandidate
     return undefined
   }
 }
@@ -120,11 +120,11 @@ const prepareCapture = async (directory: string, { args, command, label }: RunOp
   const stderrPath = joinPath(directory, 'stderr')
   const outputPath = joinPath(directory, 'diagnostics')
   const outputArgs = label === 'eslint' ? ['--output-file', outputPath] : []
-  const nativeOutput = outputArgs.length > 0
+  const hasNativeOutput = outputArgs.length > 0
   const captureArgs = [...args, ...outputArgs]
-  if (nativeOutput) await writeFile(outputPath, '')
-  const windows = process.platform === 'win32'
-  const commandArgs = windows
+  if (hasNativeOutput) await writeFile(outputPath, '')
+  const isWindows = process.platform === 'win32'
+  const commandArgs = isWindows
     ? [command, ...captureArgs]
     : [
         '/bin/sh',
@@ -136,24 +136,24 @@ const prepareCapture = async (directory: string, { args, command, label }: RunOp
         command,
         ...captureArgs
       ]
-  return { commandArgs, nativeOutput, outputPath, stderrPath, stdoutPath, windows }
+  return { commandArgs, hasNativeOutput, outputPath, stderrPath, stdoutPath, isWindows }
 }
 const executeCapture = async (opts: RunOpts, directory: string, timeoutMs: number) => {
-  const { commandArgs, nativeOutput, outputPath, stderrPath, stdoutPath, windows } = await prepareCapture(directory, opts)
+  const { commandArgs, hasNativeOutput, outputPath, stderrPath, stdoutPath, isWindows } = await prepareCapture(directory, opts)
   const child = spawn(commandArgs, {
     cwd,
     env: opts.env,
-    stderr: windows ? file(stderrPath) : 'ignore',
-    stdout: windows ? file(stdoutPath) : 'ignore',
+    stderr: isWindows ? file(stderrPath) : 'ignore',
+    stdout: isWindows ? file(stdoutPath) : 'ignore',
     timeout: timeoutMs
   })
   const exitCode = await child.exited
   const [stderr, stdout] = await Promise.all([
     file(stderrPath).text(),
-    file(nativeOutput ? outputPath : stdoutPath).text()
+    file(hasNativeOutput ? outputPath : stdoutPath).text()
   ])
-  const timedOut = child.signalCode === 'SIGTERM'
-  const note = timedOut
+  const didTimeOut = child.signalCode === 'SIGTERM'
+  const note = didTimeOut
     ? `lintmax: ${opts.label} timed out after ${Math.round(timeoutMs / 1000)} s and was killed; it reported no findings\n`
     : ''
   return { exitCode, stderr: `${stderr}${note}`, stdout }
@@ -196,7 +196,7 @@ export {
   ensureDirectory,
   envValue,
   lintmaxRoot,
-  pathExists,
+  doesPathExist,
   PRETTIER_MD_ARGS,
   readJson,
   readRequiredJson,

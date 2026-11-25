@@ -1,95 +1,65 @@
 import { write as bunWrite } from 'bun'
-import { afterAll, describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { checkJsxExtension, hasJsx } from './jsx-extension.js'
-const tmp = await mkdtemp(join(tmpdir(), 'jsx-ext-test-'))
-afterAll(async () => rm(tmp, { recursive: true }))
-const write = async (name: string, code: string) => bunWrite(join(tmp, name), code)
-const check = async () => {
+const withTmp = async (run: (tmp: string) => Promise<void>) => {
+  const tmp = await mkdtemp(join(tmpdir(), 'jsx-ext-test-'))
+  try {
+    await run(tmp)
+  } finally {
+    await rm(tmp, { force: true, recursive: true })
+  }
+}
+const write = async (tmp: string, name: string, code: string) => bunWrite(join(tmp, name), code)
+const check = async (tmp: string) => {
   const d = await checkJsxExtension({ root: tmp })
   return new Set(d.map(x => x.file.split('/').pop()))
 }
-const registerJsxExtensionCases = () => {
-  test('catches JSX element in .ts', async () => {
-    await write('elem.ts', 'const X = () => <div>hi</div>')
-    const found = await check()
-    expect(found.has('elem.ts')).toBe(true)
-  })
-  test('catches JSX fragment in .ts', async () => {
-    await write('frag.ts', 'const X = () => <>hi</>')
-    const found = await check()
-    expect(found.has('frag.ts')).toBe(true)
-  })
-  test('catches self-closing JSX in .ts', async () => {
-    await write('self.ts', 'const X = () => <br />')
-    const found = await check()
-    expect(found.has('self.ts')).toBe(true)
-  })
-  test('catches Context.Provider pattern in .ts', async () => {
-    await write(
-      'ctx.ts',
-      "import { createContext } from 'react'\nconst Ctx = createContext([])\nconst P = ({ children }: { children: unknown }) => <Ctx value={[]}>{children}</Ctx>"
-    )
-    const found = await check()
-    expect(found.has('ctx.ts')).toBe(true)
-  })
-  test('catches JSX inside ternary in .ts', async () => {
-    await write('ternary.ts', 'const X = ({ ok }: { ok: boolean }) => ok ? <span>yes</span> : null')
-    const found = await check()
-    expect(found.has('ternary.ts')).toBe(true)
-  })
-  test('catches JSX with only type imports in .ts', async () => {
-    await write('typeimport.ts', "import type { ReactNode } from 'react'\nconst X = (): ReactNode => <p>hi</p>")
-    const found = await check()
-    expect(found.has('typeimport.ts')).toBe(true)
+const expectFlagged = async (name: string, code: string, flagged: boolean) => {
+  await withTmp(async tmp => {
+    await write(tmp, name, code)
+    const found = await check(tmp)
+    expect(found.has(name)).toBe(flagged)
   })
 }
+const registerJsxExtensionCases = () => {
+  test('catches JSX element in .ts', async () => expectFlagged('elem.ts', 'const X = () => <div>hi</div>', true))
+  test('catches JSX fragment in .ts', async () => expectFlagged('frag.ts', 'const X = () => <>hi</>', true))
+  test('catches self-closing JSX in .ts', async () => expectFlagged('self.ts', 'const X = () => <br />', true))
+  test('catches Context.Provider pattern in .ts', async () =>
+    expectFlagged(
+      'ctx.ts',
+      "import { createContext } from 'react'\nconst Ctx = createContext([])\nconst P = ({ children }: { children: unknown }) => <Ctx value={[]}>{children}</Ctx>",
+      true
+    ))
+  test('catches JSX inside ternary in .ts', async () =>
+    expectFlagged('ternary.ts', 'const X = ({ ok }: { ok: boolean }) => ok ? <span>yes</span> : null', true))
+  test('catches JSX with only type imports in .ts', async () =>
+    expectFlagged('typeimport.ts', "import type { ReactNode } from 'react'\nconst X = (): ReactNode => <p>hi</p>", true))
+}
 const registerNonJsxExtensionCases = () => {
-  test('ignores generics in .ts', async () => {
-    await write('generic.ts', 'const f = <T>(x: T): T => x')
-    const found = await check()
-    expect(found.has('generic.ts')).toBe(false)
-  })
-  test('ignores constrained generics in .ts', async () => {
-    await write('constrained.ts', 'const f = <T extends unknown>(x: T) => x')
-    const found = await check()
-    expect(found.has('constrained.ts')).toBe(false)
-  })
-  test('ignores comparison operators in .ts', async () => {
-    await write('compare.ts', 'const x = a < b && c > d')
-    const found = await check()
-    expect(found.has('compare.ts')).toBe(false)
-  })
-  test('ignores async generic functions', async () => {
-    await write('asyncgen.ts', 'const f = async <T>(x: T): Promise<T> => x')
-    const found = await check()
-    expect(found.has('asyncgen.ts')).toBe(false)
-  })
-  test('ignores generic interfaces and types', async () => {
-    await write('iface.ts', 'interface Box<T> { value: T }\ntype Fn<A, B> = (a: A) => B')
-    const found = await check()
-    expect(found.has('iface.ts')).toBe(false)
-  })
-  test('ignores .d.ts files', async () => {
-    await write('types.d.ts', 'declare const X: () => <div />')
-    const found = await check()
-    expect(found.has('types.d.ts')).toBe(false)
-  })
-  test('ignores .tsx files', async () => {
-    await write('valid.tsx', 'const X = () => <div>hi</div>')
-    const found = await check()
-    expect(found.has('valid.tsx')).toBe(false)
-  })
+  test('ignores generics in .ts', async () => expectFlagged('generic.ts', 'const f = <T>(x: T): T => x', false))
+  test('ignores constrained generics in .ts', async () =>
+    expectFlagged('constrained.ts', 'const f = <T extends unknown>(x: T) => x', false))
+  test('ignores comparison operators in .ts', async () => expectFlagged('compare.ts', 'const x = a < b && c > d', false))
+  test('ignores async generic functions', async () =>
+    expectFlagged('asyncgen.ts', 'const f = async <T>(x: T): Promise<T> => x', false))
+  test('ignores generic interfaces and types', async () =>
+    expectFlagged('iface.ts', 'interface Box<T> { value: T }\ntype Fn<A, B> = (a: A) => B', false))
+  test('ignores .d.ts files', async () => expectFlagged('types.d.ts', 'declare const X: () => <div />', false))
+  test('ignores .tsx files', async () => expectFlagged('valid.tsx', 'const X = () => <div>hi</div>', false))
   test('returns correct diagnostic shape', async () => {
-    await write('shape.ts', 'const X = () => <span />')
-    const d = await checkJsxExtension({ root: tmp })
-    const match = d.find(x => x.file.endsWith('shape.ts'))
-    expect(match).toBeDefined()
-    expect(match?.rule).toBe('jsx-requires-tsx-extension')
-    expect(match?.linter).toBe('lintmax')
-    expect(match?.line).toBe(1)
+    await withTmp(async tmp => {
+      await write(tmp, 'shape.ts', 'const X = () => <span />')
+      const d = await checkJsxExtension({ root: tmp })
+      const match = d.find(x => x.file.endsWith('shape.ts'))
+      expect(match).toBeDefined()
+      expect(match?.rule).toBe('jsx-requires-tsx-extension')
+      expect(match?.linter).toBe('lintmax')
+      expect(match?.line).toBe(1)
+    })
   })
 }
 describe('jsx-requires-tsx-extension', () => {

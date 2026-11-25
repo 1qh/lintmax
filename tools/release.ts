@@ -34,7 +34,7 @@ const root = process.cwd()
 const runCommand = async (
   cmd: string[],
   cwd = root,
-  quiet = false
+  isQuiet = false
 ): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
   const subprocess = spawn({ cmd, cwd, stderr: 'pipe', stdout: 'pipe', timeout: 300_000 })
   const [exitCode, stdout, stderr] = await Promise.all([
@@ -42,7 +42,7 @@ const runCommand = async (
     new Response(subprocess.stdout).text(),
     new Response(subprocess.stderr).text()
   ])
-  if (!quiet) {
+  if (!isQuiet) {
     process.stdout.write(stdout)
     process.stderr.write(stderr)
   }

@@ -113,7 +113,7 @@ describe('edge cases', () => {
       <section className={clsx("a", "b")} />
     </>`)
     expect(violations).toHaveLength(4)
-    expect(violations.map(v => v.rule).toSorted((a, b) => a.localeCompare(b))).toEqual([
+    expect(violations.map(v => v.rule).toSorted((a, b) => a.localeCompare(b))).toStrictEqual([
       'cn/no-banned-callee',
       'cn/no-concatenation',
       'cn/no-template-literal',

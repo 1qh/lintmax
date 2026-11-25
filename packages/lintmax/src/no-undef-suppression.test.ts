@@ -1,6 +1,6 @@
 import type { ESLint } from 'eslint'
 import { file, write } from 'bun'
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { readRequiredJson } from './core.js'
@@ -87,35 +87,38 @@ const runSuppressionFixture = async (root: string): Promise<SuppressionFixtureRe
   const result = readRequiredJson<SuppressionResult>(stdout)
   return { exitCode, original, result, stderr, unused, used }
 }
+const withFixture = async (run: (fixture: SuppressionFixtureResult) => Promise<void>) => {
+  const root = await mkdtemp(join(import.meta.dir, '.no-undef-fixture-'))
+  try {
+    const fixture = await runSuppressionFixture(root)
+    await run(fixture)
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+}
 describe('plain JS no-undef suppressions', () => {
-  let fixture: SuppressionFixtureResult
-  let root: string | undefined
-  beforeEach(async () => {
-    root = await mkdtemp(join(import.meta.dir, '.no-undef-fixture-'))
-    fixture = await runSuppressionFixture(root)
-  })
-  afterEach(async () => {
-    if (root !== undefined) await rm(root, { force: true, recursive: true })
-    root = undefined
-  })
-  test('clean preserves a plain JS no-undef suppression and identifies unused directives', () => {
-    const { exitCode, original, result, stderr } = fixture
-    expect(stderr).toBe('')
-    expect(exitCode).toBe(0)
-    expect(result.before[0]?.errorCount).toBe(0)
-    expect(result.before[1]?.messages.some(message => message.ruleId === 'no-undef')).toBe(true)
-    expect(result.before[2]?.messages.some(message => message.ruleId === null)).toBe(true)
-    expect(result.cleanup).toBe(original)
+  test('clean preserves a plain JS no-undef suppression and identifies unused directives', async () => {
+    await withFixture(async fixture => {
+      const { exitCode, original, result, stderr } = fixture
+      expect(stderr).toBe('')
+      expect(exitCode).toBe(0)
+      expect(result.before[0]?.errorCount).toBe(0)
+      expect(result.before[1]?.messages.some(message => message.ruleId === 'no-undef')).toBe(true)
+      expect(result.before[2]?.messages.some(message => message.ruleId === null)).toBe(true)
+      expect(result.cleanup).toBe(original)
+    })
   })
   test('fix preserves a plain JS no-undef suppression and check still rejects an unsuppressed global', async () => {
-    const { exitCode, original, result, stderr, unused, used } = fixture
-    expect(stderr).toBe('')
-    expect(exitCode).toBe(0)
-    expect(result.after[0]?.errorCount).toBe(0)
-    expect(await file(used).text()).toBe(original)
-    expect(result.after[1]?.messages.some(message => message.ruleId === 'no-undef')).toBe(true)
-    expect(result.after[1]?.errorCount).toBeGreaterThan(0)
-    expect(result.after[2]?.errorCount).toBe(0)
-    expect(await file(unused).text()).not.toContain('eslint-disable')
+    await withFixture(async fixture => {
+      const { exitCode, original, result, stderr, unused, used } = fixture
+      expect(stderr).toBe('')
+      expect(exitCode).toBe(0)
+      expect(result.after[0]?.errorCount).toBe(0)
+      expect(await file(used).text()).toBe(original)
+      expect(result.after[1]?.messages.some(message => message.ruleId === 'no-undef')).toBe(true)
+      expect(result.after[1]?.errorCount).toBeGreaterThan(0)
+      expect(result.after[2]?.errorCount).toBe(0)
+      expect(await file(unused).text()).not.toContain('eslint-disable')
+    })
   })
 })

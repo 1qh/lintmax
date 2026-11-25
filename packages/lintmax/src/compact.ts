@@ -99,10 +99,10 @@ const printCompactCounts = (results: CompactFileResult[], changed: string[]) => 
   process.stdout.write(`[compact] Scanned ${scanned} files\n`)
   process.stdout.write(`[compact] Updated ${changed.length} files\n`)
 }
-const reportCompact = (results: CompactFileResult[], mode: 'check' | 'fix', human: boolean) => {
+const reportCompact = (results: CompactFileResult[], mode: 'check' | 'fix', isHuman: boolean) => {
   const changed = results.filter(result => result.changed).map(result => result.relativePath)
   if (mode === 'fix') {
-    if (human) printCompactCounts(results, changed)
+    if (isHuman) printCompactCounts(results, changed)
     return
   }
   if (changed.length === 0) return

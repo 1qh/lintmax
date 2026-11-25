@@ -2,6 +2,7 @@ import { generate as DefaultImage } from 'fumadocs-ui/og'
 import { notFound } from 'next/navigation'
 import { ImageResponse } from 'next/og'
 import { getPageImage, source } from '@/lib/source'
+// biome-ignore lint/nursery/useConsistentBooleanName: Next.js route segment config reads this exact export name
 export const revalidate = false
 export const generateStaticParams = () =>
   source.getPages().map(page => ({

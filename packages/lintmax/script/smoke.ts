@@ -14,7 +14,7 @@ const tarball = output
 if (pack.exitCode !== 0 || !tarball) throw new Error(`pack failed: ${decoder.decode(pack.stderr)}`)
 const dir = await mkdtemp(join(tmpdir(), 'lintmax-smoke-'))
 const cleanup = async () => rm(dir, { force: true, recursive: true })
-let passed = false
+let hasPassed = false
 const has = async (f: string) => file(join(dir, f)).exists()
 const readJson = async <T>(f: string): Promise<T> => readRequiredJson<T>(await file(join(dir, f)).text())
 const lintmaxCli = 'node_modules/lintmax/dist/cli.mjs'
@@ -450,9 +450,9 @@ try {
   await rm(join(dir, 'eslint.config.ts'), { force: true })
   await rm(join(dir, 'lintmax.config.ts'), { force: true })
   process.stdout.write('smoke test passed\n')
-  passed = true
+  hasPassed = true
 } finally {
-  if (passed) await cleanup()
+  if (hasPassed) await cleanup()
   else process.stderr.write(`smoke failed — the tree it installed is kept for diagnosis at ${dir}\n`)
   await rm(join(root, tarball), { force: true })
 }
