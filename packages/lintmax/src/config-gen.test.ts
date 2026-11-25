@@ -80,7 +80,9 @@ describe('biome config generation', () => {
           }
         }[]
       }>(await file(join(cacheDir, 'biome.json')).text())
-      const override = config.overrides?.find(o => o.includes?.includes('**') && o.linter?.rules?.nursery?.useLayeredStyles)
+      const override = config.overrides?.find(
+        o => o.includes?.includes('**') && o.linter?.rules?.nursery?.useLayeredStyles
+      )
       expect(override?.linter?.rules?.nursery?.useLayeredStyles).toStrictEqual({
         level: 'error',
         options: { requireImportLayers: false }

@@ -326,10 +326,14 @@ describe('parseRules (ignores.ts)', () => {
     ])
   })
   test('parses biome-ignore', () => {
-    expect(parseRules('/** biome-ignore lint/style/noProcessEnv: reason */', biomeRe)).toStrictEqual(['lint/style/noProcessEnv'])
+    expect(parseRules('/** biome-ignore lint/style/noProcessEnv: reason */', biomeRe)).toStrictEqual([
+      'lint/style/noProcessEnv'
+    ])
   })
   test('parses biome-ignore-all', () => {
-    expect(parseRules('/** biome-ignore-all lint/nursery/noForIn: reason */', biomeRe)).toStrictEqual(['lint/nursery/noForIn'])
+    expect(parseRules('/** biome-ignore-all lint/nursery/noForIn: reason */', biomeRe)).toStrictEqual([
+      'lint/nursery/noForIn'
+    ])
   })
   test('returns empty for no match', () => {
     expect(parseRules('const x = 1', eslintRe)).toStrictEqual([])

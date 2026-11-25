@@ -136,10 +136,13 @@ const prepareCapture = async (directory: string, { args, command, label }: RunOp
         command,
         ...captureArgs
       ]
-  return { commandArgs, hasNativeOutput, outputPath, stderrPath, stdoutPath, isWindows }
+  return { commandArgs, hasNativeOutput, isWindows, outputPath, stderrPath, stdoutPath }
 }
 const executeCapture = async (opts: RunOpts, directory: string, timeoutMs: number) => {
-  const { commandArgs, hasNativeOutput, outputPath, stderrPath, stdoutPath, isWindows } = await prepareCapture(directory, opts)
+  const { commandArgs, hasNativeOutput, outputPath, stderrPath, stdoutPath, isWindows } = await prepareCapture(
+    directory,
+    opts
+  )
   const child = spawn(commandArgs, {
     cwd,
     env: opts.env,
@@ -193,10 +196,10 @@ export {
   CliExitError,
   cwd,
   decodeText,
+  doesPathExist,
   ensureDirectory,
   envValue,
   lintmaxRoot,
-  doesPathExist,
   PRETTIER_MD_ARGS,
   readJson,
   readRequiredJson,

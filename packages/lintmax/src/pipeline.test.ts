@@ -136,7 +136,12 @@ describe('file-backed linter output', () => {
     expect(Buffer.byteLength(stdout)).toBeGreaterThan(2 * 1024 * 1024)
     const result = await captureOutput({ label: 'eslint', stdout })
     expect(result.diagnostics).toHaveLength(count)
-    expect(result.diagnostics.at(-1)).toStrictEqual({ file: 'src/large.ts', line: count, linter: 'eslint', rule: 'no-console' })
+    expect(result.diagnostics.at(-1)).toStrictEqual({
+      file: 'src/large.ts',
+      line: count,
+      linter: 'eslint',
+      rule: 'no-console'
+    })
     expect(result.failures).toStrictEqual([])
   })
   test('reports truncated JSON with its parse error, byte count and stderr', async () => {
@@ -153,7 +158,9 @@ describe('file-backed linter output', () => {
   test('reports exit 1 with valid JSON containing zero diagnostics', async () => {
     const result = await captureOutput({ label: 'eslint', stdout: '[]' })
     expect(result.diagnostics).toStrictEqual([])
-    expect(result.failures).toStrictEqual([{ code: 1, label: 'eslint', message: 'Output parsed to zero diagnostics (2 bytes)' }])
+    expect(result.failures).toStrictEqual([
+      { code: 1, label: 'eslint', message: 'Output parsed to zero diagnostics (2 bytes)' }
+    ])
     expect(formatFailureDetails(result.failures)).toContain('Output parsed to zero diagnostics')
   })
   test('reports malformed and empty failed output for every JSON reporter', async () => {

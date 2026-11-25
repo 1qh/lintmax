@@ -20,7 +20,11 @@ const write = async (dir: string, rel: string, content: string) => {
 describe('findDangerousSuppressions', () => {
   test('flags eslint no-unsafe suppression', async () => {
     await withDir(async dir => {
-      await write(dir, 'src/a.ts', '/* eslint-disable @typescript-eslint/no-unsafe-assignment */\nconst x = 1\nexport { x }\n')
+      await write(
+        dir,
+        'src/a.ts',
+        '/* eslint-disable @typescript-eslint/no-unsafe-assignment */\nconst x = 1\nexport { x }\n'
+      )
       const found = await findDangerousSuppressions(dir)
       expect(found.some(d => d.rule.includes('no-unsafe-assignment'))).toBe(true)
     })

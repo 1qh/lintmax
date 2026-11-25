@@ -22,10 +22,10 @@ const processData = function(filePath: string) {
   return data
 }
 // Check if path is non-empty
-const checkExists = function(p: string) {
+const hasContent = function(p: string) {
   // Inspect the length
-  const result = p.length > 0
-  return result
+  const isNonEmpty = p.length > 0
+  return isNonEmpty
 }
 // Build a full path
 const buildPath = function(dir: string, file: string) {
@@ -45,8 +45,8 @@ const double = function(n: number) {
 }
 // Check if number is positive
 const isPositive = function(n: number) {
-  const positive = n > 0
-  return positive
+  const isAbove = n > 0
+  return isAbove
 }
 // Get absolute value
 const abs = function(n: number) {
@@ -56,7 +56,7 @@ const abs = function(n: number) {
 type StringOrNumber = string | number
 // Export all the functions and constants
 export {
-  greet, processData, checkExists, buildPath, MAX_RETRIES, DEFAULT_TIMEOUT, API_BASE, double, isPositive, abs
+  greet, processData, hasContent, buildPath, MAX_RETRIES, DEFAULT_TIMEOUT, API_BASE, double, isPositive, abs
 }
 export type { StringOrNumber }
 `
