@@ -110,12 +110,10 @@ const loadOxlintOffRules = async (): Promise<Set<string>> => {
   const config = await readOxlintConfig()
   const off = new Set<string>(OXLINT_CLI_ALLOW)
   const configuredRules = Object.entries(config.rules ?? {})
-  for (const [rule, val] of configuredRules) {
-    const severity = Array.isArray(val) ? String(val[0]) : val
-    if (severity === 'off') {
-      off.add(rule)
-      addRuleVariants(rule, off)
-    }
+  const offRules = configuredRules.filter(([, val]) => (Array.isArray(val) ? String(val[0]) : val) === 'off')
+  for (const [rule] of offRules) {
+    off.add(rule)
+    addRuleVariants(rule, off)
   }
   for (const rule of OXLINT_CLI_ALLOW) addRuleVariants(rule, off)
   return off

@@ -29,23 +29,14 @@ const biomeEntries = (
     category?: string
     location?: { path?: string; start?: { line?: number } }
   }[]
-): Diagnostic[] => {
-  const results: Diagnostic[] = []
-  for (const d of diagnostics) {
+): Diagnostic[] =>
+  diagnostics.flatMap(d => {
     const filePath = d.location?.path
     const { category } = d
-    if (filePath && category) {
-      const line = d.location?.start?.line ?? 0
-      results.push({
-        file: normalizePath(filePath),
-        line,
-        linter: 'biome',
-        rule: category
-      })
-    }
-  }
-  return results
-}
+    return filePath && category
+      ? [{ file: normalizePath(filePath), line: d.location?.start?.line ?? 0, linter: 'biome', rule: category }]
+      : []
+  })
 const parseBiomeDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] => {
   let parsed: {
     diagnostics?: {
@@ -68,23 +59,21 @@ const oxlintEntries = (
     filename?: string
     labels?: { span?: { line?: number } }[]
   }[]
-): Diagnostic[] => {
-  const results: Diagnostic[] = []
-  for (const d of diagnostics) {
+): Diagnostic[] =>
+  diagnostics.flatMap(d => {
     const filePath = d.filename ?? ''
     const rule = d.code
-    if (rule) {
-      const line = d.labels?.[0]?.span?.line ?? 0
-      results.push({
-        file: filePath.length > 0 ? normalizePath(filePath) : '<unknown>',
-        line,
-        linter: 'oxlint',
-        rule
-      })
-    }
-  }
-  return results
-}
+    return rule
+      ? [
+          {
+            file: filePath.length > 0 ? normalizePath(filePath) : '<unknown>',
+            line: d.labels?.[0]?.span?.line ?? 0,
+            linter: 'oxlint',
+            rule
+          }
+        ]
+      : []
+  })
 const parseOxlintDiagnostics = ({ stdout }: { stdout: string }): Diagnostic[] => {
   let parsed: {
     diagnostics?: {

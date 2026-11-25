@@ -186,12 +186,13 @@ const groupByCategory = ({
   ruleNames: readonly string[]
 }): Record<string, Record<string, 'off'>> => {
   const result: Record<string, Record<string, 'off'>> = {}
-  for (const rule of ruleNames) {
+  const categorized = ruleNames.flatMap(rule => {
     const cat = categoryMap.get(rule)
-    if (cat) {
-      result[cat] ??= {}
-      result[cat][rule] = 'off'
-    }
+    return cat ? [{ cat, rule }] : []
+  })
+  for (const { cat, rule } of categorized) {
+    result[cat] ??= {}
+    result[cat][rule] = 'off'
   }
   return result
 }
