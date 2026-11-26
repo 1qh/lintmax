@@ -67,9 +67,9 @@ const rulesFromContent = (content: string): string[] => {
   }
   return rules
 }
-const findDangerousSuppressions = async (cwd: string): Promise<DangerousSuppression[]> => {
+const findDangerousSuppressions = async (cwd: string, scopedFiles?: string[]): Promise<DangerousSuppression[]> => {
   const ignoreGlobs: Glob[] = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
-  const files = (await listProjectFiles({ root: cwd })).filter(
+  const files = (scopedFiles ?? (await listProjectFiles({ root: cwd }))).filter(
     p => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.d.ts') && ignoreGlobs.every(g => !doesMatchGlob(g, p))
   )
   const results = await Promise.all(

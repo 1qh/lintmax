@@ -119,8 +119,8 @@ const checkClassNameFile = async (filePath: string): Promise<Diagnostic[]> => {
     rule: v.rule
   }))
 }
-const checkClassName = async ({ root }: { root: string }): Promise<Diagnostic[]> => {
-  const paths = (await listProjectFiles({ root })).filter(
+const checkClassName = async ({ files, root }: { files?: string[]; root: string }): Promise<Diagnostic[]> => {
+  const paths = (files ?? (await listProjectFiles({ root }))).filter(
     path =>
       isTsxFile(path) &&
       !(path.includes('node_modules') || path.includes('readonly') || path.includes('.next') || path.includes('dist'))

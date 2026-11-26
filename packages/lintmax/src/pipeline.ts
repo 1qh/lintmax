@@ -2,6 +2,7 @@
 import { env as bunEnv, file, Glob, which } from 'bun'
 import { Buffer } from 'node:buffer'
 import { homedir } from 'node:os'
+import { relative, resolve } from 'node:path'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
 import type { ExtraBins } from './extra-coverage.js'
@@ -18,7 +19,7 @@ import {
 import { checkClassName } from './class-name.js'
 import { cleanIgnores } from './clean-ignores.js'
 import { checkComments, fixComments } from './comments.js'
-import { listCompactFiles, runCompact } from './compact.js'
+import { isCompactCandidate, listCompactFiles, runCompact } from './compact.js'
 import { DEFAULT_SHARED_IGNORE_PATTERNS, OXLINT_CLI_ALLOW } from './constants.js'
 import {
   cacheDir,
@@ -33,7 +34,7 @@ import {
   run,
   runCapture
 } from './core.js'
-import { runExtraCoverage } from './extra-coverage.js'
+import { collectExtraTargets, runExtraCoverage } from './extra-coverage.js'
 import { formatGrouped } from './format.js'
 import { findDangerousSuppressions } from './ignores.js'
 import { sync } from './index.js'
@@ -90,10 +91,12 @@ const createStepExecutor = ({
     }
   }
   const runCompactContinue = async ({
+    files,
     human = false,
     isIgnored,
     mode
   }: {
+    files?: string[]
     human?: boolean
     isIgnored?: (filePath: string) => boolean
     mode: 'check' | 'fix'
@@ -101,6 +104,7 @@ const createStepExecutor = ({
     try {
       await runCompact({
         env,
+        files,
         human,
         isIgnored,
         mode,
@@ -561,19 +565,70 @@ interface LintTargets {
   biome: string[]
   eslint: string[]
   packages: string[]
+  prettier: string[]
   source: string[]
 }
 const SOURCE_EXTENSIONS = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts']
+const BIOME_EXTENSIONS = [
+  ...SOURCE_EXTENSIONS,
+  '.astro',
+  '.css',
+  '.gql',
+  '.graphql',
+  '.grit',
+  '.html',
+  '.json',
+  '.jsonc',
+  '.svelte',
+  '.vue'
+]
 const PRETTIER_EXTENSIONS = ['.md', '.yml', '.yaml']
 const hasExtension = (path: string, extensions: readonly string[]): boolean => extensions.some(ext => path.endsWith(ext))
-const createLintTargets = (files: string[]): LintTargets => ({
-  biome: files.map(p => joinPath(cwd, p)),
-  eslint: files.map(p => joinPath(cwd, p)),
-  packages: files
-    .filter(p => p === 'package.json' || p.endsWith('/package.json'))
-    .map(p => escapeGlobPath(joinPath(cwd, p))),
-  source: files.filter(p => hasExtension(p, SOURCE_EXTENSIONS)).map(p => joinPath(cwd, p))
-})
+const isMarkdown = (path: string): boolean => path.endsWith('.md')
+const createLintTargets = ({
+  files,
+  isScoped,
+  root
+}: {
+  files: string[]
+  isScoped: boolean
+  root: string
+}): LintTargets => {
+  const source = files.filter(p => hasExtension(p, SOURCE_EXTENSIONS)).map(p => joinPath(root, p))
+  return {
+    biome: (isScoped ? files.filter(p => hasExtension(p, BIOME_EXTENSIONS)) : files).map(p => joinPath(root, p)),
+    eslint: isScoped ? source : files.map(p => joinPath(root, p)),
+    packages: files
+      .filter(p => p === 'package.json' || p.endsWith('/package.json'))
+      .map(p => escapeGlobPath(joinPath(root, p))),
+    prettier: files.filter(p => hasExtension(p, PRETTIER_EXTENSIONS)).map(p => joinPath(root, p)),
+    source
+  }
+}
+const deriveScopedPlan = ({ files, paths, root }: { files: string[]; paths: string[]; root: string }) => {
+  const selections = paths.map(p => relative(root, resolve(root, p)).replaceAll('\\', '/'))
+  const scopedFiles = files.filter(p => selections.some(s => s === '' || p === s || p.startsWith(`${s}/`)))
+  const targets = createLintTargets({ files: scopedFiles, isScoped: true, root })
+  const extra = collectExtraTargets(scopedFiles)
+  const compactFiles = scopedFiles.filter(relativePath => isCompactCandidate({ relativePath }))
+  const stages = Object.entries({
+    biome: targets.biome,
+    compact: compactFiles,
+    dprint: extra.dockerfiles,
+    eslint: targets.eslint,
+    'eslint-rule-discovery': targets.eslint,
+    flowmark: targets.prettier.filter(isMarkdown),
+    oxlint: targets.source,
+    prettier: targets.prettier,
+    shellcheck: extra.shell,
+    shfmt: extra.shell,
+    'sort-package-json': targets.packages,
+    tombi: extra.toml
+  })
+    .filter(([, filesForStage]) => filesForStage.length > 0)
+    .map(([stage]) => stage)
+  return { compactFiles, scopedFiles, stages, targets }
+}
 const throwAgentResults = ({ diagnostics, failures }: { diagnostics: Diagnostic[]; failures: FailureRecord[] }) => {
   if (diagnostics.length === 0 && failures.length === 0) return
   const grouped = aggregate({ diagnostics })
@@ -602,14 +657,35 @@ interface BranchContext {
   extraBins: ExtraBins
   failures: FailureRecord[]
   runSteps: (arg: { steps: StepSpec[] }) => Promise<void>
+  scopedFiles?: string[]
+  scopedTargets?: LintTargets
+  shouldCleanIgnores: boolean
   shouldComments: boolean
   sourceFiles: string[]
   throwIfFailures: () => void
 }
+const collectSourceDiagnostics = async ({ scopedFiles, sourceFiles }: BranchContext): Promise<Diagnostic[]> => {
+  if (scopedFiles && sourceFiles.length === 0) return []
+  const input = { files: scopedFiles, root: cwd }
+  return [...(await checkClassName(input)), ...(await checkJsxExtension(input))]
+}
+const runUnusedSuppressionStage = async (
+  { scopedTargets, sourceFiles }: BranchContext,
+  isDryRun: boolean
+): Promise<UnusedDirective[]> => {
+  if ((scopedTargets?.biome.length ?? sourceFiles.length) === 0) return []
+  const result = await removeUnusedSuppressions({
+    dryRun: isDryRun,
+    filePaths: scopedTargets ? undefined : sourceFiles.map(f => joinPath(cwd, f)),
+    root: cwd,
+    scopedTargets
+  })
+  return result.diagnostics
+}
 const collectAgentDiagnostics = async (ctx: BranchContext): Promise<Diagnostic[]> => {
   const allDiagnostics = await runAgentCheck(ctx.agentParams)
   if (ctx.shouldComments) allDiagnostics.push(...(await checkComments({ files: ctx.sourceFiles })))
-  allDiagnostics.push(...(await checkClassName({ root: cwd })), ...(await checkJsxExtension({ root: cwd })))
+  allDiagnostics.push(...(await collectSourceDiagnostics(ctx)))
   return allDiagnostics
 }
 const runFixHuman = async (ctx: BranchContext): Promise<void> => {
@@ -632,17 +708,12 @@ const runFixAgent = async (ctx: BranchContext): Promise<void> => {
   throwAgentResults({ diagnostics: allDiagnostics, failures: ctx.failures })
 }
 const collectHumanCustomDiagnostics = async (ctx: BranchContext) => {
-  const cnDiagsHuman = await checkClassName({ root: cwd })
-  const jsxDiagsHuman = await checkJsxExtension({ root: cwd })
-  const unusedHuman =
-    ctx.sourceFiles.length > 0
-      ? await removeUnusedSuppressions({ dryRun: true, filePaths: ctx.sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
-      : { diagnostics: [], files: [], removed: 0 }
+  const sourceDiagnostics = await collectSourceDiagnostics(ctx)
+  const unusedHuman = await runUnusedSuppressionStage(ctx, true)
   const humanCustomDiags = [
-    ...cnDiagsHuman,
-    ...jsxDiagsHuman,
-    ...unusedToDiagnostics({ root: cwd, unused: unusedHuman.diagnostics }),
-    ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
+    ...sourceDiagnostics,
+    ...unusedToDiagnostics({ root: cwd, unused: unusedHuman }),
+    ...dangerousToDiagnostics(await findDangerousSuppressions(cwd, ctx.scopedFiles)),
     ...emitExtra(
       await runExtraCoverage({ bins: ctx.extraBins, command: 'check', env: ctx.env, gitFiles: ctx.allGitFiles })
     )
@@ -662,16 +733,10 @@ const runCheckHuman = async (ctx: BranchContext): Promise<void> => {
 }
 const runCheckAgent = async (ctx: BranchContext): Promise<void> => {
   const allDiagnostics = await collectAgentDiagnostics(ctx)
-  if (ctx.sourceFiles.length > 0) {
-    const unusedAgent = await removeUnusedSuppressions({
-      dryRun: true,
-      filePaths: ctx.sourceFiles.map(f => joinPath(cwd, f)),
-      root: cwd
-    })
-    allDiagnostics.push(...unusedToDiagnostics({ root: cwd, unused: unusedAgent.diagnostics }))
-  }
+  const unusedAgent = await runUnusedSuppressionStage(ctx, true)
   allDiagnostics.push(
-    ...dangerousToDiagnostics(await findDangerousSuppressions(cwd)),
+    ...unusedToDiagnostics({ root: cwd, unused: unusedAgent }),
+    ...dangerousToDiagnostics(await findDangerousSuppressions(cwd, ctx.scopedFiles)),
     ...emitExtra(
       await runExtraCoverage({ bins: ctx.extraBins, command: 'check', env: ctx.env, gitFiles: ctx.allGitFiles })
     )
@@ -705,15 +770,20 @@ const synchronizeConfig = async ({
       })
     : sync())
 }
-const resolveAllBins = async (): Promise<[string, string, string, string, string, string, string]> => {
+const resolvePlannedBin = async ({ bin, pkg, stages }: { bin: string; pkg: string; stages?: string[] }) => {
+  if (stages?.includes(bin) === false) return ''
+  const resolved = await resolveBin({ bin, pkg })
+  return resolved
+}
+const resolveLintBins = async (stages?: string[]): Promise<[string, string, string, string, string, string, string]> => {
   const bins = await Promise.all([
-    resolveBin({ bin: 'sort-package-json', pkg: 'sort-package-json' }),
-    resolveBin({ bin: 'biome', pkg: '@biomejs/biome' }),
-    resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
-    resolveBin({ bin: 'eslint', pkg: 'eslint' }),
-    resolveBin({ bin: 'prettier', pkg: 'prettier' }),
-    resolveBin({ bin: 'tombi', pkg: 'tombi' }),
-    resolveBin({ bin: 'dprint', pkg: 'dprint' })
+    resolvePlannedBin({ bin: 'sort-package-json', pkg: 'sort-package-json', stages }),
+    resolvePlannedBin({ bin: 'biome', pkg: '@biomejs/biome', stages }),
+    resolvePlannedBin({ bin: 'oxlint', pkg: 'oxlint', stages }),
+    resolvePlannedBin({ bin: 'eslint', pkg: 'eslint', stages }),
+    resolvePlannedBin({ bin: 'prettier', pkg: 'prettier', stages }),
+    resolvePlannedBin({ bin: 'tombi', pkg: 'tombi', stages }),
+    resolvePlannedBin({ bin: 'dprint', pkg: 'dprint', stages })
   ])
   return bins
 }
@@ -764,11 +834,10 @@ const runFixCommand = async ({
   runStepsSilent: (arg: { steps: StepSpec[] }) => Promise<void>
 }): Promise<void> => {
   if (ctx.shouldComments) await fixComments({ files: ctx.sourceFiles })
-  if (ctx.sourceFiles.length > 0) await cleanIgnores(ctx.sourceFiles.map(f => joinPath(cwd, f)))
+  if (ctx.shouldCleanIgnores) await cleanIgnores(ctx.sourceFiles.map(f => joinPath(cwd, f)))
   await (human ? ctx.runSteps({ steps: fixSteps }) : runStepsSilent({ steps: fixSteps }))
   clearFailures()
-  if (ctx.sourceFiles.length > 0)
-    await removeUnusedSuppressions({ filePaths: ctx.sourceFiles.map(f => joinPath(cwd, f)), root: cwd })
+  await runUnusedSuppressionStage(ctx, false)
   await (human ? runFixHuman(ctx) : runFixAgent(ctx))
 }
 const prepareLintRuntime = async () => {
@@ -795,6 +864,7 @@ const prepareLintFiles = async ({
   dir,
   env,
   human,
+  paths,
   runCompactContinue,
   runtime
 }: {
@@ -802,22 +872,27 @@ const prepareLintFiles = async ({
   dir: string
   env: Record<string, string | undefined>
   human: boolean
+  paths: string[]
   runCompactContinue: ReturnType<typeof createStepExecutor>['runCompactContinue']
   runtime: { compact?: boolean }
 }) => {
   const oxlintIgnorePatternsEarly = await readOxlintIgnorePatterns({ dir })
   const ignoreGlobsEarly = oxlintIgnorePatternsEarly.map(p => new Glob(p))
   const isIgnored = (filePath: string): boolean => ignoreGlobsEarly.some(g => g.match(filePath))
-  if (command === 'fix' && runtime.compact === true) await runCompactContinue({ human, isIgnored, mode: 'fix' })
+  const shouldCompact = command === 'fix' && runtime.compact === true
+  if (shouldCompact && paths.length === 0) await runCompactContinue({ human, isIgnored, mode: 'fix' })
   const allGitFiles = (await listCompactFiles({ env, root: cwd })).filter(one => !isIgnored(one))
-  return { allGitFiles, isIgnored, oxlintIgnorePatternsEarly }
+  const plan = paths.length > 0 ? deriveScopedPlan({ files: allGitFiles, paths, root: cwd }) : undefined
+  if (shouldCompact && plan && plan.compactFiles.length > 0)
+    await runCompactContinue({ files: plan.compactFiles, human, mode: 'fix' })
+  return { allGitFiles, oxlintIgnorePatternsEarly, plan }
 }
 const createFlowmarkStep = async (
   command: 'check' | 'fix',
   env: Record<string, string | undefined>,
   prettierMarkdownTargets: string[]
 ): Promise<FlowmarkStep | undefined> => {
-  const markdownFiles = prettierMarkdownTargets.filter(p => p.endsWith('.md'))
+  const markdownFiles = prettierMarkdownTargets.filter(isMarkdown)
   if (markdownFiles.length === 0) return
   const uvx = await resolveUvx(env)
   if (uvx.length === 0) return
@@ -850,26 +925,26 @@ const createLintCommands = ({
   return { agentParams, checkSteps, fixSteps }
 }
 const prepareLintCommands = async ({
-  allGitFiles,
   command,
   dir,
   env,
   failures,
   oxlintIgnorePatternsEarly,
+  stages,
   targets
 }: {
-  allGitFiles: string[]
   command: 'check' | 'fix'
   dir: string
   env: Record<string, string | undefined>
   failures: FailureRecord[]
   oxlintIgnorePatternsEarly: string[]
+  stages?: string[]
   targets: LintTargets
 }) => {
   const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs'), '--no-warn-ignored', ...targets.eslint]
-  const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await resolveAllBins()
+  const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await resolveLintBins(stages)
   const extraBins: ExtraBins = { dprint: dprintBin, tombi: tombiBin }
-  const prettierMarkdownTargets = allGitFiles.filter(p => hasExtension(p, PRETTIER_EXTENSIONS)).map(p => joinPath(cwd, p))
+  const prettierMarkdownTargets = targets.prettier
   const flowmarkStep = await createFlowmarkStep(command, env, prettierMarkdownTargets)
   const commandParams = {
     biomeBin,
@@ -885,49 +960,61 @@ const prepareLintCommands = async ({
   }
   return { ...createLintCommands({ command, commandParams, env, failures, flowmarkStep }), extraBins }
 }
-const prepareLintContext = async (command: 'check' | 'fix', isHuman: boolean) => {
+const prepareLintContext = async (command: 'check' | 'fix', isHuman: boolean, paths: string[]) => {
   const { dir, env, executor, failures, runtime } = await prepareLintRuntime()
   const { clearFailures, runCompactContinue, runSteps, runStepsSilent, throwIfFailures } = executor
-  const { allGitFiles, isIgnored, oxlintIgnorePatternsEarly } = await prepareLintFiles({
+  const { allGitFiles, oxlintIgnorePatternsEarly, plan } = await prepareLintFiles({
     command,
     dir,
     env,
     human: isHuman,
+    paths,
     runCompactContinue,
     runtime
   })
-  const targets = createLintTargets(allGitFiles)
+  const targets = plan?.targets ?? createLintTargets({ files: allGitFiles, isScoped: false, root: cwd })
   const { agentParams, checkSteps, extraBins, fixSteps } = await prepareLintCommands({
-    allGitFiles,
     command,
     dir,
     env,
     failures,
     oxlintIgnorePatternsEarly,
+    stages: plan?.stages,
     targets
   })
-  const shouldComments = runtime.comments !== false
-  const sourceFiles = allGitFiles.filter(f => !isIgnored(f))
+  const sourceFiles = plan ? plan.scopedFiles.filter(p => hasExtension(p, SOURCE_EXTENSIONS)) : allGitFiles
+  const shouldComments = runtime.comments !== false && (plan === undefined || sourceFiles.length > 0)
   const ctx: BranchContext = {
     agentParams,
-    allGitFiles,
+    allGitFiles: plan?.scopedFiles ?? allGitFiles,
     checkSteps,
     env,
     extraBins,
     failures,
     runSteps,
+    scopedFiles: plan?.scopedFiles,
+    scopedTargets: plan?.targets,
+    shouldCleanIgnores: plan ? plan.stages.includes('eslint-rule-discovery') : sourceFiles.length > 0,
     shouldComments,
     sourceFiles,
     throwIfFailures
   }
   return { clearFailures, ctx, fixSteps, runStepsSilent }
 }
-const runLint = async ({ command, human = false }: { command: 'check' | 'fix'; human?: boolean }) => {
-  const { clearFailures, ctx, fixSteps, runStepsSilent } = await prepareLintContext(command, human)
+const runLint = async ({
+  command,
+  human = false,
+  paths = []
+}: {
+  command: 'check' | 'fix'
+  human?: boolean
+  paths?: string[]
+}) => {
+  const { clearFailures, ctx, fixSteps, runStepsSilent } = await prepareLintContext(command, human, paths)
   if (command === 'fix') {
     await runFixCommand({ clearFailures, ctx, fixSteps, human, runStepsSilent })
     return
   }
   await (human ? runCheckHuman(ctx) : runCheckAgent(ctx))
 }
-export { captureAndParse, formatFailureDetails, runLint }
+export { captureAndParse, deriveScopedPlan, formatFailureDetails, runLint }

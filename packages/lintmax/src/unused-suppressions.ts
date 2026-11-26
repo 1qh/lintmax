@@ -459,22 +459,27 @@ const removeBiomeSuppressions = async ({
 const removeUnusedSuppressions = async ({
   dryRun = false,
   filePaths,
-  root
+  root,
+  scopedTargets
 }: {
   dryRun?: boolean
   filePaths?: string[]
   root: string
+  scopedTargets?: { biome: string[]; source: string[] }
 }): Promise<RemoveResult> => {
-  const targets = filePaths ?? []
-  if (targets.length === 0) return { diagnostics: [], files: [], removed: 0 }
+  const sourceTargets = scopedTargets?.source ?? filePaths ?? []
+  const biomeTargets = scopedTargets?.biome ?? filePaths ?? []
   const configDir = joinPath(root, cacheDir)
   const oxlintConfigPath = joinPath(configDir, '.oxlintrc.json')
   const [oxlintBin, biomeBin] = await Promise.all([
-    resolveBin({ bin: 'oxlint', pkg: 'oxlint' }),
-    resolveBin({ bin: 'biome', pkg: '@biomejs/biome' })
+    sourceTargets.length > 0 ? resolveBin({ bin: 'oxlint', pkg: 'oxlint' }) : undefined,
+    biomeTargets.length > 0 ? resolveBin({ bin: 'biome', pkg: '@biomejs/biome' }) : undefined
   ])
-  const oxlint = await removeOxlintSuppressions({ dryRun, oxlintBin, oxlintConfigPath, targets })
-  const biome = await removeBiomeSuppressions({ biomeBin, configDir, dryRun, targets })
+  const empty = { diagnostics: [], files: [], removed: 0 }
+  const oxlint = oxlintBin
+    ? await removeOxlintSuppressions({ dryRun, oxlintBin, oxlintConfigPath, targets: sourceTargets })
+    : empty
+  const biome = biomeBin ? await removeBiomeSuppressions({ biomeBin, configDir, dryRun, targets: biomeTargets }) : empty
   return {
     diagnostics: [...oxlint.diagnostics, ...biome.diagnostics],
     files: [...new Set([...oxlint.files, ...biome.files])],

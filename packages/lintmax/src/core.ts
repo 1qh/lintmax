@@ -182,7 +182,7 @@ const readVersion = async () => {
 }
 const usage = ({ version }: { version: string }) => {
   process.stdout.write(`lintmax v${version}\n\n`)
-  process.stdout.write('Usage: lintmax <command>\n\n')
+  process.stdout.write('Usage: lintmax <command> [paths...]\n\n')
   process.stdout.write('Commands:\n')
   process.stdout.write('  fix       Format, auto-fix, and gate all files (default)\n')
   process.stdout.write('  check     Verify all files without modifying (CI)\n')

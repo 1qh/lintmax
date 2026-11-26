@@ -8,8 +8,24 @@ import type { FailureRecord } from './core.js'
 import { parseBiomeDiagnostics, parseEslintDiagnostics, parseOxlintDiagnostics } from './aggregate.js'
 import { bunEnv, readRequiredJson, resolveBin, runCapture } from './core.js'
 import { joinPath } from './path.js'
-import { captureAndParse, formatFailureDetails } from './pipeline.js'
+import { captureAndParse, deriveScopedPlan, formatFailureDetails } from './pipeline.js'
 import { requireLintAnswer } from './unused-suppressions.js'
+describe('explicit path stage selection', () => {
+  const files = ['CLAUDE.md', 'src/index.ts', 'package.json', 'config.toml']
+  const root = tmpdir()
+  test('selects Markdown formatters and skips ESLint rule discovery for a Markdown file', () => {
+    const { stages } = deriveScopedPlan({ files, paths: ['./CLAUDE.md'], root })
+    expect(stages.length).toBeGreaterThan(0)
+    expect(stages).not.toContain('eslint-rule-discovery')
+    expect(stages).toStrictEqual(['flowmark', 'prettier'])
+  })
+  test('selects ESLint and its rule discovery for a TypeScript file', () => {
+    const { stages } = deriveScopedPlan({ files, paths: ['src/index.ts'], root })
+    expect(stages.length).toBeGreaterThan(0)
+    expect(stages).toContain('eslint')
+    expect(stages).toContain('eslint-rule-discovery')
+  })
+})
 const emitOutput = `
 const input = await Bun.file(process.argv[2]).json()
 const outputIndex = process.argv.indexOf('--output-file')

@@ -26,11 +26,11 @@ const hasJsx = async (sourceText: string): Promise<boolean> => {
   const asTsx = await parse('file.tsx', sourceText)
   return hasJsxNode(asTsx.program)
 }
-const checkJsxExtension = async ({ root }: { root: string }): Promise<Diagnostic[]> => {
+const checkJsxExtension = async ({ files, root }: { files?: string[]; root: string }): Promise<Diagnostic[]> => {
   const ignoreGlobs = DEFAULT_SHARED_IGNORE_PATTERNS.map(p => new Glob(p))
   const isIgnored = (p: string): boolean =>
     p.includes('node_modules') || p.endsWith('.d.ts') || ignoreGlobs.some(g => g.match(p))
-  const paths = (await listProjectFiles({ root })).filter(p => p.endsWith('.ts') && !isIgnored(p))
+  const paths = (files ?? (await listProjectFiles({ root }))).filter(p => p.endsWith('.ts') && !isIgnored(p))
   const diagnostics = await Promise.all(
     paths.map(async (path): Promise<Diagnostic[]> => {
       const content = await file(`${root}/${path}`).text()

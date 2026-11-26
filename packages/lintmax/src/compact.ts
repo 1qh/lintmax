@@ -115,20 +115,22 @@ const reportCompact = (results: CompactFileResult[], mode: 'check' | 'fix', isHu
 }
 const runCompact = async ({
   env,
+  files,
   human = false,
   isIgnored,
   mode,
   root
 }: {
   env: Record<string, string | undefined>
+  files?: string[]
   human?: boolean
   isIgnored?: (filePath: string) => boolean
   mode: 'check' | 'fix'
   root: string
 }) => {
-  const listed = await listCompactFiles({ env, root })
-  const files = isIgnored === undefined ? listed : listed.filter(one => !isIgnored(one))
-  const results = await Promise.all(files.map(async relativePath => compactFile(relativePath, root, mode)))
+  const listed = files ?? (await listCompactFiles({ env, root }))
+  const targets = isIgnored === undefined ? listed : listed.filter(one => !isIgnored(one))
+  const results = await Promise.all(targets.map(async relativePath => compactFile(relativePath, root, mode)))
   reportCompact(results, mode, human)
 }
-export { listCompactFiles, runCompact }
+export { isCompactCandidate, listCompactFiles, runCompact }
