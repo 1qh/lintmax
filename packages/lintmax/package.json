@@ -53,7 +53,6 @@
     "check": "bun dist/cli.mjs check",
     "fix": "bun dist/cli.mjs fix",
     "prepublishOnly": "bun run build",
-    "postpublish": "bun ../../tools/prune-versions.ts",
     "smoke": "bun script/smoke.ts",
     "test": "bun test src && bun script/test-magic.ts && bun script/test-coverage.ts"
   },
