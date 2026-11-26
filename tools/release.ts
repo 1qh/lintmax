@@ -1,8 +1,29 @@
 #!/usr/bin/env bun
 /* eslint-disable no-console -- release diagnostics are CLI output */
-import { file, Glob } from 'bun'
+import { file, Glob, spawn } from 'bun'
 import { dirname, join } from 'node:path'
-import { pruneFromRegistry, runCommand } from './prune-versions.js'
+interface CommandResult {
+  exitCode: number
+  stderr: string
+  stdout: string
+}
+const runCommand = async (cmd: string[], cwd = process.cwd(), timeout = 60_000): Promise<CommandResult> => {
+  const proc = spawn(cmd, {
+    cwd,
+    // biome-ignore lint/style/noProcessEnv: release subprocesses inherit the caller's npm credentials and PATH
+    env: process.env,
+    stderr: 'pipe',
+    stdin: 'ignore',
+    stdout: 'pipe',
+    timeout
+  })
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text()
+  ])
+  return { exitCode, stderr, stdout }
+}
 const nameVer = (p: { name: string; version: string }): string => `${p.name}@${p.version}`
 interface Pkg {
   name?: string
@@ -130,6 +151,18 @@ const selectToPublish = (resolved: Target[]): Target[] | undefined => {
   console.log(`already published: ${onNpm.map(nameVer).join(', ')}`)
   return undefined
 }
+const cleanupOne = async (target: Target): Promise<number> => {
+  try {
+    const result = await runCommand(['bunx', 'pm4ai@latest', 'cleanup'], target.dir, 15 * 60_000)
+    if (result.stdout !== '') console.log(result.stdout)
+    if (result.stderr !== '') console.error(result.stderr)
+    if (result.exitCode !== 0) console.error(`${nameVer(target)} cleanup failed: exit ${result.exitCode}`)
+    return result.exitCode
+  } catch (error) {
+    console.error(`${nameVer(target)} cleanup failed: ${String(error)}`)
+    return 1
+  }
+}
 const main = async (): Promise<number> => {
   const resolved = (await Promise.all(pkgs.map(async ({ path, pkg }) => resolve(path, pkg)))).filter(
     (t): t is Target => t !== undefined
@@ -142,14 +175,7 @@ const main = async (): Promise<number> => {
     console.error(`release failed: ${String(error)}`)
     code = 1
   }
-  const pruned = await Promise.all(
-    resolved
-      .filter(t => t.onNpm)
-      .map(async t => {
-        const result = await pruneFromRegistry(t.name, t.version)
-        return result
-      })
-  )
+  const pruned = await Promise.all(resolved.filter(t => t.onNpm).map(cleanupOne))
   return code !== 0 || pruned.some(result => result !== 0) ? 1 : 0
 }
 process.exitCode = await main()
