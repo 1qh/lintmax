@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 /** biome-ignore-all lint/performance/noAwaitInLoops: npm calls are serialised to avoid concurrent manifest-write 422s */
 /* eslint-disable no-console -- release diagnostics are CLI output */
-import { file, sleep, spawn } from 'bun'
+import { env, file, sleep, spawn, write } from 'bun'
+import { chmod, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 interface CommandResult {
   exitCode: number
@@ -42,23 +44,6 @@ const versionsToRetire = (document: unknown, current: string): string[] => {
   }
   return selected
 }
-const retireVersions = async (name: string, versions: string[]): Promise<number> => {
-  const failures: string[] = []
-  for (const version of versions) {
-    const spec = `${name}@${version}`
-    // eslint-disable-next-line no-await-in-loop -- sequential to avoid concurrent npm manifest-write 422s
-    const unpublish = await runCommand(['npm', 'unpublish', spec])
-    if (unpublish.exitCode === 0) console.log(`${spec} unpublished`)
-    else {
-      // eslint-disable-next-line no-await-in-loop -- sequential to avoid concurrent npm manifest-write 422s
-      const deprecate = await runCommand(['npm', 'deprecate', spec, 'superseded by latest'])
-      if (deprecate.exitCode === 0) console.log(`${spec} deprecated`)
-      else failures.push(`${spec} failed:\nunpublish: ${unpublish.stderr.trim()}\ndeprecate: ${deprecate.stderr.trim()}`)
-    }
-  }
-  for (const failure of failures) console.error(failure)
-  return failures.length > 0 ? 1 : 0
-}
 const REGISTRY_WAIT_MS = 600_000
 const REGISTRY_POLL_MS = 15_000
 const fetchDocument = async (name: string): Promise<unknown> => {
@@ -78,6 +63,51 @@ const documentWithVersion = async (name: string, version: string, deadline: numb
   const next = await documentWithVersion(name, version, deadline)
   return next
 }
+const RETIRE_WAIT_MS = 180_000
+const isRetired = (document: unknown, version: string): boolean => {
+  const metadata: unknown = Object.entries(registryVersions(document)).find(([v]) => v === version)?.[1]
+  return metadata === undefined || (typeof metadata === 'object' && metadata !== null && 'deprecated' in metadata)
+}
+const pendingAfter = async (name: string, versions: string[], deadline: number): Promise<string[]> => {
+  const document = await fetchDocument(name)
+  const pending = versions.filter(v => !isRetired(document, v))
+  if (pending.length === 0 || Date.now() > deadline) return pending
+  await sleep(REGISTRY_POLL_MS)
+  const next = await pendingAfter(name, versions, deadline)
+  return next
+}
+const retireOne = async (spec: string, userconfig: string): Promise<string> => {
+  const unpublish = await runCommand(['npm', 'unpublish', spec, '--userconfig', userconfig])
+  const deprecate = await runCommand(['npm', 'deprecate', spec, 'superseded by latest', '--userconfig', userconfig])
+  return `${spec}: unpublish exit ${unpublish.exitCode} ${unpublish.stderr.trim()} | deprecate exit ${deprecate.exitCode} ${deprecate.stderr.trim()}`
+}
+const retireVersions = async (name: string, versions: string[], userconfig: string): Promise<number> => {
+  const attempts: string[] = []
+  // eslint-disable-next-line no-await-in-loop -- sequential to avoid concurrent npm manifest-write 422s
+  for (const version of versions) attempts.push(await retireOne(`${name}@${version}`, userconfig))
+  const pending = await pendingAfter(name, versions, Date.now() + RETIRE_WAIT_MS)
+  const stillPending = new Set(pending)
+  const retired = versions.filter(x => !stillPending.has(x))
+  for (const v of retired) console.log(`${name}@${v} retired`)
+  if (pending.length === 0) return 0
+  console.error(`${name}: still published and not deprecated after retiring: ${pending.join(', ')}`)
+  for (const attempt of attempts) console.error(attempt)
+  return 1
+}
+const withUserconfig = async (run: (userconfig: string) => Promise<number>): Promise<number> => {
+  const token = env.NPM_CONFIG_TOKEN
+  if (token === undefined || token === '') throw new Error('NPM_CONFIG_TOKEN is not set, so npm cannot retire versions')
+  const dir = await mkdtemp(join(tmpdir(), 'lintmax-npmrc-'))
+  const userconfig = join(dir, 'npmrc')
+  try {
+    await write(userconfig, `//registry.npmjs.org/:_authToken=${token}\n`)
+    await chmod(userconfig, 0o600)
+    const code = await run(userconfig)
+    return code
+  } finally {
+    await rm(dir, { force: true, recursive: true })
+  }
+}
 const pruneFromRegistry = async (name: string, version: string): Promise<number> => {
   try {
     const document = await documentWithVersion(name, version, Date.now() + REGISTRY_WAIT_MS)
@@ -86,7 +116,7 @@ const pruneFromRegistry = async (name: string, version: string): Promise<number>
       console.log(`${name}: no versions to retire`)
       return 0
     }
-    const code = await retireVersions(name, selected)
+    const code = await withUserconfig(async userconfig => retireVersions(name, selected, userconfig))
     return code
   } catch (error) {
     console.error(`${name}: prune failed: ${String(error)}`)
@@ -103,4 +133,4 @@ const main = async (): Promise<number> => {
   return code
 }
 if (import.meta.main) process.exitCode = await main()
-export { type CommandResult, pruneFromRegistry, runCommand, versionsToRetire }
+export { type CommandResult, isRetired, pruneFromRegistry, runCommand, versionsToRetire }

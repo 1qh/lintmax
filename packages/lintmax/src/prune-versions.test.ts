@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { versionsToRetire } from '../../../tools/prune-versions.js'
+import { isRetired, versionsToRetire } from '../../../tools/prune-versions.js'
 describe('versionsToRetire', () => {
   test('retires only a non-current version without a deprecated field', () => {
     const selected = versionsToRetire({ versions: { '1': { deprecated: 'superseded by latest' }, '2': {}, '3': {} } }, '3')
@@ -16,5 +16,11 @@ describe('versionsToRetire', () => {
   })
   test('skips an existing deprecated field even when its message is empty', () => {
     expect(versionsToRetire({ versions: { '1': { deprecated: '' }, '3': {} } }, '3')).toStrictEqual([])
+  })
+})
+describe('isRetired', () => {
+  test('reads a version as retired only when it is gone or deprecated', () => {
+    const document = { versions: { '1': { deprecated: 'superseded by latest' }, '2': {} } }
+    expect(['1', '2', '3'].map(v => isRetired(document, v))).toStrictEqual([true, false, true])
   })
 })
