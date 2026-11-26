@@ -1,9 +1,9 @@
-/** biome-ignore-all lint/nursery/useLayeredStyles: the imports here are framework entry points — tailwind, shadcn and the fumadocs preset — whose own cascade layering they define themselves, so wrapping them in a layer changes precedence against a vendored preset this file cannot see inside */
-/** biome-ignore-all lint/nursery/noUndeclaredCustomProperties: every --color-fd-* is declared by the vendored fumadocs-ui preset this file imports, which the rule cannot follow across the import */
+/* biome-ignore-all lint/nursery/noUndeclaredCustomProperties: every --color-fd-* is declared by the fumadocs preset imported below, which this rule does not resolve, so it reads a declared property as undeclared. The aliases are what let a consumer write the shadcn name bg-muted rather than bg-fd-muted, which the shadcn rule requires. */
 @import 'tailwindcss';
 @import 'shadcn/tailwind.css';
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
+@layer theme, base, components, utilities, app;
 @source '../../../../packages/**/*.{ts,tsx}';
 @theme inline {
   --color-foreground: var(--color-fd-foreground);
@@ -27,6 +27,7 @@
   --color-destructive-foreground: var(--color-fd-primary-foreground);
 }
 /* biome-ignore lint/nursery/noUnusedClasses: applied at runtime by next-themes */
+/* biome-ignore lint/nursery/useLayeredStyles: fumadocs defines these .dark tokens unlayered, and a layered override loses */
 .dark {
   --color-fd-background: hsl(0, 0%, 0%);
   --color-fd-card: hsl(0, 0%, 5%);
@@ -35,12 +36,14 @@
   --color-fd-secondary: hsl(0, 0%, 8%);
   --color-fd-border: hsla(0, 0%, 30%, 30%);
 }
-/* biome-ignore lint/nursery/noUnusedClasses: applied via font variable setup to rendered pre/code */
-.font-mono,
-pre,
-code {
-  font-family: var(--font-mono), ui-monospace, monospace;
-}
-html > body[data-scroll-locked] {
-  margin-inline-end: 0 !important;
+@layer app {
+  /* biome-ignore lint/nursery/noUnusedClasses: applied via font variable setup to rendered pre/code */
+  .font-mono,
+  pre,
+  code {
+    font-family: var(--font-mono), ui-monospace, monospace;
+  }
+  html > body[data-scroll-locked] {
+    margin-inline-end: 0 !important;
+  }
 }
