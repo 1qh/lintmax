@@ -1,6 +1,7 @@
 /** biome-ignore-all lint/performance/noAwaitInLoops: sequential pipeline fix steps mutate files in order */
-import { $, env as bunEnv, file, Glob } from 'bun'
+import { env as bunEnv, file, Glob, which } from 'bun'
 import { Buffer } from 'node:buffer'
+import { homedir } from 'node:os'
 import type { Diagnostic } from './aggregate.js'
 import type { FailureRecord, RunOpts, StepSpec } from './core.js'
 import type { ExtraBins } from './extra-coverage.js'
@@ -51,6 +52,19 @@ const formatFailureDetails = (failures: FailureRecord[]): string =>
       return `- ${item.label} (exit ${item.code})${messageLine}`
     })
     .join('\n')
+interface FlowmarkStep extends StepSpec {
+  command: string
+}
+const recordFlowmarkResult = (result: Awaited<ReturnType<typeof runCapture>>, failures: FailureRecord[]) => {
+  const { exitCode, stderr, stdout } = result
+  if (exitCode === 0) return
+  const output = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n')
+  failures.push({ code: exitCode, label: 'flowmark', message: output || 'Flowmark failed without reporting details' })
+}
+const runFlowmark = async (opts: RunOpts, failures: FailureRecord[]) => {
+  const result = await runCapture(opts)
+  recordFlowmarkResult(result, failures)
+}
 const createStepExecutor = ({
   env,
   failures,
@@ -114,7 +128,7 @@ const createStepExecutor = ({
         silent: step.silent
       }
       // eslint-disable-next-line no-await-in-loop
-      await runContinue(opts)
+      await (step.label === 'flowmark' ? runFlowmark(opts, failures) : runContinue(opts))
     }
   }
   const runStepsSilent = async ({ steps }: { steps: StepSpec[] }) => {
@@ -126,7 +140,8 @@ const createStepExecutor = ({
         env,
         label: step.label
       })
-      if (result.exitCode !== 0)
+      if (step.label === 'flowmark') recordFlowmarkResult(result, failures)
+      else if (result.exitCode !== 0)
         failures.push({
           code: result.exitCode,
           label: step.label,
@@ -135,7 +150,7 @@ const createStepExecutor = ({
     }
   }
   const clearFailures = () => {
-    failures.length = 0
+    failures.splice(0, failures.length, ...failures.filter(step => step.label === 'flowmark'))
   }
   const throwIfFailures = () => {
     if (failures.length === 0) return
@@ -159,6 +174,7 @@ const createCheckSteps = ({
   dir,
   eslintArgs,
   eslintBin,
+  flowmarkStep,
   oxlintBin,
   oxlintIgnorePatterns,
   prettierBin,
@@ -170,6 +186,7 @@ const createCheckSteps = ({
   dir: string
   eslintArgs: string[]
   eslintBin: string
+  flowmarkStep: FlowmarkStep | undefined
   oxlintBin: string
   oxlintIgnorePatterns: readonly string[]
   prettierBin: string
@@ -207,6 +224,7 @@ const createCheckSteps = ({
       label: 'eslint'
     }
   ]
+  if (flowmarkStep) steps.push(flowmarkStep)
   if (prettierMarkdownTargets.length > 0)
     steps.push({
       args: [prettierBin, ...PRETTIER_MD_ARGS, '--check', '--no-error-on-unmatched-pattern', ...prettierMarkdownTargets],
@@ -226,7 +244,7 @@ const createFixSteps = ({
   dir,
   eslintArgs,
   eslintBin,
-  hasFlowmark,
+  flowmarkStep,
   oxlintBin,
   oxlintIgnorePatterns,
   prettierBin,
@@ -238,7 +256,7 @@ const createFixSteps = ({
   dir: string
   eslintArgs: string[]
   eslintBin: string
-  hasFlowmark: boolean
+  flowmarkStep: FlowmarkStep | undefined
   oxlintBin: string
   oxlintIgnorePatterns: readonly string[]
   prettierBin: string
@@ -287,15 +305,7 @@ const createFixSteps = ({
       silent: true
     }
   ]
-  const markdownFiles = prettierMarkdownTargets.filter(p => p.endsWith('.md'))
-  if (hasFlowmark)
-    for (const target of markdownFiles)
-      steps.push({
-        args: ['-w', '0', '--auto', target],
-        command: 'flowmark',
-        label: 'flowmark',
-        silent: true
-      })
+  if (flowmarkStep) steps.push(flowmarkStep)
   if (prettierMarkdownTargets.length > 0)
     steps.push({
       args: [prettierBin, ...PRETTIER_MD_ARGS, '--write', '--no-error-on-unmatched-pattern', ...prettierMarkdownTargets],
@@ -419,6 +429,7 @@ const runAgentCheck = async ({
   eslintArgs,
   eslintBin,
   failures,
+  flowmarkStep,
   oxlintBin,
   oxlintIgnorePatterns,
   prettierBin,
@@ -432,6 +443,7 @@ const runAgentCheck = async ({
   eslintArgs: string[]
   eslintBin: string
   failures: FailureRecord[]
+  flowmarkStep: FlowmarkStep | undefined
   oxlintBin: string
   oxlintIgnorePatterns: readonly string[]
   prettierBin: string
@@ -509,6 +521,7 @@ const runAgentCheck = async ({
         parser: ({ stdout }) => parseEslintDiagnostics({ stdout })
       })
     )
+  if (flowmarkStep) await runFlowmark({ ...flowmarkStep, env }, failures)
   if (prettierMarkdownTargets.length > 0)
     push(
       await captureAndParse({
@@ -704,6 +717,39 @@ const resolveAllBins = async (): Promise<[string, string, string, string, string
   ])
   return bins
 }
+const runUvInstaller = async (env: Record<string, string | undefined>, installDir: string, message: string) => {
+  try {
+    return await runCapture({
+      args: ['-c', 'curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh'],
+      command: 'sh',
+      env: { ...env, UV_INSTALL_DIR: installDir },
+      label: 'uv installer',
+      timeoutMs: 120_000
+    })
+  } catch (installError) {
+    const detail = installError instanceof Error ? installError.message : String(installError)
+    const error = new CliExitError({ code: 1, message: `${message}\n${detail}` })
+    throw Object.assign(error, { cause: installError })
+  }
+}
+const installUvx = async (env: Record<string, string | undefined>, installDir: string): Promise<string> => {
+  const uvxPath = joinPath(installDir, 'uvx')
+  const message = `Cannot find uvx after attempting to install uv. Expected ${uvxPath}`
+  const result = await runUvInstaller(env, installDir, message)
+  const installedUvx = which('uvx', { PATH: installDir })
+  if (installedUvx) return installedUvx
+  const detail = result.stderr.trim() || result.stdout.trim()
+  throw new CliExitError({ code: result.exitCode || 1, message: detail ? `${message}\n${detail}` : message })
+}
+const resolveUvx = async (env: Record<string, string | undefined>): Promise<string> => {
+  const uvxOnPath = which('uvx', { PATH: env.PATH ?? '' })
+  if (uvxOnPath) return uvxOnPath
+  const installDir = joinPath(homedir(), '.local', 'bin')
+  const localUvx = which('uvx', { PATH: installDir })
+  if (localUvx) return localUvx
+  const uvx = await installUvx(env, installDir)
+  return uvx
+}
 const runFixCommand = async ({
   clearFailures,
   ctx,
@@ -766,8 +812,46 @@ const prepareLintFiles = async ({
   const allGitFiles = (await listCompactFiles({ env, root: cwd })).filter(one => !isIgnored(one))
   return { allGitFiles, isIgnored, oxlintIgnorePatternsEarly }
 }
+const createFlowmarkStep = async (
+  command: 'check' | 'fix',
+  env: Record<string, string | undefined>,
+  prettierMarkdownTargets: string[]
+): Promise<FlowmarkStep | undefined> => {
+  const markdownFiles = prettierMarkdownTargets.filter(p => p.endsWith('.md'))
+  if (markdownFiles.length === 0) return
+  const uvx = await resolveUvx(env)
+  if (uvx.length === 0) return
+  const flowmarkFlags =
+    command === 'fix' ? ['--auto'] : ['--check', '--semantic', '--cleanups', '--smartquotes', '--ellipses']
+  return {
+    args: ['--from', 'flowmark@latest', 'flowmark', '-w', '0', ...flowmarkFlags, ...markdownFiles],
+    command: uvx,
+    label: 'flowmark',
+    silent: true
+  }
+}
+const createLintCommands = ({
+  command,
+  commandParams,
+  env,
+  failures,
+  flowmarkStep
+}: {
+  command: 'check' | 'fix'
+  commandParams: Omit<Parameters<typeof createCheckSteps>[0], 'flowmarkStep'>
+  env: Record<string, string | undefined>
+  failures: FailureRecord[]
+  flowmarkStep: FlowmarkStep | undefined
+}) => {
+  const flowmarkCheckStep = command === 'check' ? flowmarkStep : undefined
+  const checkSteps = createCheckSteps({ ...commandParams, flowmarkStep: flowmarkCheckStep })
+  const fixSteps = createFixSteps({ ...commandParams, flowmarkStep: command === 'fix' ? flowmarkStep : undefined })
+  const agentParams = { ...commandParams, env, failures, flowmarkStep: flowmarkCheckStep }
+  return { agentParams, checkSteps, fixSteps }
+}
 const prepareLintCommands = async ({
   allGitFiles,
+  command,
   dir,
   env,
   failures,
@@ -775,6 +859,7 @@ const prepareLintCommands = async ({
   targets
 }: {
   allGitFiles: string[]
+  command: 'check' | 'fix'
   dir: string
   env: Record<string, string | undefined>
   failures: FailureRecord[]
@@ -784,8 +869,8 @@ const prepareLintCommands = async ({
   const eslintArgs = ['--config', joinPath(dir, 'eslint.generated.mjs'), '--no-warn-ignored', ...targets.eslint]
   const [sortPkgJson, biomeBin, oxlintBin, eslintBin, prettierBin, tombiBin, dprintBin] = await resolveAllBins()
   const extraBins: ExtraBins = { dprint: dprintBin, tombi: tombiBin }
-  const hasFlowmark = (await $`which flowmark`.env(env).quiet().nothrow()).exitCode === 0
   const prettierMarkdownTargets = allGitFiles.filter(p => hasExtension(p, PRETTIER_EXTENSIONS)).map(p => joinPath(cwd, p))
+  const flowmarkStep = await createFlowmarkStep(command, env, prettierMarkdownTargets)
   const commandParams = {
     biomeBin,
     dir,
@@ -798,10 +883,7 @@ const prepareLintCommands = async ({
     sortPkgJson,
     targets
   }
-  const checkSteps = createCheckSteps(commandParams)
-  const fixSteps = createFixSteps({ ...commandParams, hasFlowmark })
-  const agentParams = { ...commandParams, env, failures }
-  return { agentParams, checkSteps, extraBins, fixSteps }
+  return { ...createLintCommands({ command, commandParams, env, failures, flowmarkStep }), extraBins }
 }
 const prepareLintContext = async (command: 'check' | 'fix', isHuman: boolean) => {
   const { dir, env, executor, failures, runtime } = await prepareLintRuntime()
@@ -817,6 +899,7 @@ const prepareLintContext = async (command: 'check' | 'fix', isHuman: boolean) =>
   const targets = createLintTargets(allGitFiles)
   const { agentParams, checkSteps, extraBins, fixSteps } = await prepareLintCommands({
     allGitFiles,
+    command,
     dir,
     env,
     failures,
